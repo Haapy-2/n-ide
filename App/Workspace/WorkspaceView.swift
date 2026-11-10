@@ -6,8 +6,8 @@ struct WorkspaceView: View {
   let project: ProjectFile
   /// nil이면 본문을 읽지 않는다(미리보기·스냅샷용).
   @State private var autosaver: EpisodeAutosaver?
-  /// 본문이 사이드바 유리 뒤로 흐릿하게 비치는 효과. 설정 창(10단계)에서 끄고 켠다.
-  @AppStorage(AppSettingKey.sidebarShowsContentBehind) private var sidebarShowsContentBehind = true
+  /// 사이드바 뒤로 다른 앱·바탕화면이 흐릿하게 비치는 효과. 설정 창(10단계)에서 끄고 켠다.
+  @AppStorage(AppSettingKey.sidebarSeesThroughWindow) private var sidebarSeesThroughWindow = true
   @State private var selection: EpisodeID?
 
   init(project: ProjectFile, store: ProjectStore? = nil) {
@@ -24,7 +24,6 @@ struct WorkspaceView: View {
       detail
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.paper)
-        .backgroundExtensionEffect(isEnabled: sidebarShowsContentBehind)
         // 제목과 버튼을 편집 영역 쪽 툴바에 붙인다. 사이드바 쪽에 두면 사이드바 폭만큼만 보여서 긴 제목이 잘린다.
         .navigationTitle(project.title)
         .toolbar {
@@ -39,6 +38,9 @@ struct WorkspaceView: View {
         }
     }
     .frame(minWidth: 720, minHeight: 480)
+    // 창 바탕을 반투명 재질로 바꾸면 그 위에 떠 있는 유리 사이드바로 창 뒤의 다른 앱과 바탕화면이 비친다.
+    // 종이(편집 영역)는 불투명 paper 색이라 본문 쪽은 비치지 않는다.
+    .modifier(SeeThroughWindowBackground(isEnabled: sidebarSeesThroughWindow))
     // 창을 닫을 때 남은 저장을 마친다(Task가 저장기를 붙잡고 있어 창이 사라져도 끝까지 저장된다).
     .onDisappear { if let autosaver { Task { await autosaver.flush() } } }
   }
@@ -51,6 +53,19 @@ struct WorkspaceView: View {
       EpisodeEditorPane(autosaver: autosaver, episodeID: selection)
     } else {
       Color.clear
+    }
+  }
+}
+
+/// 켜져 있으면 창 바탕을 창 뒤가 비치는 반투명 재질로, 꺼져 있으면 시스템 기본(불투명) 바탕으로.
+private struct SeeThroughWindowBackground: ViewModifier {
+  let isEnabled: Bool
+
+  func body(content: Content) -> some View {
+    if isEnabled {
+      content.containerBackground(.ultraThinMaterial, for: .window)
+    } else {
+      content
     }
   }
 }
