@@ -15,7 +15,7 @@
 | 빌드하고 앱 실행 | `Scripts/run.sh` |
 | 테스트 전체 | `Scripts/test.sh` |
 | 디자인 스냅샷 만들기 | `Scripts/snapshots.sh` |
-| 성능 측정 표 | `Scripts/perf.sh` (4단계부터) |
+| 성능 측정 표 | `Scripts/perf.sh` |
 
 Xcode에서 쓰려면 `NovelEditor.xcodeproj`를 열고 실행 버튼(⌘R)을 누른다.
 
@@ -28,11 +28,12 @@ NovelEditor.xcodeproj  Xcode 프로젝트
 App/                 앱 소스: 화면(SwiftUI)과 편집기(AppKit)
   Picker/            작품 선택 창
   Workspace/         작업 공간 창 (사이드바, 편집 영역)
+  Project/           작품 만들기·열기, 최근 작품 목록
   Theme/             색 토큰 이름
   Resources/         글꼴(Fonts/), 색 값(Colors.xcassets)
-Packages/NovelCore/  공통 로직 패키지(모델, 저장, 검색, 글자 수, 스냅샷)와 테스트
+Packages/NovelCore/  공통 로직 패키지(모델, 저장, 검색, 글자 수, 스냅샷), 테스트, 더미 작품 생성기
 Tests/AppTests/      앱 쪽 테스트, 디자인 스냅샷
-Scripts/             build.sh, run.sh, test.sh, snapshots.sh (lib.sh는 공통 부분)
+Scripts/             build.sh, run.sh, test.sh, snapshots.sh, perf.sh (lib.sh는 공통 부분)
 docs/                모든 문서
 build/               빌드 산출물과 임시 파일 (git 제외, 지워도 됨)
 ```

@@ -5,7 +5,7 @@ source "$(dirname "$0")/lib.sh"
 
 log="$LOGS/core-test.log"
 if swift test --package-path "$ROOT/Packages/NovelCore" --scratch-path "$ROOT/build/spm" >"$log" 2>&1; then
-  echo "✓ NovelCore 테스트 성공 · $(grep -hoE "Test run with [0-9]+ tests?( in [0-9]+ suites?)? passed" "$log" | tail -1)"
+  echo "✓ NovelCore 테스트 성공 · $(grep -hoE "Test run with [0-9]+ tests?( in [0-9]+ suites?)? passed" "$log" | sort -t' ' -k4 -n | tail -1)"
 else
   echo "✗ NovelCore 테스트 실패 · 전체 로그 build/logs/core-test.log"
   grep -E "error:|✘|recorded an issue" "$log" | head -30

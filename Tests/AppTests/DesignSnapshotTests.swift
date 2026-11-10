@@ -1,4 +1,5 @@
 import AppKit
+import NovelCore
 import SwiftUI
 import XCTest
 @testable import NovelEditor
@@ -7,17 +8,24 @@ import XCTest
 /// 평소 테스트에서는 건너뛰고, Scripts/snapshots.sh로 실행할 때만 만든다.
 @MainActor
 final class DesignSnapshotTests: XCTestCase {
-  private let stage = "01"
+  private let stage = "04"
 
   func testRenderSnapshots() throws {
     guard ProcessInfo.processInfo.environment["NOVEL_SNAPSHOTS"] == "1" else {
       throw XCTSkip("Scripts/snapshots.sh로 실행할 때만 스냅샷을 만든다")
     }
     for dark in [false, true] {
-      try render(ProjectPickerView(), name: "picker-empty", size: CGSize(width: 560, height: 420), dark: dark)
-      try render(WorkspaceView(projectTitle: "회귀한 검성은 이번 생에서만큼은 조용히 살고 싶다"), name: "workspace-empty", size: CGSize(width: 1100, height: 760), dark: dark)
+      try render(ProjectPickerView(recent: []), name: "picker-empty", size: CGSize(width: 560, height: 420), dark: dark)
+      try render(ProjectPickerView(recent: Self.sampleRecent), name: "picker-recent", size: CGSize(width: 560, height: 420), dark: dark)
+      try render(WorkspaceView(project: .previewManyEpisodes), name: "workspace-500", size: CGSize(width: 1100, height: 760), dark: dark)
+      try render(WorkspaceView(project: ProjectFile(title: "회귀한 검성은 이번 생에서만큼은 조용히 살고 싶다")), name: "workspace-empty", size: CGSize(width: 1100, height: 760), dark: dark)
     }
   }
+
+  private static let sampleRecent = [
+    RecentProject(path: NSHomeDirectory() + "/Documents/달빛 아래 검.novel", title: "달빛 아래 검", episodeCount: 212, lastOpened: .now.addingTimeInterval(-86_400)),
+    RecentProject(path: NSHomeDirectory() + "/Desktop/시험용 단편.novel", title: "시험용 단편", episodeCount: 3, lastOpened: .now.addingTimeInterval(-86_400 * 8)),
+  ]
 
   /// 실제 창에 띄운 뒤 창 전체(툴바 포함)를 이미지로 뜬다.
   private func render(_ view: some View, name: String, size: CGSize, dark: Bool) throws {

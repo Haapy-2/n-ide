@@ -21,10 +21,10 @@ macOS용 한국어 웹소설 집필 에디터(앱 이름 임시: `NovelEditor`).
 ```
 README.md, CLAUDE.md   루트에는 이 둘과 아래 항목만. 새 루트 항목은 허락 받고 추가
 NovelEditor.xcodeproj  Xcode 프로젝트
-App/                   앱 소스 (Picker/ 작품 선택 창, Workspace/ 작업 공간, Theme/ 색 토큰). Resources/ = Fonts/, Colors.xcassets
-Packages/NovelCore/    Foundation만 쓰는 공통 로직 패키지 + 단위 테스트
+App/                   앱 소스 (Picker/ 작품 선택 창, Workspace/ 작업 공간, Project/ 작품 열기·만들기·최근 목록, Theme/ 색 토큰). Resources/ = Fonts/, Colors.xcassets
+Packages/NovelCore/    Foundation만 쓰는 공통 로직 패키지 + 단위 테스트 + 성능 테스트 + make-dummy-novel(더미 작품 생성기)
 Tests/AppTests/        앱 테스트, 디자인 스냅샷 (성능 테스트는 Tests/ 아래 따로)
-Scripts/               build.sh, run.sh, test.sh, snapshots.sh, perf.sh(4단계~), lib.sh(공통)
+Scripts/               build.sh, run.sh, test.sh, snapshots.sh, perf.sh, lib.sh(공통)
 docs/                  SPEC, PLAN, DESIGN, PROGRESS, 체크리스트, design-snapshots/
 build/                 빌드 산출물·임시 파일·더미 작품·로그 (git 제외, 통째로 지워도 됨)
 ```
@@ -45,7 +45,7 @@ build/                 빌드 산출물·임시 파일·더미 작품·로그 (g
 - Swift, SwiftUI(창·사이드바·설정), 편집기는 `NSTextView`(TextKit 1 명시) + `NSViewRepresentable`
 - 저장은 일반 파일: 회차마다 `.md`, 작품 정보는 `project.json`. DB 없음, 외부 라이브러리 없음(Pretendard 글꼴만 예외)
 - `NovelCore`는 Foundation만 import. AppKit/SwiftUI 금지, macOS 전용 API 금지, 경로는 밖에서 받는다 (나중에 iOS에서 재사용)
-- AppKit 코드는 편집기 관련 파일 안에만 둔다
+- AppKit 코드는 편집기 관련 파일 안에만 둔다. 예외: `App/Project/SystemDialogs.swift`(저장·열기 창, Finder, 경고 창. SwiftUI에 대응하는 것이 없음)
 
 ## 코드 규칙
 
@@ -64,6 +64,7 @@ build/                 빌드 산출물·임시 파일·더미 작품·로그 (g
 - `NSTextView`의 텍스트 저장소가 본문의 원본이다. 키 입력마다 본문 전체를 복사하거나 SwiftUI 상태로 흘리지 않는다
 - 작품을 열 때 `project.json`만 읽고, 본문은 선택한 회차만 읽는다. 저장·검색·글자 수·스냅샷은 메인 스레드를 막지 않는다
 - 성능은 감이 아니라 측정으로 (`docs/SPEC.md` 8장). 목표 미달이면 숨기지 말고 원인·대안을 보고하고 멈춘다
+- 더미 작품은 앞 10화만 5,000자, 나머지는 300자(사용자 요청). 더미·생성 파일 내용을 대화로 읽지 않는다(토큰 절약)
 
 ## 하면 안 되는 것
 

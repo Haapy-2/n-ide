@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		A0000000000000000000001A /* NovelCore in Frameworks */ = {isa = PBXBuildFile; productRef = A00000000000000000000019 /* NovelCore */; };
+		A0000000000000000000001E /* NovelCore in Frameworks */ = {isa = PBXBuildFile; productRef = A0000000000000000000001D /* NovelCore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -44,7 +45,7 @@
 			path = App;
 			sourceTree = "<group>";
 		};
-		A00000000000000000000007 /* AppTests */ = {
+		A00000000000000000000007 /* Tests/AppTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Tests/AppTests;
 			sourceTree = "<group>";
@@ -64,6 +65,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A0000000000000000000001E /* NovelCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -74,7 +76,7 @@
 			isa = PBXGroup;
 			children = (
 				A00000000000000000000006 /* App */,
-				A00000000000000000000007 /* AppTests */,
+				A00000000000000000000007 /* Tests/AppTests */,
 				A00000000000000000000003 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -128,9 +130,12 @@
 				A0000000000000000000001B /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				A00000000000000000000007 /* AppTests */,
+				A00000000000000000000007 /* Tests/AppTests */,
 			);
 			name = AppTests;
+			packageProductDependencies = (
+				A0000000000000000000001D /* NovelCore */,
+			);
 			productName = AppTests;
 			productReference = A00000000000000000000005 /* AppTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -378,6 +383,10 @@
 
 /* Begin XCSwiftPackageProductDependency section */
 		A00000000000000000000019 /* NovelCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = NovelCore;
+		};
+		A0000000000000000000001D /* NovelCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = NovelCore;
 		};
