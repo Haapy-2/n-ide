@@ -63,8 +63,10 @@ struct ProjectPickerView: View {
             RoundedRectangle(cornerRadius: 6)
               .fill(project.id == selection ? Color.ink.opacity(0.08) : .clear))
           .contentShape(RoundedRectangle(cornerRadius: 6))
+          // 한 번 클릭 선택은 바로 처리한다. 두 제스처를 순서대로 붙이면 SwiftUI가 "두 번 클릭인지"
+          // 판정 시간(약 0.3~0.5초)을 기다린 뒤에야 선택해서 클릭이 굼떠 보인다.
           .onTapGesture(count: 2) { launcher.open(project.url) }
-          .onTapGesture { selection = project.id }
+          .simultaneousGesture(TapGesture().onEnded { selection = project.id })
           .contextMenu {
             Button("Finder에서 보기") { SystemDialogs.revealInFinder(project.url) }
             Button("목록에서 빼기") {
