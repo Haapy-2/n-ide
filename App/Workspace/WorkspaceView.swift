@@ -22,8 +22,6 @@ struct WorkspaceView: View {
       detail
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.paper)
-        // 종이색이 떠 있는 유리 사이드바 아래까지 이어져 보이게 한다 (DESIGN.md 0장).
-        .backgroundExtensionEffect()
         // 제목과 버튼을 편집 영역 쪽 툴바에 붙인다. 사이드바 쪽에 두면 사이드바 폭만큼만 보여서 긴 제목이 잘린다.
         .navigationTitle(project.title)
         .toolbar {

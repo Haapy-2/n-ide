@@ -15,6 +15,9 @@ struct EpisodeList: View {
         }
       }
     }
+    // 선택 표시를 항상 "비활성" 모양(은은한 회색)으로 그린다. 기본 모양은 사이드바에 초점이 있으면
+    // 파란 강조색으로 칠하다가, 편집기로 초점이 넘어가는 순간 회색으로 바뀌어 번쩍이는 것처럼 보인다.
+    .environment(\.controlActiveState, .inactive)
   }
 }
 
