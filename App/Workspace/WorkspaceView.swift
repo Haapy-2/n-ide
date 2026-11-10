@@ -6,6 +6,8 @@ struct WorkspaceView: View {
   let project: ProjectFile
   /// nil이면 본문을 읽지 않는다(미리보기·스냅샷용).
   @State private var autosaver: EpisodeAutosaver?
+  /// 본문이 사이드바 유리 뒤로 흐릿하게 비치는 효과. 설정 창(10단계)에서 끄고 켠다.
+  @AppStorage(AppSettingKey.sidebarShowsContentBehind) private var sidebarShowsContentBehind = true
   @State private var selection: EpisodeID?
 
   init(project: ProjectFile, store: ProjectStore? = nil) {
@@ -22,6 +24,7 @@ struct WorkspaceView: View {
       detail
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.paper)
+        .backgroundExtensionEffect(isEnabled: sidebarShowsContentBehind)
         // 제목과 버튼을 편집 영역 쪽 툴바에 붙인다. 사이드바 쪽에 두면 사이드바 폭만큼만 보여서 긴 제목이 잘린다.
         .navigationTitle(project.title)
         .toolbar {
