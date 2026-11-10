@@ -28,3 +28,7 @@ struct ProjectPickerView: View {
     .frame(width: 560, height: 420)
   }
 }
+
+#Preview {
+  ProjectPickerView()
+}

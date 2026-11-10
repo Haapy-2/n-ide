@@ -32,3 +32,9 @@ struct WorkspaceView: View {
     .frame(minWidth: 720, minHeight: 480)
   }
 }
+
+// Xcode 캔버스(⌥⌘↩)에서 작업 공간 틀을 바로 볼 수 있다. 4단계 전까지 앱에서는 이 화면으로 갈 수 없다.
+#Preview {
+  WorkspaceView(projectTitle: "달빛 아래 검")
+    .frame(width: 1100, height: 760)
+}
