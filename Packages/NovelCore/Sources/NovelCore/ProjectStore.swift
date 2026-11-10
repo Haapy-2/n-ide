@@ -26,11 +26,33 @@ public struct ProjectStore: Sendable {
     return store
   }
 
+  /// `project.json`을 엄격하게 읽는다. 깨졌으면 복구하지 않고 오류를 던진다. 작품을 열 때는 `open()`을 쓴다.
   public func loadProject() throws -> ProjectFile {
-    let url = layout.projectFile
+    try Self.decodeProject(at: layout.projectFile)
+  }
+
+  /// 저장하기 전에 지금 파일이 정상이면 `project.json.bak`으로 남긴다. 깨진 파일로 백업을 덮어쓰지 않는다.
+  public func saveProject(_ project: ProjectFile) throws {
+    let current = layout.projectFile
+    if let data = FileManager.default.contents(atPath: current.path(percentEncoded: false)),
+      (try? Self.decodeProject(data: data, url: current)) != nil
+    {
+      try AtomicFile.write(data, to: layout.projectBackupFile)
+    }
+    let encoder = JSONEncoder()
+    // 사람이 텍스트 편집기로 열어도 읽기 쉽게 들여쓰고, 키 순서를 고정해 git 비교도 깔끔하게 한다.
+    encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+    try AtomicFile.write(try encoder.encode(project), to: current)
+  }
+
+  static func decodeProject(at url: URL) throws -> ProjectFile {
     guard let data = FileManager.default.contents(atPath: url.path(percentEncoded: false)) else {
       throw ProjectError.missingProjectFile(url)
     }
+    return try decodeProject(data: data, url: url)
+  }
+
+  static func decodeProject(data: Data, url: URL) throws -> ProjectFile {
     // 버전부터 확인한다. 더 새 형식이면 전체를 해석하기 전에 거부해야 엉뚱한 오류가 나지 않는다.
     guard let header = try? JSONDecoder().decode(VersionHeader.self, from: data) else {
       throw ProjectError.corruptProjectFile(url)
@@ -43,13 +65,6 @@ public struct ProjectStore: Sendable {
       throw ProjectError.corruptProjectFile(url)
     }
     return project
-  }
-
-  public func saveProject(_ project: ProjectFile) throws {
-    let encoder = JSONEncoder()
-    // 사람이 텍스트 편집기로 열어도 읽기 쉽게 들여쓰고, 키 순서를 고정해 git 비교도 깔끔하게 한다.
-    encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-    try AtomicFile.write(try encoder.encode(project), to: layout.projectFile)
   }
 
   // MARK: - 회차와 노트 본문

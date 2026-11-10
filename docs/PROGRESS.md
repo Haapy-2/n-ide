@@ -4,15 +4,17 @@
 
 ## 지금 하는 일
 
-2단계(NovelCore 저장 기본) 완료, 사용자 확인 대기 중.
+3단계(저장 순서와 복구) 완료, 사용자 확인 대기 중.
 
 ## 다음 할 일
 
-3단계 저장 순서와 복구 (PLAN.md 4장).
-- `Packages/NovelCore/Sources/NovelCore/`에 회차별 저장 줄(actor, 한 번에 하나씩)과 변경 번호를 만든다. 낮은 번호의 저장이 높은 번호를 덮지 못하게.
-- `ProjectStore.saveProject`가 직전 정상본을 `project.json.bak`으로 남기게 하고, `loadProject`가 깨진 경우 백업 → `episodes/` 파일로 목록 재구성 순서로 복구하게 한다(지금은 `ProjectError.corruptProjectFile`을 던지기만 함).
-- 저장 실패 재시도(0.5초, 1초, 2초).
-- 늦게 끝난 옛 저장 재현 테스트, 복구 테스트.
+4단계 작품 선택 창과 사이드바, 성능 도구 (PLAN.md 4장).
+- `App/Info.plist`에 `.novel`을 문서 패키지 형식으로 등록(UTExportedTypeDeclarations, CFBundleDocumentTypes). Finder 두 번 클릭 → 그 작품 바로 열기.
+- `App/Picker/ProjectPickerView.swift`: 최근 작품 목록(UserDefaults에 경로 저장, 없어진 경로는 조용히 빼기), 새 작품(저장 창, 처음 위치 ~/Documents, 마지막 위치 기억), 다른 위치에서 열기.
+- 작업 공간 창: `WindowGroup(for: URL.self)`로 작품마다 창. `ProjectStore.open()`을 백그라운드에서 부르고, 복구했으면 한 줄로 알림.
+- 사이드바 회차 목록(번호, 제목, 글자 수 자리).
+- `make-dummy-novel` 실행 도구(NovelCore 패키지 안, 500회차 × 5,000자를 build/perf/에), `Scripts/perf.sh`, "500회차 열기" 측정.
+- 사이드바 여닫기 끊김을 실제 앱(Release)에서 확인 (알려진 문제 참고).
 
 ## 끝난 단계
 
@@ -21,6 +23,7 @@
 | 0. 계획 | 2026-11-10 | SPEC, PLAN, DESIGN 승인 |
 | 1. 앱 뼈대 | 2026-11-10 | Xcode 프로젝트, NovelCore 패키지, 스크립트, 색 토큰, Pretendard, 작품 선택 창(빈 상태), 작업 공간 틀, 디자인 스냅샷 |
 | 2. NovelCore 저장 기본 | 2026-11-10 | 모델(작품·회차·노트·고유 ID), `project.json`(schemaVersion, 상위 버전 거부), 원자적 쓰기(임시 파일 → fsync → rename), 회차·노트 본문 UTF-8 읽기·쓰기, 테스트 22개 |
+| 3. 저장 순서와 복구 | 2026-11-10 | 저장 줄(`SaveQueue` actor, 변경 번호로 옛 저장 차단, 0.5·1·2초 재시도), `project.json.bak`, 열 때 복구(백업 → 본문 파일로 재구성, 깨진 파일은 `project.json.broken-<시각>`으로 보존), 테스트 38개 |
 
 ## 알려진 문제
 
@@ -47,6 +50,8 @@
 | `Identifiers.swift` | 회차·노트 고유 ID |
 | `ProjectFile.swift` | `project.json` 내용(작품, 회차 목록, 노트 목록, 작품별 설정) |
 | `ProjectLayout.swift` | 작품 폴더 안 파일 위치 |
-| `ProjectStore.swift` | 작품 만들기, `project.json`·본문 읽기·쓰기 |
+| `ProjectStore.swift` | 작품 만들기, `project.json`·본문 읽기·쓰기, 저장 때 백업 |
+| `ProjectRecovery.swift` | 작품 열기(`open()`)와 복구 |
+| `SaveQueue.swift` | 저장 줄: 순서 보장, 옛 저장 차단, 재시도 |
 | `AtomicFile.swift` | 원자적 쓰기 |
 | `ProjectError.swift` | 오류 종류 |

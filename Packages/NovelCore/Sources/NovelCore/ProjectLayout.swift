@@ -5,6 +5,7 @@ import Foundation
 /// ```
 /// 내작품.novel/
 ///   project.json
+///   project.json.bak
 ///   episodes/<회차ID>.md
 ///   notes/<노트ID>.md
 ///   snapshots/<회차ID>/<시각>.md
@@ -15,6 +16,8 @@ public struct ProjectLayout: Sendable {
   public init(root: URL) { self.root = root }
 
   public var projectFile: URL { root.appending(path: "project.json", directoryHint: .notDirectory) }
+  /// 직전 정상본. `project.json`이 깨졌을 때 여기서 복구한다.
+  public var projectBackupFile: URL { root.appending(path: "project.json.bak", directoryHint: .notDirectory) }
   public var episodesFolder: URL { root.appending(path: "episodes", directoryHint: .isDirectory) }
   public var notesFolder: URL { root.appending(path: "notes", directoryHint: .isDirectory) }
   public var snapshotsFolder: URL { root.appending(path: "snapshots", directoryHint: .isDirectory) }
