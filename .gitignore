@@ -1,0 +1,10 @@
+# 빌드 산출물과 임시 파일 (통째로 지워도 됨)
+build/
+
+# macOS / Xcode 개인 파일
+.DS_Store
+xcuserdata/
+*.xcuserstate
+
+# Claude Code 개인 메모
+CLAUDE.local.md
