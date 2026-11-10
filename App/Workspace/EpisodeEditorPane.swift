@@ -28,23 +28,17 @@ struct EpisodeEditorPane: View {
         .padding(.trailing, 20)
         .padding(.bottom, 10)
     }
-    .task(id: episodeID) { await switchEpisode() }
+    .onChange(of: episodeID, initial: true) { switchEpisode() }
   }
 
-  private func switchEpisode() async {
-    // 떠나는 회차를 먼저 저장한다. 편집기에는 아직 떠나는 회차 본문이 있다.
-    await autosaver.flush()
+  /// 회차 전환은 기다림 없이 한 번에 한다: 떠나는 회차 저장은 뒤에서 시작만 하고,
+  /// 새 회차 본문(5,000자 안팎, 0.1ms 수준)은 바로 읽어 같은 화면 갱신 안에서 바꿔 넣는다.
+  /// 기다리는 동안 옛 본문이 한 박자 남아 있다가 바뀌면 끊겨 보이기 때문이다.
+  private func switchEpisode() {
+    autosaver.leaveEpisode()
     let id = episodeID
-    let store = autosaver.store
     do {
-      let text: String
-      if let unsaved = autosaver.unsavedText(for: id) {
-        text = unsaved
-      } else {
-        // 파일 읽기는 메인 스레드 밖에서.
-        text = try await Task.detached { try store.readEpisode(id) }.value
-      }
-      guard id == episodeID else { return }
+      let text = try autosaver.pendingText(for: id) ?? autosaver.store.readEpisode(id)
       errorMessage = nil
       content = ManuscriptEditor.Content(token: UUID(), episodeID: id, text: text)
       autosaver.begin(episode: id)

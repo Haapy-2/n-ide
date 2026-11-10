@@ -30,6 +30,9 @@ final class EpisodeAutosaver {
   @ObservationIgnored private var savedChanges: [EpisodeID: Int] = [:]
   /// 저장에 실패한 회차의 본문.
   @ObservationIgnored private var unsaved: [EpisodeID: String] = [:]
+  /// 파일에 쓰는 중인 회차의 본문.
+  @ObservationIgnored private var inFlight: [EpisodeID: String] = [:]
+  @ObservationIgnored private var running: [UUID: Task<Void, Never>] = [:]
   @ObservationIgnored private var pendingSave: Task<Void, Never>?
 
   init(store: ProjectStore, queue: SaveQueue = SaveQueue(), delay: Duration = .seconds(1)) {
@@ -42,16 +45,17 @@ final class EpisodeAutosaver {
   /// 저장 안 된 변경이 있는지 (지금 회차 또는 저장에 실패한 회차).
   var hasUnsavedChanges: Bool {
     if let episodeID, isDirty(episodeID) { return true }
-    return !unsaved.isEmpty
+    return !unsaved.isEmpty || !running.isEmpty
   }
 
   func attach(_ textView: ManuscriptTextView) {
     self.textView = textView
   }
 
-  /// 회차를 열 때 디스크 대신 보여줄 본문(저장에 실패해 메모리에 남은 것). 없으면 nil.
-  func unsavedText(for id: EpisodeID) -> String? {
-    unsaved[id]
+  /// 회차를 열 때 디스크 대신 보여줄 본문: 저장에 실패해 메모리에 남은 것, 또는 아직 쓰는 중인 것. 없으면 nil.
+  /// (빠르게 A→B→A로 돌아왔을 때 A 저장이 끝나기 전 디스크의 옛 본문을 읽지 않기 위해서다.)
+  func pendingText(for id: EpisodeID) -> String? {
+    unsaved[id] ?? inFlight[id]
   }
 
   /// 편집기에 새 회차가 올라간 뒤 부른다.
@@ -61,6 +65,15 @@ final class EpisodeAutosaver {
     if unsaved[id] != nil { scheduleSave() }
   }
 
+  /// 회차를 떠날 때. 지금 본문을 바로 복사해 저장을 시작하되 기다리지 않는다.
+  /// 저장이 끝나길 기다렸다 다음 회차를 보여주면 전환이 끊겨 보이기 때문이다.
+  func leaveEpisode() {
+    pendingSave?.cancel()
+    pendingSave = nil
+    if let job = makeSaveJob() { start(job) }
+    episodeID = nil
+  }
+
   /// 편집기에서 사용자가 글을 고칠 때마다.
   func textDidChange() {
     guard let episodeID else { return }
@@ -68,11 +81,14 @@ final class EpisodeAutosaver {
     scheduleSave()
   }
 
-  /// 기다리지 않고 지금 저장한다(회차 전환, 창 비활성, 종료).
+  /// 지금 저장하고, 이미 시작된 저장까지 모두 끝날 때까지 기다린다(창 비활성, 창 닫기, 종료).
   func flush() async {
     pendingSave?.cancel()
     pendingSave = nil
-    await save()
+    if let job = makeSaveJob() { start(job) }
+    while let task = running.values.first {
+      await task.value
+    }
   }
 
   private func scheduleSave() {
@@ -80,7 +96,7 @@ final class EpisodeAutosaver {
     pendingSave = Task { [delay] in
       try? await Task.sleep(for: delay)
       guard !Task.isCancelled else { return }
-      await self.save()
+      if let job = self.makeSaveJob() { self.start(job) }
     }
   }
 
@@ -88,11 +104,28 @@ final class EpisodeAutosaver {
     changes[id, default: 0] > savedChanges[id, default: 0] || unsaved[id] != nil
   }
 
-  private func save() async {
-    guard let id = episodeID, let textView, isDirty(id) else { return }
-    let change = changes[id, default: 0]
-    // 저장할 때 한 번만 본문을 복사한다(키 입력마다 복사하지 않음).
-    let text = textView.string
+  private struct SaveJob {
+    let id: EpisodeID
+    let change: Int
+    let text: String
+  }
+
+  /// 저장할 내용을 지금 시점으로 복사한다. 키 입력마다가 아니라 저장할 때 한 번만 본문을 복사한다.
+  private func makeSaveJob() -> SaveJob? {
+    guard let id = episodeID, let textView, isDirty(id) else { return nil }
+    return SaveJob(id: id, change: changes[id, default: 0], text: textView.string)
+  }
+
+  private func start(_ job: SaveJob) {
+    let key = UUID()
+    inFlight[job.id] = job.text
+    running[key] = Task {
+      await write(job)
+      running[key] = nil
+    }
+  }
+
+  private func write(_ job: SaveJob) async {
     let store = store
     status = .saving
     let indicator = Task {
@@ -104,18 +137,19 @@ final class EpisodeAutosaver {
       showsSavingIndicator = false
     }
     do {
-      _ = try await queue.save(.episode(id), change: change) {
-        try store.writeEpisode(text, id: id)
+      _ = try await queue.save(.episode(job.id), change: job.change) {
+        try store.writeEpisode(job.text, id: job.id)
       }
-      savedChanges[id] = max(savedChanges[id, default: 0], change)
+      savedChanges[job.id] = max(savedChanges[job.id, default: 0], job.change)
       // 방금 저장한 본문에는 메모리에 남아 있던 내용도 들어 있으므로 지운다.
-      unsaved[id] = nil
+      if savedChanges[job.id, default: 0] >= changes[job.id, default: 0] { unsaved[job.id] = nil }
       if unsaved.isEmpty { status = .idle }
     } catch {
-      unsaved[id] = text
+      unsaved[job.id] = job.text
       let message = (error as? ProjectError)?.userMessage ?? error.localizedDescription
       status = .failed(message)
     }
+    if inFlight[job.id] == job.text { inFlight[job.id] = nil }
   }
 }
 

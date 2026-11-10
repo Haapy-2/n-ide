@@ -70,7 +70,7 @@ final class EpisodeAutosaverTests: XCTestCase {
 
     guard case .failed = autosaver.status else { return XCTFail("실패 상태여야 한다: \(autosaver.status)") }
     XCTAssertTrue(autosaver.hasUnsavedChanges)
-    XCTAssertEqual(autosaver.unsavedText(for: episode), "첫 문장 지켜야 할 문장")
+    XCTAssertEqual(autosaver.pendingText(for: episode), "첫 문장 지켜야 할 문장")
     XCTAssertEqual(try store.readEpisode(episode), "첫 문장", "실패해도 원래 파일은 그대로")
 
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: episodes)
@@ -78,7 +78,7 @@ final class EpisodeAutosaverTests: XCTestCase {
 
     XCTAssertEqual(autosaver.status, .idle)
     XCTAssertFalse(autosaver.hasUnsavedChanges)
-    XCTAssertNil(autosaver.unsavedText(for: episode))
+    XCTAssertNil(autosaver.pendingText(for: episode))
     XCTAssertEqual(try store.readEpisode(episode), "첫 문장 지켜야 할 문장")
   }
 
@@ -92,5 +92,17 @@ final class EpisodeAutosaverTests: XCTestCase {
 
     XCTAssertTrue(textView.hasMarkedText(), "저장 뒤에도 조합 중이어야 한다")
     XCTAssertEqual(textView.markedRange().length, 1)
+  }
+
+  /// 회차를 떠나면 저장을 기다리지 않고 바로 돌아오지만, 곧바로 다시 열어도 방금 쓴 본문이 보인다.
+  func testQuickReturnShowsLatestTextBeforeSaveFinishes() async throws {
+    type(" 방금 쓴 문장")
+
+    autosaver.leaveEpisode()
+
+    XCTAssertEqual(autosaver.pendingText(for: episode), "첫 문장 방금 쓴 문장")
+    await autosaver.flush()
+    XCTAssertEqual(try store.readEpisode(episode), "첫 문장 방금 쓴 문장")
+    XCTAssertNil(autosaver.pendingText(for: episode))
   }
 }
