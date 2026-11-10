@@ -8,3 +8,6 @@ xcuserdata/
 
 # Claude Code 개인 메모
 CLAUDE.local.md
+
+# Xcode가 Swift 패키지 옆에 만드는 개인 상태 폴더
+.swiftpm/

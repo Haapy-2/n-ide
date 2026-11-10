@@ -21,10 +21,10 @@ macOS용 한국어 웹소설 집필 에디터(앱 이름 임시: `NovelEditor`).
 ```
 README.md, CLAUDE.md   루트에는 이 둘과 아래 항목만. 새 루트 항목은 허락 받고 추가
 NovelEditor.xcodeproj  Xcode 프로젝트
-App/                   앱 소스 (SwiftUI 화면 + AppKit 편집기). Resources/ = 글꼴·아이콘·색
+App/                   앱 소스 (Picker/ 작품 선택 창, Workspace/ 작업 공간, Theme/ 색 토큰). Resources/ = Fonts/, Colors.xcassets
 Packages/NovelCore/    Foundation만 쓰는 공통 로직 패키지 + 단위 테스트
-Tests/                 앱 테스트, 성능 테스트
-Scripts/               build.sh, run.sh, test.sh, perf.sh
+Tests/AppTests/        앱 테스트, 디자인 스냅샷 (성능 테스트는 Tests/ 아래 따로)
+Scripts/               build.sh, run.sh, test.sh, snapshots.sh, perf.sh(4단계~), lib.sh(공통)
 docs/                  SPEC, PLAN, DESIGN, PROGRESS, 체크리스트, design-snapshots/
 build/                 빌드 산출물·임시 파일·더미 작품·로그 (git 제외, 통째로 지워도 됨)
 ```
@@ -33,9 +33,11 @@ build/                 빌드 산출물·임시 파일·더미 작품·로그 (g
 
 ## 명령
 
-- `Scripts/build.sh` 빌드 / `Scripts/run.sh` 빌드 후 실행 / `Scripts/test.sh` 테스트 / `Scripts/perf.sh` 성능 표
+- `Scripts/build.sh` 빌드 / `Scripts/run.sh` 빌드 후 실행 / `Scripts/test.sh` 테스트 / `Scripts/snapshots.sh` 디자인 스냅샷 / `Scripts/perf.sh` 성능 표
+- NovelCore 테스트는 `swift test --scratch-path build/spm`, 앱 테스트는 `xcodebuild`(스킴 NovelEditor). test.sh가 둘 다 돌린다
 - 스크립트는 성공하면 한 줄 요약, 실패하면 오류 부분만 출력한다. 전체 로그는 `build/logs/`.
-- 직접 `xcodebuild`를 쓸 때는 항상 `-derivedDataPath build/DerivedData`.
+- 직접 `xcodebuild`를 쓸 때는 항상 `-derivedDataPath build/DerivedData`와 `-resultBundlePath build/logs/…`.
+- Xcode 프로젝트는 폴더 동기화 그룹이라 `App/`, `Tests/AppTests/`에 파일을 넣으면 자동 포함된다. 프로젝트 파일을 고칠 일은 빌드 설정뿐
 - 메모리 8GB 기기다. 빌드나 테스트를 동시에 여러 개 돌리지 않는다. 하위 에이전트·병렬 작업은 꼭 필요할 때만.
 
 ## 기술 결정 (확정, 바꾸려면 근거와 함께 먼저 제안)
@@ -49,8 +51,10 @@ build/                 빌드 산출물·임시 파일·더미 작품·로그 (g
 
 - 들여쓰기 스페이스 2칸. 파일 하나에 역할 하나. 필요 없는 추상화나 미리 만드는 기능 금지
 - 주석은 "왜"가 필요한 곳에만, 한국어로
-- 색은 토큰 파일 한 곳에서만 정의 (`docs/DESIGN.md`의 토큰). 코드에 색 값 흩지 않기
-- 앱 이름은 한곳에서 관리
+- 색 값은 `App/Resources/Colors.xcassets`에만, 코드는 `App/Theme/ColorTokens.swift`의 이름(`Color.paper` 등)만 쓴다
+- 앱 이름은 빌드 설정 `PRODUCT_NAME` 한 곳. 코드는 `AppInfo.name`으로 읽는다
+- 앱 타깃은 기본 격리가 MainActor(Swift 6). NovelCore는 기본 격리 없음
+- 테스트: NovelCore는 Swift Testing(`@Test`), 앱 쪽은 XCTest
 - 보고할 때 새로 등장한 Swift 개념은 한두 문장으로 설명
 
 ## 꼭 지킬 것
