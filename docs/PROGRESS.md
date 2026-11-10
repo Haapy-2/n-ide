@@ -4,12 +4,15 @@
 
 ## 지금 하는 일
 
-1단계(앱 뼈대) 완료, 사용자 확인 대기 중.
+2단계(NovelCore 저장 기본) 완료, 사용자 확인 대기 중.
 
 ## 다음 할 일
 
-2단계 NovelCore 저장 기본 (PLAN.md 4장).
-`Packages/NovelCore/Sources/NovelCore/`에 모델(작품·회차·노트), `project.json` 읽기/쓰기(`schemaVersion`은 `ProjectFormat.currentSchemaVersion`), 원자적 쓰기, 회차 본문 읽기/쓰기를 만들고 `Tests/NovelCoreTests/`에 테스트를 쓴다.
+3단계 저장 순서와 복구 (PLAN.md 4장).
+- `Packages/NovelCore/Sources/NovelCore/`에 회차별 저장 줄(actor, 한 번에 하나씩)과 변경 번호를 만든다. 낮은 번호의 저장이 높은 번호를 덮지 못하게.
+- `ProjectStore.saveProject`가 직전 정상본을 `project.json.bak`으로 남기게 하고, `loadProject`가 깨진 경우 백업 → `episodes/` 파일로 목록 재구성 순서로 복구하게 한다(지금은 `ProjectError.corruptProjectFile`을 던지기만 함).
+- 저장 실패 재시도(0.5초, 1초, 2초).
+- 늦게 끝난 옛 저장 재현 테스트, 복구 테스트.
 
 ## 끝난 단계
 
@@ -17,6 +20,7 @@
 |---|---|---|
 | 0. 계획 | 2026-11-10 | SPEC, PLAN, DESIGN 승인 |
 | 1. 앱 뼈대 | 2026-11-10 | Xcode 프로젝트, NovelCore 패키지, 스크립트, 색 토큰, Pretendard, 작품 선택 창(빈 상태), 작업 공간 틀, 디자인 스냅샷 |
+| 2. NovelCore 저장 기본 | 2026-11-10 | 모델(작품·회차·노트·고유 ID), `project.json`(schemaVersion, 상위 버전 거부), 원자적 쓰기(임시 파일 → fsync → rename), 회차·노트 본문 UTF-8 읽기·쓰기, 테스트 22개 |
 
 ## 알려진 문제
 
@@ -34,3 +38,15 @@
 |---|---|
 | 처음 빌드 | 약 6초 |
 | 테스트 전체 (`Scripts/test.sh`) | 약 15초 |
+
+## NovelCore 파일 지도
+
+| 파일 | 역할 |
+|---|---|
+| `ProjectFormat.swift` | 확장자, 현재 형식 버전 |
+| `Identifiers.swift` | 회차·노트 고유 ID |
+| `ProjectFile.swift` | `project.json` 내용(작품, 회차 목록, 노트 목록, 작품별 설정) |
+| `ProjectLayout.swift` | 작품 폴더 안 파일 위치 |
+| `ProjectStore.swift` | 작품 만들기, `project.json`·본문 읽기·쓰기 |
+| `AtomicFile.swift` | 원자적 쓰기 |
+| `ProjectError.swift` | 오류 종류 |
