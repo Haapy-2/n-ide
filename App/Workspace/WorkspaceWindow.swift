@@ -21,7 +21,7 @@ struct WorkspaceWindow: View {
         // 목표가 0.3초 이내라 안내 문구 없이 종이만 잠깐 보인다.
         Color.paper.frame(minWidth: 720, minHeight: 480)
       case .loaded(let project):
-        WorkspaceView(project: project)
+        WorkspaceView(project: project, store: ProjectStore(root: url))
       case .failed(let message):
         EmptyStateView(message: message, buttonTitle: "작품 전환…") { openWindow(id: AppScene.picker) }
           .padding(40)

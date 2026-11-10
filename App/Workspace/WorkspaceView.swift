@@ -2,13 +2,15 @@ import NovelCore
 import SwiftUI
 
 /// 작품 하나의 작업 공간: 유리 사이드바(회차 목록) + 불투명 종이 편집 영역.
-/// 편집기는 5단계에서 편집 영역에 들어간다.
 struct WorkspaceView: View {
   let project: ProjectFile
+  /// nil이면 본문을 읽지 않는다(미리보기·스냅샷용).
+  let store: ProjectStore?
   @State private var selection: EpisodeID?
 
-  init(project: ProjectFile) {
+  init(project: ProjectFile, store: ProjectStore? = nil) {
     self.project = project
+    self.store = store
     _selection = State(initialValue: project.episodes.first?.id)
   }
 
@@ -42,8 +44,9 @@ struct WorkspaceView: View {
   private var detail: some View {
     if project.episodes.isEmpty {
       EmptyStateView(message: "첫 회차를 추가해 주세요.", buttonTitle: "새 회차", action: nil)
+    } else if let store, let selection {
+      EpisodeEditorPane(store: store, episodeID: selection)
     } else {
-      // 편집기 자리 (5단계)
       Color.clear
     }
   }

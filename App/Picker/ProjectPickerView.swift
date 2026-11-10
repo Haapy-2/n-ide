@@ -41,6 +41,7 @@ struct ProjectPickerView: View {
     .padding(32)
     .frame(width: 560, height: 420)
     .onAppear {
+      if let url = LaunchProbe.projectToOpen { launcher.open(url) }
       if loadsRecentOnAppear { recent = RecentProjects.load() }
     }
     // Finder에서 .novel을 두 번 클릭하면 여기로 들어온다.

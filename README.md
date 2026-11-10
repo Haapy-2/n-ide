@@ -3,7 +3,7 @@
 한국어 웹소설을 쓰기 위한 macOS 네이티브 집필 에디터. 회차마다 `.md` 파일 하나로 저장하고,
 빠른 입력과 깨지지 않는 한글 조합, 잃어버리지 않는 원고를 가장 중요하게 여긴다.
 
-> 현재 상태: **1단계(앱 뼈대) 완료.** 진행 상황은 [docs/PROGRESS.md](docs/PROGRESS.md).
+> 현재 상태: **5단계(편집기) 완료.** 진행 상황은 [docs/PROGRESS.md](docs/PROGRESS.md).
 
 ## 빌드와 실행
 
@@ -28,7 +28,9 @@ NovelEditor.xcodeproj  Xcode 프로젝트
 App/                 앱 소스: 화면(SwiftUI)과 편집기(AppKit)
   Picker/            작품 선택 창
   Workspace/         작업 공간 창 (사이드바, 편집 영역)
+  Editor/            원고 편집기 (NSTextView)
   Project/           작품 만들기·열기, 최근 작품 목록
+  Perf/              성능 측정용 갈고리 (perf.sh 전용)
   Theme/             색 토큰 이름
   Resources/         글꼴(Fonts/), 색 값(Colors.xcassets)
 Packages/NovelCore/  공통 로직 패키지(모델, 저장, 검색, 글자 수, 스냅샷), 테스트, 더미 작품 생성기
