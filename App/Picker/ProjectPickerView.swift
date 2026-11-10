@@ -50,21 +50,38 @@ struct ProjectPickerView: View {
     }
   }
 
+  /// 선택 표시는 작업 공간 사이드바와 같은 직접 그린 회색 칸(시스템 파란 선택 대신, DESIGN.md 4장).
+  /// 한 번 클릭하면 선택, 두 번 클릭하면 열기, 선택한 채로 ↩를 눌러도 열린다.
   private var recentList: some View {
-    List(recent, selection: $selection) { project in
-      RecentProjectRow(project: project)
-    }
-    .contextMenu(forSelectionType: RecentProject.ID.self) { ids in
-      if let project = recent.first(where: { ids.contains($0.id) }) {
-        Button("Finder에서 보기") { SystemDialogs.revealInFinder(project.url) }
-        Button("목록에서 빼기") {
-          RecentProjects.remove(project)
-          recent = RecentProjects.load()
-        }
+    List {
+      ForEach(recent) { project in
+        RecentProjectRow(project: project)
+          .padding(.horizontal, 10)
+          .padding(.vertical, 6)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .background(
+            RoundedRectangle(cornerRadius: 6)
+              .fill(project.id == selection ? Color.ink.opacity(0.08) : .clear))
+          .contentShape(RoundedRectangle(cornerRadius: 6))
+          .onTapGesture(count: 2) { launcher.open(project.url) }
+          .onTapGesture { selection = project.id }
+          .contextMenu {
+            Button("Finder에서 보기") { SystemDialogs.revealInFinder(project.url) }
+            Button("목록에서 빼기") {
+              RecentProjects.remove(project)
+              recent = RecentProjects.load()
+            }
+          }
+          .listRowInsets(EdgeInsets(top: 1, leading: 0, bottom: 1, trailing: 0))
+          .listRowBackground(Color.clear)
+          .listRowSeparator(.hidden)
       }
-    } primaryAction: { ids in
-      // 두 번 클릭 또는 ↩
-      if let project = recent.first(where: { ids.contains($0.id) }) { launcher.open(project.url) }
+    }
+    .scrollContentBackground(.hidden)
+    .onKeyPress(.return) {
+      guard let project = recent.first(where: { $0.id == selection }) else { return .ignored }
+      launcher.open(project.url)
+      return .handled
     }
   }
 
@@ -97,10 +114,11 @@ private struct RecentProjectRow: View {
     .padding(.vertical, 3)
   }
 
-  /// 홈 폴더를 `~`로 줄인다.
+  /// 홈 폴더를 `~`로 줄이고, 폴더 경로 끝의 `/`는 뺀다.
   private var abbreviatedPath: String {
     let home = FileManager.default.homeDirectoryForCurrentUser.path(percentEncoded: false)
-    let path = project.path
+    var path = project.path
+    if path.count > 1, path.hasSuffix("/") { path.removeLast() }
     return path.hasPrefix(home) ? "~/" + path.dropFirst(home.count) : path
   }
 }
