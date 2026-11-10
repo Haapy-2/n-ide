@@ -15,7 +15,7 @@ final class DesignSnapshotTests: XCTestCase {
     }
     for dark in [false, true] {
       try render(ProjectPickerView(), name: "picker-empty", size: CGSize(width: 560, height: 420), dark: dark)
-      try render(WorkspaceView(projectTitle: "달빛 아래 검"), name: "workspace-empty", size: CGSize(width: 1100, height: 760), dark: dark)
+      try render(WorkspaceView(projectTitle: "회귀한 검성은 이번 생에서만큼은 조용히 살고 싶다"), name: "workspace-empty", size: CGSize(width: 1100, height: 760), dark: dark)
     }
   }
 
