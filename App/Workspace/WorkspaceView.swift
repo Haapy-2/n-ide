@@ -5,12 +5,12 @@ import SwiftUI
 struct WorkspaceView: View {
   let project: ProjectFile
   /// nil이면 본문을 읽지 않는다(미리보기·스냅샷용).
-  let store: ProjectStore?
+  @State private var autosaver: EpisodeAutosaver?
   @State private var selection: EpisodeID?
 
   init(project: ProjectFile, store: ProjectStore? = nil) {
     self.project = project
-    self.store = store
+    _autosaver = State(initialValue: store.map { EpisodeAutosaver(store: $0) })
     _selection = State(initialValue: project.episodes.first?.id)
   }
 
@@ -38,14 +38,16 @@ struct WorkspaceView: View {
         }
     }
     .frame(minWidth: 720, minHeight: 480)
+    // 창을 닫을 때 남은 저장을 마친다(Task가 저장기를 붙잡고 있어 창이 사라져도 끝까지 저장된다).
+    .onDisappear { if let autosaver { Task { await autosaver.flush() } } }
   }
 
   @ViewBuilder
   private var detail: some View {
     if project.episodes.isEmpty {
       EmptyStateView(message: "첫 회차를 추가해 주세요.", buttonTitle: "새 회차", action: nil)
-    } else if let store, let selection {
-      EpisodeEditorPane(store: store, episodeID: selection)
+    } else if let autosaver, let selection {
+      EpisodeEditorPane(autosaver: autosaver, episodeID: selection)
     } else {
       Color.clear
     }

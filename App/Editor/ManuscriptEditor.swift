@@ -18,6 +18,12 @@ struct ManuscriptEditor: NSViewRepresentable {
 
   let content: Content
   var style = EditorStyle()
+  /// 사용자가 글을 고칠 때마다 (자동 저장용).
+  var onTextChange: () -> Void = {}
+  /// 창이 비활성화될 때 (바로 저장용).
+  var onFocusLost: () -> Void = {}
+  /// 편집기가 만들어졌을 때 한 번.
+  var onReady: (ManuscriptTextView) -> Void = { _ in }
 
   func makeNSView(context: Context) -> NSScrollView {
     let scrollView = NSScrollView()
@@ -28,12 +34,16 @@ struct ManuscriptEditor: NSViewRepresentable {
     let textView = ManuscriptTextView.make()
     textView.style = style
     scrollView.documentView = textView
+    textView.delegate = context.coordinator
     context.coordinator.textView = textView
+    context.coordinator.parent = self
+    onReady(textView)
     apply(content, to: textView, coordinator: context.coordinator)
     return scrollView
   }
 
   func updateNSView(_ scrollView: NSScrollView, context: Context) {
+    context.coordinator.parent = self
     guard let textView = context.coordinator.textView else { return }
     // 조합 중에는 모양도 바꾸지 않는다(ManuscriptTextView.applyStyle도 한 번 더 막는다).
     if textView.style != style, !textView.hasMarkedText() {
@@ -49,6 +59,7 @@ struct ManuscriptEditor: NSViewRepresentable {
     textView.replaceAllText(with: content.text)
     // 창에 붙은 뒤에 첫 응답자로 만든다(makeNSView 시점에는 아직 창이 없다).
     DispatchQueue.main.async {
+      coordinator.observeWindow(textView.window)
       textView.window?.makeFirstResponder(textView)
       if textView.window?.firstResponder === textView { LaunchProbe.editorReady() }
     }
@@ -56,8 +67,30 @@ struct ManuscriptEditor: NSViewRepresentable {
 
   func makeCoordinator() -> Coordinator { Coordinator() }
 
-  final class Coordinator {
+  final class Coordinator: NSObject, NSTextViewDelegate {
     weak var textView: ManuscriptTextView?
+    var parent: ManuscriptEditor?
     var appliedToken: UUID?
+    private var resignObserver: NSObjectProtocol?
+
+    // 프로그램이 본문을 바꿀 때(회차 전환)는 불리지 않고, 사용자가 고칠 때만 불린다.
+    func textDidChange(_ notification: Notification) {
+      parent?.onTextChange()
+    }
+
+    /// 편집기가 창에 붙으면 그 창이 비활성화될 때를 지켜본다.
+    func observeWindow(_ window: NSWindow?) {
+      if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
+      guard let window else { return }
+      resignObserver = NotificationCenter.default.addObserver(
+        forName: NSWindow.didResignKeyNotification, object: window, queue: .main
+      ) { [weak self] _ in
+        MainActor.assumeIsolated { self?.parent?.onFocusLost() }
+      }
+    }
+
+    isolated deinit {
+      if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
+    }
   }
 }

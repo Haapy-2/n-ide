@@ -2,6 +2,8 @@ import SwiftUI
 
 @main
 struct NovelEditorApp: App {
+  @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
   var body: some Scene {
     // 앱을 열면 작품 선택 창이 먼저 뜬다. Finder에서 .novel을 두 번 클릭한 경우도 이 창이 받아서 작품을 연다.
     Window("작품 선택", id: AppScene.picker) {
