@@ -14,14 +14,19 @@ struct EpisodeList: View {
     List {
       Section("회차") {
         ForEach(Array(episodes.enumerated()), id: \.element.id) { index, episode in
+          // 클릭 영역 = 회색 선택 칸 전체. 줄 여백을 0으로 하고 여백을 칸 안쪽에 직접 넣어
+          // 글자뿐 아니라 칸의 빈 곳을 눌러도 선택되게 한다.
           EpisodeRow(number: index + 1, title: episode.title)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
-            .onTapGesture { selection = episode.id }
-            .listRowBackground(
+            .background(
               RoundedRectangle(cornerRadius: 6)
-                .fill(episode.id == selection ? Color.ink.opacity(0.08) : .clear)
-                .padding(.horizontal, 10))
+                .fill(episode.id == selection ? Color.ink.opacity(0.08) : .clear))
+            .contentShape(RoundedRectangle(cornerRadius: 6))
+            .onTapGesture { selection = episode.id }
+            .listRowInsets(EdgeInsets(top: 1, leading: 10, bottom: 1, trailing: 10))
+            .listRowBackground(Color.clear)
             .accessibilityAddTraits(episode.id == selection ? [.isButton, .isSelected] : .isButton)
         }
       }
