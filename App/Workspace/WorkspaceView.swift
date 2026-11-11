@@ -83,6 +83,12 @@ struct WorkspaceView: View {
     } message: {
       Text(alertMessage ?? model?.errorMessage ?? "")
     }
+    // 되돌리기 등으로 보고 있던 회차가 목록에서 사라지면 가까운 회차로 옮긴다.
+    .onChange(of: project.episodes.map(\.id)) { old, new in
+      guard let current = selection, !new.contains(current) else { return }
+      let oldIndex = old.firstIndex(of: current) ?? 0
+      selection = new.isEmpty ? nil : new[min(oldIndex, new.count - 1)]
+    }
     // 창을 닫을 때 남은 저장을 마친다(Task가 저장기를 붙잡고 있어 창이 사라져도 끝까지 저장된다).
     .onDisappear { if let model { Task { await model.autosaver.flush() } } }
   }
@@ -121,7 +127,7 @@ struct WorkspaceView: View {
     guard let model else { return }
     Task {
       do {
-        selection = try await model.addEpisode(after: id)
+        selection = try await model.addEpisode(after: id, undoManager: undoManager)
       } catch {
         alertMessage = "새 회차를 만들지 못했어요. \((error as? ProjectError)?.userMessage ?? error.localizedDescription)"
       }
@@ -146,7 +152,7 @@ struct WorkspaceView: View {
     let index = episodes.firstIndex { $0.id == id }
     Task {
       do {
-        try await model.trashEpisode(id)
+        try await model.trashEpisode(id, undoManager: undoManager)
         // 지운 회차를 보고 있었으면 바로 아래(없으면 위) 회차로 옮긴다.
         if selection == id, let index {
           let remaining = model.episodes

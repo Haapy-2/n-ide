@@ -30,7 +30,10 @@ struct EpisodeList: View {
             .background(
               RoundedRectangle(cornerRadius: 6)
                 .fill(episode.id == selection ? Color.ink.opacity(0.08) : .clear))
-            .contentShape(RoundedRectangle(cornerRadius: 6))
+            // 회색 칸 사이의 1pt 틈도 클릭 영역에 넣는다. 틈을 줄 여백(listRowInsets)으로 두면
+            // 그곳을 누를 때 아무 반응이 없어 목록이 버벅이는 것처럼 느껴진다.
+            .padding(.vertical, 1)
+            .contentShape(Rectangle())
             // 두 번 클릭하면 이름 변경. 한 번 클릭 선택은 두 번 클릭 판정을 기다리지 않고 바로 한다.
             .onTapGesture(count: 2) { onRename?(episode.id) }
             .simultaneousGesture(TapGesture().onEnded {
@@ -45,7 +48,7 @@ struct EpisodeList: View {
                 Button("휴지통으로 이동…") { onTrash(episode.id) }
               }
             }
-            .listRowInsets(EdgeInsets(top: 1, leading: 10, bottom: 1, trailing: 10))
+            .listRowInsets(EdgeInsets(top: 0, leading: 10, bottom: 0, trailing: 10))
             .listRowBackground(Color.clear)
             .accessibilityAddTraits(episode.id == selection ? [.isButton, .isSelected] : .isButton)
         }
@@ -53,6 +56,8 @@ struct EpisodeList: View {
         .onMove(perform: onMove)
       }
     }
+    // 시스템 기본 최소 줄 높이를 없애 줄 사이에 클릭 안 되는 틈이 생기지 않게 한다.
+    .environment(\.defaultMinListRowHeight, 0)
     .focusable()
     .focused($isFocused)
     // 초점 표시(파란 테두리)는 그리지 않는다. 선택한 회차의 회색 칸으로 충분하다.

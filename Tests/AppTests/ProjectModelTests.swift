@@ -30,7 +30,9 @@ final class ProjectModelTests: XCTestCase {
       autosaveDelay: .milliseconds(20),
       moveToTrash: { url in
         if trashFails { throw CocoaError(.fileWriteNoPermission) }
-        try FileManager.default.moveItem(at: url, to: trash.appending(path: url.lastPathComponent))
+        let destination = trash.appending(path: url.lastPathComponent)
+        try FileManager.default.moveItem(at: url, to: destination)
+        return destination
       })
   }
 
@@ -160,5 +162,58 @@ final class ProjectModelTests: XCTestCase {
 
     XCTAssertEqual(model.episode(id)?.title, "")
     XCTAssertEqual(try store.loadProject().episodes.first?.title, "")
+  }
+
+  private func grouped(_ undo: UndoManager, _ work: () async throws -> Void) async rethrows {
+    undo.beginUndoGrouping()
+    try await work()
+    undo.endUndoGrouping()
+  }
+
+  /// 실수로 만든 새 회차를 ⌘Z로 없애고(휴지통), ⇧⌘Z로 다시 꺼낸다.
+  func testUndoAddEpisode() async throws {
+    let model = try makeModel()
+    let first = try await model.addEpisode()
+    let undo = UndoManager()
+    undo.groupsByEvent = false
+    var added: EpisodeID!
+    try await grouped(undo) { added = try await model.addEpisode(after: first, undoManager: undo) }
+    XCTAssertEqual(undo.undoActionName, "새 회차")
+
+    undo.undo()
+    try await Task.sleep(for: .milliseconds(150))
+    XCTAssertEqual(model.episodes.map(\.id), [first])
+    XCTAssertEqual(try store.loadProject().episodes.map(\.id), [first])
+    XCTAssertTrue(FileManager.default.fileExists(atPath: trash.appending(path: "\(added.rawValue).md").path(percentEncoded: false)))
+
+    undo.redo()
+    try await Task.sleep(for: .milliseconds(150))
+    XCTAssertEqual(model.episodes.map(\.id), [first, added])
+    XCTAssertEqual(try store.readEpisode(added), "")
+  }
+
+  /// 휴지통으로 보낸 회차를 ⌘Z로 꺼내 원래 자리와 본문 그대로 되돌리고, ⇧⌘Z로 다시 휴지통에 보낸다.
+  func testUndoTrashRestoresFileAndPosition() async throws {
+    let model = try makeModel()
+    let a = try await model.addEpisode()
+    let b = try await model.addEpisode()
+    let c = try await model.addEpisode()
+    try store.writeEpisode("되살릴 본문", id: b)
+    let undo = UndoManager()
+    undo.groupsByEvent = false
+
+    try await grouped(undo) { try await model.trashEpisode(b, undoManager: undo) }
+    XCTAssertEqual(model.episodes.map(\.id), [a, c])
+
+    undo.undo()
+    try await Task.sleep(for: .milliseconds(150))
+    XCTAssertEqual(model.episodes.map(\.id), [a, b, c])
+    XCTAssertEqual(try store.loadProject().episodes.map(\.id), [a, b, c])
+    XCTAssertEqual(try store.readEpisode(b), "되살릴 본문")
+
+    undo.redo()
+    try await Task.sleep(for: .milliseconds(150))
+    XCTAssertEqual(model.episodes.map(\.id), [a, c])
+    XCTAssertFalse(FileManager.default.fileExists(atPath: store.layout.episodeFile(b).path(percentEncoded: false)))
   }
 }

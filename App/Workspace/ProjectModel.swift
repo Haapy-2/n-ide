@@ -15,13 +15,14 @@ final class ProjectModel {
   @ObservationIgnored let queue: SaveQueue
   @ObservationIgnored let autosaver: EpisodeAutosaver
   @ObservationIgnored private var projectChange = 0
-  /// 파일을 휴지통으로 옮긴다. 테스트에서는 진짜 휴지통 대신 다른 곳으로 옮기도록 바꿔 끼운다.
-  @ObservationIgnored private let moveToTrash: @Sendable (URL) throws -> Void
+  /// 파일을 휴지통으로 옮기고 휴지통 안의 새 위치를 돌려준다(되돌리기 때 다시 꺼내려고).
+  /// 테스트에서는 진짜 휴지통 대신 다른 곳으로 옮기도록 바꿔 끼운다.
+  @ObservationIgnored private let moveToTrash: @Sendable (URL) throws -> URL
 
   init(
     project: ProjectFile, store: ProjectStore, queue: SaveQueue = SaveQueue(),
     autosaveDelay: Duration = .seconds(1),
-    moveToTrash: @escaping @Sendable (URL) throws -> Void = { try FileManager.default.trashItem(at: $0, resultingItemURL: nil) }
+    moveToTrash: @escaping @Sendable (URL) throws -> URL = ProjectModel.systemTrash
   ) {
     self.project = project
     self.store = store
@@ -39,15 +40,18 @@ final class ProjectModel {
   // MARK: - 회차 바꾸기
 
   /// 새 회차를 `after` 바로 뒤(없으면 맨 끝)에 만든다. 빈 본문 파일을 먼저 쓰고 목록에 넣는다.
+  /// `undoManager`를 주면 ⌘Z로 방금 만든 회차를 휴지통으로 보낼 수 있다(⇧⌘Z로 다시 꺼냄).
   @discardableResult
-  func addEpisode(after: EpisodeID? = nil) async throws -> EpisodeID {
+  func addEpisode(after: EpisodeID? = nil, undoManager: UndoManager? = nil) async throws -> EpisodeID {
     let episode = EpisodeMeta(title: "", goal: project.settings.defaultEpisodeGoal)
     let store = store
     let id = episode.id
     // 본문 파일이 먼저 있어야 목록에만 있고 파일은 없는 회차가 생기지 않는다.
     try await Task.detached { try store.writeEpisode("", id: id) }.value
     let index = after.flatMap { id in project.episodes.firstIndex { $0.id == id } }.map { $0 + 1 }
-    project.episodes.insert(episode, at: index ?? project.episodes.endIndex)
+    let insertAt = index ?? project.episodes.endIndex
+    project.episodes.insert(episode, at: insertAt)
+    registerUndoByTrashing(TrashRecord(episode: episode, index: insertAt), actionName: "새 회차", undoManager: undoManager)
     await saveProject()
     return id
   }
@@ -92,18 +96,93 @@ final class ProjectModel {
   }
 
   /// 회차를 휴지통으로 옮긴다. 휴지통으로 못 옮기면 아무것도 바꾸지 않고 오류를 던진다(영구 삭제로 대신하지 않음).
-  func trashEpisode(_ id: EpisodeID) async throws {
+  /// `undoManager`를 주면 ⌘Z로 휴지통에서 꺼내 원래 자리에 되돌릴 수 있다.
+  func trashEpisode(_ id: EpisodeID, undoManager: UndoManager? = nil) async throws {
     guard let index = project.episodes.firstIndex(where: { $0.id == id }) else { return }
+    let record = TrashRecord(episode: project.episodes[index], index: index)
+    try await moveToTrash(record)
+    registerUndoByRestoring(record, actionName: "휴지통으로 이동", undoManager: undoManager)
+  }
+
+  // MARK: - 휴지통과 되돌리기
+
+  /// 휴지통으로 보낸(또는 보낼) 회차 하나의 기록. 되돌리기와 다시 실행이 같은 기록을 주고받는다.
+  final class TrashRecord {
+    let episode: EpisodeMeta
+    let index: Int
+    /// 휴지통 안의 위치. 휴지통에 있을 때만 값이 있다.
+    var trashedURL: URL?
+
+    init(episode: EpisodeMeta, index: Int) {
+      self.episode = episode
+      self.index = index
+    }
+  }
+
+  private func moveToTrash(_ record: TrashRecord) async throws {
+    let id = record.episode.id
     // 지우기 전에 고친 내용을 저장해 둔다. 휴지통에서 꺼냈을 때 마지막 내용이 들어 있도록.
     await autosaver.flush()
     let file = store.layout.episodeFile(id)
     let moveToTrash = moveToTrash
-    try await Task.detached {
-      if FileManager.default.fileExists(atPath: file.path(percentEncoded: false)) { try moveToTrash(file) }
+    record.trashedURL = try await Task.detached {
+      FileManager.default.fileExists(atPath: file.path(percentEncoded: false)) ? try moveToTrash(file) : nil
     }.value
     autosaver.forget(episode: id)
-    project.episodes.remove(at: index)
+    project.episodes.removeAll { $0.id == id }
     await saveProject()
+  }
+
+  /// 휴지통에서 꺼내 원래 자리(그사이 목록이 줄었으면 맨 끝)에 다시 넣는다. 같은 이름의 파일이 이미 있으면 덮어쓰지 않는다.
+  private func restoreFromTrash(_ record: TrashRecord) async throws {
+    guard !project.episodes.contains(where: { $0.id == record.episode.id }) else { return }
+    if let trashed = record.trashedURL {
+      let destination = store.layout.episodeFile(record.episode.id)
+      try await Task.detached { try FileManager.default.moveItem(at: trashed, to: destination) }.value
+      record.trashedURL = nil
+    }
+    project.episodes.insert(record.episode, at: min(record.index, project.episodes.count))
+    await saveProject()
+  }
+
+  // 되돌리기 기록은 반드시 그 자리에서(동기로) 한다. 파일 옮기기는 그 뒤에 Task로 한다.
+  // 그래야 UndoManager가 되돌리기와 다시 실행을 제대로 구분해 쌓는다.
+
+  /// ⌘Z를 누르면 이 회차를 휴지통으로 보내도록 기록한다(새 회차 되돌리기, 휴지통 꺼내기의 다시 실행).
+  private func registerUndoByTrashing(_ record: TrashRecord, actionName: String, undoManager: UndoManager?) {
+    undoManager?.registerUndo(withTarget: self) { model in
+      MainActor.assumeIsolated {
+        model.registerUndoByRestoring(record, actionName: actionName, undoManager: undoManager)
+        Task { await model.runFileUndo { try await model.moveToTrash(record) } }
+      }
+    }
+    undoManager?.setActionName(actionName)
+  }
+
+  /// ⌘Z를 누르면 이 회차를 휴지통에서 꺼내도록 기록한다(휴지통으로 이동 되돌리기, 새 회차의 다시 실행).
+  private func registerUndoByRestoring(_ record: TrashRecord, actionName: String, undoManager: UndoManager?) {
+    undoManager?.registerUndo(withTarget: self) { model in
+      MainActor.assumeIsolated {
+        model.registerUndoByTrashing(record, actionName: actionName, undoManager: undoManager)
+        Task { await model.runFileUndo { try await model.restoreFromTrash(record) } }
+      }
+    }
+    undoManager?.setActionName(actionName)
+  }
+
+  private func runFileUndo(_ work: () async throws -> Void) async {
+    do {
+      try await work()
+    } catch {
+      errorMessage = "되돌리지 못했어요. 파일은 그대로 두었어요. \(error.localizedDescription)"
+    }
+  }
+
+  nonisolated static func systemTrash(_ url: URL) throws -> URL {
+    var resulting: NSURL?
+    try FileManager.default.trashItem(at: url, resultingItemURL: &resulting)
+    guard let resulting else { throw CocoaError(.fileWriteUnknown) }
+    return resulting as URL
   }
 
   // MARK: - 저장
