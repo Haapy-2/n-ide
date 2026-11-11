@@ -10,7 +10,7 @@ struct WorkspaceWindow: View {
 
   private enum LoadState {
     case loading
-    case loaded(ProjectFile)
+    case loaded(ProjectModel)
     case failed(String)
   }
 
@@ -20,8 +20,8 @@ struct WorkspaceWindow: View {
       case .loading:
         // 목표가 0.3초 이내라 안내 문구 없이 종이만 잠깐 보인다.
         Color.paper.frame(minWidth: 720, minHeight: 480)
-      case .loaded(let project):
-        WorkspaceView(project: project, store: ProjectStore(root: url))
+      case .loaded(let model):
+        WorkspaceView(model: model)
       case .failed(let message):
         EmptyStateView(message: message, buttonTitle: "작품 전환…") { openWindow(id: AppScene.picker) }
           .padding(40)
@@ -45,7 +45,7 @@ struct WorkspaceWindow: View {
       let (project, recovery) = try await Task.detached { try ProjectStore(root: url).open() }.value
       RecentProjects.record(url: url, title: project.title, episodeCount: project.episodes.count)
       recoveryNotice = Self.notice(for: recovery)
-      state = .loaded(project)
+      state = .loaded(ProjectModel(project: project, store: ProjectStore(root: url)))
     } catch let error as ProjectError {
       state = .failed(error.userMessage)
     } catch {

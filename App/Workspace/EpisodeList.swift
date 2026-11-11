@@ -9,6 +9,11 @@ import SwiftUI
 struct EpisodeList: View {
   let episodes: [EpisodeMeta]
   @Binding var selection: EpisodeID?
+  /// nil이면(미리보기) 메뉴와 드래그가 없다.
+  var onRename: ((EpisodeID) -> Void)? = nil
+  var onTrash: ((EpisodeID) -> Void)? = nil
+  var onAddAfter: ((EpisodeID) -> Void)? = nil
+  var onMove: ((IndexSet, Int) -> Void)? = nil
 
   var body: some View {
     List {
@@ -24,11 +29,23 @@ struct EpisodeList: View {
               RoundedRectangle(cornerRadius: 6)
                 .fill(episode.id == selection ? Color.ink.opacity(0.08) : .clear))
             .contentShape(RoundedRectangle(cornerRadius: 6))
-            .onTapGesture { selection = episode.id }
+            // 두 번 클릭하면 이름 변경. 한 번 클릭 선택은 두 번 클릭 판정을 기다리지 않고 바로 한다.
+            .onTapGesture(count: 2) { onRename?(episode.id) }
+            .simultaneousGesture(TapGesture().onEnded { selection = episode.id })
+            .contextMenu {
+              if let onAddAfter, let onRename, let onTrash {
+                Button("아래에 새 회차") { onAddAfter(episode.id) }
+                Button("이름 변경…") { onRename(episode.id) }
+                Divider()
+                Button("휴지통으로 이동…") { onTrash(episode.id) }
+              }
+            }
             .listRowInsets(EdgeInsets(top: 1, leading: 10, bottom: 1, trailing: 10))
             .listRowBackground(Color.clear)
             .accessibilityAddTraits(episode.id == selection ? [.isButton, .isSelected] : .isButton)
         }
+        // 드래그로 순서 바꾸기. 번호는 순서로 매기므로 함께 바뀐다(파일 이름은 그대로).
+        .onMove(perform: onMove)
       }
     }
   }

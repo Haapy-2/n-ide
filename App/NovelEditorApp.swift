@@ -12,7 +12,10 @@ struct NovelEditorApp: App {
     .windowStyle(.hiddenTitleBar)
     .windowResizability(.contentSize)
     .handlesExternalEvents(matching: ["*"])
-    .commands { ProjectCommands() }
+    .commands {
+      ProjectCommands()
+      EpisodeCommands()
+    }
 
     // 작품마다 작업 공간 창 하나. 창의 값은 작품 폴더 URL이다.
     WindowGroup(for: URL.self) { $url in

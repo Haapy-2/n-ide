@@ -3,22 +3,42 @@ import SwiftUI
 
 /// 작품 하나의 작업 공간: 유리 사이드바(회차 목록) + 불투명 종이 편집 영역.
 struct WorkspaceView: View {
-  let project: ProjectFile
-  /// nil이면 본문을 읽지 않는다(미리보기·스냅샷용).
-  @State private var autosaver: EpisodeAutosaver?
+  /// nil이면 미리보기·스냅샷용이라 본문을 읽지 않고 목록을 바꿀 수 없다.
+  private let model: ProjectModel?
+  private let previewProject: ProjectFile?
   /// 사이드바 뒤로 다른 앱·바탕화면이 흐릿하게 비치는 효과. 설정 창(10단계)에서 끄고 켠다.
   @AppStorage(AppSettingKey.sidebarSeesThroughWindow) private var sidebarSeesThroughWindow = true
   @State private var selection: EpisodeID?
+  @State private var renaming: EpisodeID?
+  @State private var renameText = ""
+  @State private var trashing: EpisodeID?
+  @State private var alertMessage: String?
 
-  init(project: ProjectFile, store: ProjectStore? = nil) {
-    self.project = project
-    _autosaver = State(initialValue: store.map { EpisodeAutosaver(store: $0) })
-    _selection = State(initialValue: project.episodes.first?.id)
+  init(model: ProjectModel) {
+    self.model = model
+    previewProject = nil
+    _selection = State(initialValue: model.episodes.first?.id)
   }
+
+  init(previewProject: ProjectFile) {
+    model = nil
+    self.previewProject = previewProject
+    _selection = State(initialValue: previewProject.episodes.first?.id)
+  }
+
+  private var project: ProjectFile { model?.project ?? previewProject! }
 
   var body: some View {
     NavigationSplitView {
-      EpisodeList(episodes: project.episodes, selection: $selection)
+      EpisodeList(
+        episodes: project.episodes,
+        selection: $selection,
+        onRename: model == nil ? nil : { beginRename($0) },
+        onTrash: model == nil ? nil : { trashing = $0 },
+        onAddAfter: model == nil ? nil : { id in addEpisode(after: id) },
+        onMove: model == nil ? nil : { source, destination in
+          Task { await model?.moveEpisodes(fromOffsets: source, toOffset: destination) }
+        })
         .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 340)
     } detail: {
       detail
@@ -28,8 +48,8 @@ struct WorkspaceView: View {
         .navigationTitle(project.title)
         .toolbar {
           ToolbarItem {
-            Button("새 회차", systemImage: "square.and.pencil") {}
-              .disabled(true)
+            Button("새 회차", systemImage: "square.and.pencil") { addEpisode(after: selection) }
+              .disabled(model == nil)
           }
           ToolbarItem {
             Button("노트 나란히 보기", systemImage: "sidebar.right") {}
@@ -41,19 +61,119 @@ struct WorkspaceView: View {
     // 창 바탕을 반투명 재질로 바꾸면 그 위에 떠 있는 유리 사이드바로 창 뒤의 다른 앱과 바탕화면이 비친다.
     // 종이(편집 영역)는 불투명 paper 색이라 본문 쪽은 비치지 않는다.
     .modifier(SeeThroughWindowBackground(isEnabled: sidebarSeesThroughWindow))
+    // 회차 메뉴(EpisodeCommands)가 지금 앞에 있는 창의 작업 공간에 명령을 보낼 수 있게 한다.
+    .focusedSceneValue(\.workspaceActions, model == nil ? nil : actions)
+    .alert("회차 이름", isPresented: isRenaming) {
+      TextField("제목", text: $renameText)
+      Button("변경") { commitRename() }
+      Button("취소", role: .cancel) { renaming = nil }
+    } message: {
+      Text("비워 두면 \"제목 없음\"으로 보여요.")
+    }
+    .alert(trashTitle, isPresented: isTrashing) {
+      Button("휴지통으로 이동", role: .destructive) { commitTrash() }
+      Button("취소", role: .cancel) { trashing = nil }
+    } message: {
+      Text("본문 파일을 휴지통으로 옮겨요. 휴지통에서 꺼내면 되살릴 수 있어요.")
+    }
+    .alert("알림", isPresented: isShowingAlert) {
+      Button("확인") { alertMessage = nil; model?.errorMessage = nil }
+    } message: {
+      Text(alertMessage ?? model?.errorMessage ?? "")
+    }
     // 창을 닫을 때 남은 저장을 마친다(Task가 저장기를 붙잡고 있어 창이 사라져도 끝까지 저장된다).
-    .onDisappear { if let autosaver { Task { await autosaver.flush() } } }
+    .onDisappear { if let model { Task { await model.autosaver.flush() } } }
   }
 
   @ViewBuilder
   private var detail: some View {
     if project.episodes.isEmpty {
-      EmptyStateView(message: "첫 회차를 추가해 주세요.", buttonTitle: "새 회차", action: nil)
-    } else if let autosaver, let selection {
-      EpisodeEditorPane(autosaver: autosaver, episodeID: selection)
+      EmptyStateView(message: "첫 회차를 추가해 주세요.", buttonTitle: "새 회차", action: model == nil ? nil : { addEpisode(after: nil) })
+    } else if let model, let selection {
+      EpisodeEditorPane(autosaver: model.autosaver, episodeID: selection)
     } else {
       Color.clear
     }
+  }
+
+  // MARK: - 회차 명령
+
+  private var actions: WorkspaceActions {
+    let index = selection.flatMap { id in project.episodes.firstIndex { $0.id == id } }
+    return WorkspaceActions(
+      addEpisode: { addEpisode(after: selection) },
+      renameSelected: selection.map { id in { beginRename(id) } },
+      trashSelected: selection.map { id in { trashing = id } },
+      selectPrevious: neighbor(of: index, offset: -1),
+      selectNext: neighbor(of: index, offset: 1))
+  }
+
+  /// 선택한 회차의 앞(-1)·뒤(+1) 회차로 옮기는 명령. 없으면 nil.
+  private func neighbor(of index: Int?, offset: Int) -> (() -> Void)? {
+    guard let index, project.episodes.indices.contains(index + offset) else { return nil }
+    let id = project.episodes[index + offset].id
+    return { selection = id }
+  }
+
+  private func addEpisode(after id: EpisodeID?) {
+    guard let model else { return }
+    Task {
+      do {
+        selection = try await model.addEpisode(after: id)
+      } catch {
+        alertMessage = "새 회차를 만들지 못했어요. \((error as? ProjectError)?.userMessage ?? error.localizedDescription)"
+      }
+    }
+  }
+
+  private func beginRename(_ id: EpisodeID) {
+    renameText = model?.episode(id)?.title ?? ""
+    renaming = id
+  }
+
+  private func commitRename() {
+    guard let model, let id = renaming else { return }
+    renaming = nil
+    Task { await model.rename(id, to: renameText) }
+  }
+
+  private func commitTrash() {
+    guard let model, let id = trashing else { return }
+    trashing = nil
+    let episodes = project.episodes
+    let index = episodes.firstIndex { $0.id == id }
+    Task {
+      do {
+        try await model.trashEpisode(id)
+        // 지운 회차를 보고 있었으면 바로 아래(없으면 위) 회차로 옮긴다.
+        if selection == id, let index {
+          let remaining = model.episodes
+          selection = remaining.isEmpty ? nil : remaining[min(index, remaining.count - 1)].id
+        }
+      } catch {
+        alertMessage = "휴지통으로 옮기지 못해 지우지 않았어요. \(error.localizedDescription)"
+      }
+    }
+  }
+
+  private var trashTitle: String {
+    guard let id = trashing, let index = project.episodes.firstIndex(where: { $0.id == id }) else { return "" }
+    let title = project.episodes[index].title
+    return "\(index + 1)화\(title.isEmpty ? "" : " ‘\(title)’")을(를) 휴지통으로 옮길까요?"
+  }
+
+  private var isRenaming: Binding<Bool> {
+    Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })
+  }
+
+  private var isTrashing: Binding<Bool> {
+    Binding(get: { trashing != nil }, set: { if !$0 { trashing = nil } })
+  }
+
+  private var isShowingAlert: Binding<Bool> {
+    Binding(
+      get: { alertMessage != nil || model?.errorMessage != nil },
+      set: { if !$0 { alertMessage = nil; model?.errorMessage = nil } })
   }
 }
 
@@ -72,12 +192,12 @@ private struct SeeThroughWindowBackground: ViewModifier {
 
 // Xcode 캔버스(⌥⌘↩)에서 작업 공간을 바로 볼 수 있다.
 #Preview("빈 작품") {
-  WorkspaceView(project: ProjectFile(title: "회귀한 검성은 이번 생에서만큼은 조용히 살고 싶다"))
+  WorkspaceView(previewProject: ProjectFile(title: "회귀한 검성은 이번 생에서만큼은 조용히 살고 싶다"))
     .frame(width: 1100, height: 760)
 }
 
 #Preview("500회차") {
-  WorkspaceView(project: .previewManyEpisodes)
+  WorkspaceView(previewProject: .previewManyEpisodes)
     .frame(width: 1100, height: 760)
 }
 
