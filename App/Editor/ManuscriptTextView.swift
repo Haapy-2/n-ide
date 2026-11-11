@@ -10,6 +10,15 @@ final class ManuscriptTextView: NSTextView {
   /// 회차마다 따로 쓰는 실행 취소 기록. 회차를 바꾸면 비운다(PLAN.md 세부 기준).
   let episodeUndoManager = UndoManager()
 
+  /// 창에 붙거나 다른 창으로 옮겨질 때마다. SwiftUI가 뷰를 창에 붙이는 시점은 정해져 있지 않아서
+  /// "조금 뒤에 한 번" 하는 대신 AppKit이 알려 주는 이 순간에 초점과 창 감시를 건다.
+  var onMoveToWindow: (NSWindow) -> Void = { _ in }
+
+  override func viewDidMoveToWindow() {
+    super.viewDidMoveToWindow()
+    if let window { onMoveToWindow(window) }
+  }
+
   static func make() -> ManuscriptTextView {
     // TextKit 1: NSTextStorage → NSLayoutManager → NSTextContainer 를 직접 연결한다.
     let storage = NSTextStorage()

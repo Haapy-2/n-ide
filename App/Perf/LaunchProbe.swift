@@ -9,6 +9,14 @@ enum LaunchProbe {
     ProcessInfo.processInfo.environment["NOVEL_PERF_OPEN"].map { URL(filePath: $0, directoryHint: .isDirectory) }
   }
 
+  /// 메모리 측정 중이면(NOVEL_PERF_OPEN만 있고 NOVEL_PERF_LAUNCH는 없을 때) 작업 공간 창의 본문 영역 크기를 이 값으로 고정한다.
+  /// 창을 그리는 그래픽 버퍼가 창 넓이에 비례해서, macOS가 기억해 둔 창 크기에 따라 메모리 값이 90~112MB로 흔들렸다.
+  /// 실행 시간 측정에서는 쓰지 않는다: 창 크기를 바꾸면 화면을 한 번 더 배치해서 실행 시간이 늘어난다.
+  static var windowContentSize: CGSize? {
+    guard projectToOpen != nil, ProcessInfo.processInfo.environment["NOVEL_PERF_LAUNCH"] != "1" else { return nil }
+    return CGSize(width: 1100, height: 760)
+  }
+
   private static var reported = false
 
   static func editorReady() {

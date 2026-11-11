@@ -39,6 +39,9 @@ struct ManuscriptEditor: NSViewRepresentable {
     textView.delegate = context.coordinator
     context.coordinator.textView = textView
     context.coordinator.parent = self
+    textView.onMoveToWindow = { [weak coordinator = context.coordinator] window in
+      coordinator?.attach(to: window)
+    }
     onReady(textView)
     apply(content, to: textView, coordinator: context.coordinator)
     return scrollView
@@ -59,15 +62,8 @@ struct ManuscriptEditor: NSViewRepresentable {
   private func apply(_ content: Content, to textView: ManuscriptTextView, coordinator: Coordinator) {
     coordinator.appliedToken = content.token
     textView.replaceAllText(with: content.text)
-    // 창에 붙은 뒤에 첫 응답자로 만든다(makeNSView 시점에는 아직 창이 없다).
-    // 단, 사이드바처럼 다른 곳이 키보드 초점을 갖고 있으면 빼앗지 않는다(사이드바에서 ↑↓·↩·⌘⌫를 이어 쓰게).
-    DispatchQueue.main.async {
-      coordinator.observeWindow(textView.window)
-      if let window = textView.window, window.firstResponder == nil || window.firstResponder === window {
-        window.makeFirstResponder(textView)
-      }
-      if textView.window?.firstResponder === textView { LaunchProbe.editorReady() }
-    }
+    // 이미 창에 붙어 있으면(회차 전환) 지금 초점을 준다. 아직이면(처음 만들 때) viewDidMoveToWindow가 맡는다.
+    if let window = textView.window { coordinator.attach(to: window) }
   }
 
   func makeCoordinator() -> Coordinator { Coordinator() }
@@ -84,11 +80,28 @@ struct ManuscriptEditor: NSViewRepresentable {
       parent?.onTextChange()
     }
 
-    /// 편집기가 창에 붙으면 그 창이 비활성화·활성화될 때를 지켜본다.
-    func observeWindow(_ window: NSWindow?) {
+    /// 편집기가 창에 있을 때: 창 감시를 걸고, 아무도 키보드 초점을 갖고 있지 않으면 편집기가 받는다.
+    /// 사이드바처럼 다른 곳이 초점을 갖고 있으면 빼앗지 않는다(사이드바에서 ↑↓·↩·⌘⌫를 이어 쓰게).
+    func attach(to window: NSWindow) {
+      guard let textView else { return }
+      if observedWindow !== window {
+        observeWindow(window)
+        if let size = LaunchProbe.windowContentSize { window.setContentSize(size) }
+      }
+      if window.firstResponder == nil || window.firstResponder === window {
+        window.makeFirstResponder(textView)
+      }
+      // 측정 신호는 한 차례 뒤에 찍는다. 창에 붙는 순간은 아직 화면을 그리기 전이라, 바로 찍으면 실행 시간이 실제보다 짧게 나온다.
+      if window.firstResponder === textView { DispatchQueue.main.async { LaunchProbe.editorReady() } }
+    }
+
+    private weak var observedWindow: NSWindow?
+
+    /// 그 창이 비활성화·활성화될 때를 지켜본다.
+    private func observeWindow(_ window: NSWindow) {
       if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
       if let becomeKeyObserver { NotificationCenter.default.removeObserver(becomeKeyObserver) }
-      guard let window else { return }
+      observedWindow = window
       // 다른 앱에서 돌아오면 이 창이 다시 키 창이 된다. 그때 회차 파일이 앱 밖에서 바뀌었는지 본다.
       becomeKeyObserver = NotificationCenter.default.addObserver(
         forName: NSWindow.didBecomeKeyNotification, object: window, queue: .main

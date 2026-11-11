@@ -25,7 +25,7 @@ App/                   앱 소스 (Picker/ 작품 선택 창, Workspace/ 작업 
 Packages/NovelCore/    Foundation만 쓰는 공통 로직 패키지 + 단위 테스트 + 성능 테스트 + make-dummy-novel(더미 작품 생성기)
 Tests/AppTests/        앱 테스트, 디자인 스냅샷 (성능 테스트는 Tests/ 아래 따로)
 Scripts/               build.sh, run.sh, test.sh, snapshots.sh, perf.sh, lib.sh(공통)
-docs/                  SPEC, PLAN, DESIGN, PROGRESS, 체크리스트, design-snapshots/, log/(날짜별 작업 기록)
+docs/                  SPEC, PLAN, DESIGN, PERFORMANCE, PROGRESS, 체크리스트, design-snapshots/, log/(날짜별 작업 기록)
 build/                 빌드 산출물·임시 파일·더미 작품·로그 (git 제외, 통째로 지워도 됨)
 ```
 
@@ -75,6 +75,7 @@ build/                 빌드 산출물·임시 파일·더미 작품·로그 (g
 - 테스트를 지우거나 목표 수치를 낮춰서 통과시키기
 - 빈 폴더, 백업 사본, 실험 잔여 코드 남기기
 - 같은 방법을 두 번 넘게 반복하기 (두 번 실패하면 접근을 바꾸거나 묻는다)
+- 사용자 허락 없이 파일을 만들거나 고치기. 먼저 무엇을 왜 바꿀지 보고하고 허락을 받는다(조사·측정은 괜찮음)
 
 ## 작업 흐름
 
@@ -95,6 +96,7 @@ build/                 빌드 산출물·임시 파일·더미 작품·로그 (g
 - 요구사항 원문: `docs/SPEC.md`
 - 단계 계획, 세부 기준, 미결정 사항: `docs/PLAN.md`
 - 색·글꼴·레이아웃 값: `docs/DESIGN.md`
+- 성능과 UX 규칙(키 입력 경로, 회차 수, 측정 방법, 보이는 변화 보고 절차): `docs/PERFORMANCE.md`
 - 진행 상황, 성능 측정 표: `docs/PROGRESS.md`
 - 날짜별 작업 기록(이유·근거·결과·에러·수정): `docs/log/`
 - 한글 입력 손 확인 체크리스트: `docs/checklist-hangul.md` (편집기 단계에서 생성)

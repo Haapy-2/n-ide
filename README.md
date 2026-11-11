@@ -45,6 +45,7 @@ build/               빌드 산출물과 임시 파일 (git 제외, 지워도 �
 - [docs/SPEC.md](docs/SPEC.md): 요구사항 원문
 - [docs/PLAN.md](docs/PLAN.md): 단계별 계획, 세부 기준, 미결정 사항
 - [docs/DESIGN.md](docs/DESIGN.md): 디자인 값과 결정
+- [docs/PERFORMANCE.md](docs/PERFORMANCE.md): 성능과 UX 규칙
 - [docs/PROGRESS.md](docs/PROGRESS.md): 진행 상황과 성능 측정
 - docs/design-snapshots/: 단계별 화면 스냅샷
 - [docs/log/](docs/log/): 날짜별 작업 기록

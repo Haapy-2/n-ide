@@ -25,17 +25,29 @@ TEST_RUNNER_NOVEL_PERF_PROJECT="$DUMMY" xb perf-app "앱 성능 측정(릴리스
 # 앱 실행 시간: 6번 실행하고 첫 번째는 참고값으로만 쓴다(SPEC 8장: 한 번 실행한 적 있는 상태 기준).
 xb perf-release-build "릴리스 빌드" -scheme NovelEditor -configuration Release build >/dev/null
 APP="$DERIVED/Build/Products/Release/NovelEditor.app/Contents/MacOS/NovelEditor"
+# 한 번이 10초를 넘기면 멈춘 것으로 보고 끄고 다음으로 넘어간다(전에는 멈추면 perf.sh가 끝나지 않았다). 멈춘 횟수는 표 아래에 적는다.
 : >"$LOGS/perf-launch.log"
 for _ in 1 2 3 4 5 6; do
-  NOVEL_PERF_OPEN="$DUMMY" NOVEL_PERF_LAUNCH=1 "$APP" 2>/dev/null | grep NOVEL_PERF >>"$LOGS/perf-launch.log" || true
+  NOVEL_PERF_OPEN="$DUMMY" NOVEL_PERF_LAUNCH=1 "$APP" >"$LOGS/perf-launch-run.log" 2>/dev/null &
+  pid=$!
+  for _ in $(seq 100); do kill -0 "$pid" 2>/dev/null || break; sleep 0.1; done
+  if kill -0 "$pid" 2>/dev/null; then
+    kill "$pid" 2>/dev/null || true
+    echo "NOVEL_PERF launch_hung" >>"$LOGS/perf-launch.log"
+  fi
+  wait "$pid" 2>/dev/null || true
+  grep NOVEL_PERF "$LOGS/perf-launch-run.log" >>"$LOGS/perf-launch.log" || true
 done
+rm -f "$LOGS/perf-launch-run.log"
 
 # 대기 메모리: 5,000자 회차를 연 채로 30초 둔 뒤 실제 사용량(phys_footprint).
+# 창 크기는 앱이 1100×760으로 고정한다(LaunchProbe.windowContentSize). 그래픽 버퍼가 창 넓이에 비례하기 때문.
 NOVEL_PERF_OPEN="$DUMMY" "$APP" >/dev/null 2>&1 &
 pid=$!
 sleep 30
 footprint -p "$pid" >"$LOGS/perf-memory.log" 2>&1 || true
 kill "$pid" 2>/dev/null || true
+wait "$pid" 2>/dev/null || true
 
 # 측정값에서 중앙값·최솟값·최댓값(키 입력은 p95)을 뽑아 표로 만든다.
 python3 - "$log" "$LOGS/perf-app.log" "$LOGS/perf-launch.log" "$LOGS/perf-memory.log" <<'PY'
@@ -60,6 +72,7 @@ def perf(name, text):
 row("키 입력 1,000번 (5,000자 회차)", perf("keystroke_ms", app), 16, stat="p95")
 row("회차 전환 (처음 여는 5,000자 회차)", perf("switch_ms", app), 50)
 runs = [float(v) for v in re.findall(r"launch_ms ([0-9.]+)", launch)]
+hung = launch.count("launch_hung")
 row("앱 실행 → 입력 가능 (첫 실행 제외 5회)", runs[1:], 500)
 m = re.search(r"phys_footprint:\s*([0-9.]+)\s*(KB|MB|GB)", memory) or re.search(r"Footprint:\s*([0-9.]+)\s*(KB|MB|GB)", memory)
 if m:
@@ -72,4 +85,5 @@ print("| 항목 | 기준값 | 최솟값 | 최댓값 | 목표 | 결과 |")
 print("|---|---|---|---|---|---|")
 print("\n".join(rows))
 if runs: print(f"\n참고: 첫 실행 {runs[0]:.1f}ms")
+if hung: print(f"주의: 실행 6번 중 {hung}번이 10초 안에 입력 가능 상태가 되지 않아 껐음")
 PY
