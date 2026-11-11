@@ -58,9 +58,12 @@ struct ManuscriptEditor: NSViewRepresentable {
     coordinator.appliedToken = content.token
     textView.replaceAllText(with: content.text)
     // 창에 붙은 뒤에 첫 응답자로 만든다(makeNSView 시점에는 아직 창이 없다).
+    // 단, 사이드바처럼 다른 곳이 키보드 초점을 갖고 있으면 빼앗지 않는다(사이드바에서 ↑↓·↩·⌘⌫를 이어 쓰게).
     DispatchQueue.main.async {
       coordinator.observeWindow(textView.window)
-      textView.window?.makeFirstResponder(textView)
+      if let window = textView.window, window.firstResponder == nil || window.firstResponder === window {
+        window.makeFirstResponder(textView)
+      }
       if textView.window?.firstResponder === textView { LaunchProbe.editorReady() }
     }
   }

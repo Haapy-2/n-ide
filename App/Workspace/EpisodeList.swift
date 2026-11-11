@@ -14,6 +14,8 @@ struct EpisodeList: View {
   var onTrash: ((EpisodeID) -> Void)? = nil
   var onAddAfter: ((EpisodeID) -> Void)? = nil
   var onMove: ((IndexSet, Int) -> Void)? = nil
+  /// 회차를 클릭하면 사이드바가 키보드 초점을 받는다. 초점이 있을 때: ↑↓ 이동, ↩ 이름 변경, ⌘⌫ 휴지통.
+  @FocusState private var isFocused: Bool
 
   var body: some View {
     List {
@@ -31,7 +33,10 @@ struct EpisodeList: View {
             .contentShape(RoundedRectangle(cornerRadius: 6))
             // 두 번 클릭하면 이름 변경. 한 번 클릭 선택은 두 번 클릭 판정을 기다리지 않고 바로 한다.
             .onTapGesture(count: 2) { onRename?(episode.id) }
-            .simultaneousGesture(TapGesture().onEnded { selection = episode.id })
+            .simultaneousGesture(TapGesture().onEnded {
+              selection = episode.id
+              isFocused = true
+            })
             .contextMenu {
               if let onAddAfter, let onRename, let onTrash {
                 Button("아래에 새 회차") { onAddAfter(episode.id) }
@@ -48,6 +53,30 @@ struct EpisodeList: View {
         .onMove(perform: onMove)
       }
     }
+    .focusable()
+    .focused($isFocused)
+    // 초점 표시(파란 테두리)는 그리지 않는다. 선택한 회차의 회색 칸으로 충분하다.
+    .focusEffectDisabled()
+    .onKeyPress(.upArrow) { move(by: -1) }
+    .onKeyPress(.downArrow) { move(by: 1) }
+    .onKeyPress(.return) {
+      guard let selection, let onRename else { return .ignored }
+      onRename(selection)
+      return .handled
+    }
+    .onKeyPress(keys: [.delete]) { press in
+      guard press.modifiers.contains(.command), let selection, let onTrash else { return .ignored }
+      onTrash(selection)
+      return .handled
+    }
+  }
+
+  private func move(by offset: Int) -> KeyPress.Result {
+    guard let selection, let index = episodes.firstIndex(where: { $0.id == selection }),
+      episodes.indices.contains(index + offset)
+    else { return .ignored }
+    self.selection = episodes[index + offset].id
+    return .handled
   }
 }
 
