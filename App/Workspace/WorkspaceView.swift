@@ -13,6 +13,8 @@ struct WorkspaceView: View {
   @State private var renameText = ""
   @State private var trashing: EpisodeID?
   @State private var alertMessage: String?
+  /// 창의 실행 취소 기록. 편집기는 회차별로 따로 갖고 있어서, 사이드바에 초점이 있을 때 ⌘Z가 이것을 쓴다.
+  @Environment(\.undoManager) private var undoManager
 
   init(model: ProjectModel) {
     self.model = model
@@ -37,7 +39,7 @@ struct WorkspaceView: View {
         onTrash: model == nil ? nil : { trashing = $0 },
         onAddAfter: model == nil ? nil : { id in addEpisode(after: id) },
         onMove: model == nil ? nil : { source, destination in
-          Task { await model?.moveEpisodes(fromOffsets: source, toOffset: destination) }
+          Task { await model?.moveEpisodes(fromOffsets: source, toOffset: destination, undoManager: undoManager) }
         })
         .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 340)
     } detail: {
@@ -134,7 +136,7 @@ struct WorkspaceView: View {
   private func commitRename() {
     guard let model, let id = renaming else { return }
     renaming = nil
-    Task { await model.rename(id, to: renameText) }
+    Task { await model.rename(id, to: renameText, undoManager: undoManager) }
   }
 
   private func commitTrash() {

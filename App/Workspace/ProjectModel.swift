@@ -52,17 +52,43 @@ final class ProjectModel {
     return id
   }
 
-  func rename(_ id: EpisodeID, to title: String) async {
+  /// 이름 변경. `undoManager`를 주면 ⌘Z로 되돌릴 수 있다.
+  func rename(_ id: EpisodeID, to title: String, undoManager: UndoManager? = nil) async {
     guard let index = project.episodes.firstIndex(where: { $0.id == id }) else { return }
     let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
     guard project.episodes[index].title != trimmed else { return }
-    project.episodes[index].title = trimmed
-    await saveProject()
+    var episodes = project.episodes
+    episodes[index].title = trimmed
+    await replaceEpisodes(with: episodes, actionName: "이름 변경", undoManager: undoManager).value
   }
 
-  func moveEpisodes(fromOffsets source: IndexSet, toOffset destination: Int) async {
-    project.episodes.move(fromOffsets: source, toOffset: destination)
-    await saveProject()
+  /// 드래그로 순서 바꾸기. `undoManager`를 주면 ⌘Z로 직전 순서로 되돌릴 수 있다.
+  func moveEpisodes(fromOffsets source: IndexSet, toOffset destination: Int, undoManager: UndoManager? = nil) async {
+    var episodes = project.episodes
+    episodes.move(fromOffsets: source, toOffset: destination)
+    guard episodes != project.episodes else { return }
+    await replaceEpisodes(with: episodes, actionName: "순서 변경", undoManager: undoManager).value
+  }
+
+  /// 회차 목록(순서·제목)을 통째로 바꾸고 저장을 시작한다. 되돌리기에는 바꾸기 전 목록을 기록한다.
+  /// 되돌리기 처리 안에서 다시 이 함수를 부르므로 다시 실행(⇧⌘Z)이 자동으로 쌓인다.
+  /// 기록은 반드시 그 자리에서(동기로) 해야 UndoManager가 되돌리기/다시 실행을 제대로 구분한다.
+  /// 회차 목록만 바꾸고 파일은 건드리지 않으므로 되돌려도 본문에는 영향이 없다.
+  @discardableResult
+  private func replaceEpisodes(
+    with episodes: [EpisodeMeta], actionName: String, undoManager: UndoManager?
+  ) -> Task<Void, Never> {
+    let previous = project.episodes
+    undoManager?.registerUndo(withTarget: self) { model in
+      MainActor.assumeIsolated {
+        // 그 사이 회차가 추가·삭제됐으면 그 변화를 덮어쓰지 않도록, 같은 회차들일 때만 되돌린다.
+        guard Set(model.project.episodes.map(\.id)) == Set(previous.map(\.id)) else { return }
+        model.replaceEpisodes(with: previous, actionName: actionName, undoManager: undoManager)
+      }
+    }
+    undoManager?.setActionName(actionName)
+    project.episodes = episodes
+    return Task { await saveProject() }
   }
 
   /// 회차를 휴지통으로 옮긴다. 휴지통으로 못 옮기면 아무것도 바꾸지 않고 오류를 던진다(영구 삭제로 대신하지 않음).

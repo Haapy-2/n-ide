@@ -119,4 +119,46 @@ final class ProjectModelTests: XCTestCase {
     XCTAssertFalse(FileManager.default.fileExists(atPath: store.layout.episodeFile(id).path(percentEncoded: false)))
     XCTAssertFalse(model.autosaver.hasUnsavedChanges)
   }
+
+  /// 드래그로 바꾼 순서를 ⌘Z로 직전 순서로 되돌리고, ⇧⌘Z로 다시 바꾼다. 저장된 목록도 따라간다.
+  func testUndoAndRedoReorder() async throws {
+    let model = try makeModel()
+    let a = try await model.addEpisode()
+    let b = try await model.addEpisode()
+    let c = try await model.addEpisode()
+    let undo = UndoManager()
+    undo.groupsByEvent = false
+
+    undo.beginUndoGrouping()
+    await model.moveEpisodes(fromOffsets: IndexSet(integer: 2), toOffset: 0, undoManager: undo)
+    undo.endUndoGrouping()
+    XCTAssertEqual(model.episodes.map(\.id), [c, a, b])
+    XCTAssertEqual(undo.undoActionName, "순서 변경")
+
+    undo.undo()
+    try await Task.sleep(for: .milliseconds(100))
+    XCTAssertEqual(model.episodes.map(\.id), [a, b, c])
+    XCTAssertEqual(try store.loadProject().episodes.map(\.id), [a, b, c])
+
+    undo.redo()
+    try await Task.sleep(for: .milliseconds(100))
+    XCTAssertEqual(model.episodes.map(\.id), [c, a, b])
+    XCTAssertEqual(try store.loadProject().episodes.map(\.id), [c, a, b])
+  }
+
+  func testUndoRename() async throws {
+    let model = try makeModel()
+    let id = try await model.addEpisode()
+    let undo = UndoManager()
+    undo.groupsByEvent = false
+
+    undo.beginUndoGrouping()
+    await model.rename(id, to: "새 제목", undoManager: undo)
+    undo.endUndoGrouping()
+    undo.undo()
+    try await Task.sleep(for: .milliseconds(100))
+
+    XCTAssertEqual(model.episode(id)?.title, "")
+    XCTAssertEqual(try store.loadProject().episodes.first?.title, "")
+  }
 }
