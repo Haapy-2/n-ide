@@ -22,6 +22,8 @@ struct ManuscriptEditor: NSViewRepresentable {
   var onTextChange: () -> Void = {}
   /// 창이 비활성화될 때 (바로 저장용).
   var onFocusLost: () -> Void = {}
+  /// 창이 다시 활성화될 때 (외부 변경 확인용).
+  var onFocusGained: () -> Void = {}
   /// 편집기가 만들어졌을 때 한 번.
   var onReady: (ManuscriptTextView) -> Void = { _ in }
 
@@ -75,16 +77,24 @@ struct ManuscriptEditor: NSViewRepresentable {
     var parent: ManuscriptEditor?
     var appliedToken: UUID?
     private var resignObserver: NSObjectProtocol?
+    private var becomeKeyObserver: NSObjectProtocol?
 
     // 프로그램이 본문을 바꿀 때(회차 전환)는 불리지 않고, 사용자가 고칠 때만 불린다.
     func textDidChange(_ notification: Notification) {
       parent?.onTextChange()
     }
 
-    /// 편집기가 창에 붙으면 그 창이 비활성화될 때를 지켜본다.
+    /// 편집기가 창에 붙으면 그 창이 비활성화·활성화될 때를 지켜본다.
     func observeWindow(_ window: NSWindow?) {
       if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
+      if let becomeKeyObserver { NotificationCenter.default.removeObserver(becomeKeyObserver) }
       guard let window else { return }
+      // 다른 앱에서 돌아오면 이 창이 다시 키 창이 된다. 그때 회차 파일이 앱 밖에서 바뀌었는지 본다.
+      becomeKeyObserver = NotificationCenter.default.addObserver(
+        forName: NSWindow.didBecomeKeyNotification, object: window, queue: .main
+      ) { [weak self] _ in
+        MainActor.assumeIsolated { self?.parent?.onFocusGained() }
+      }
       resignObserver = NotificationCenter.default.addObserver(
         forName: NSWindow.didResignKeyNotification, object: window, queue: .main
       ) { [weak self] _ in
@@ -94,6 +104,7 @@ struct ManuscriptEditor: NSViewRepresentable {
 
     isolated deinit {
       if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
+      if let becomeKeyObserver { NotificationCenter.default.removeObserver(becomeKeyObserver) }
     }
   }
 }

@@ -26,6 +26,11 @@ public struct ProjectLayout: Sendable {
     episodesFolder.appending(path: "\(id.rawValue).md", directoryHint: .notDirectory)
   }
 
+  /// 회차 하나의 스냅샷 폴더.
+  public func snapshotFolder(_ id: EpisodeID) -> URL {
+    snapshotsFolder.appending(path: id.rawValue, directoryHint: .isDirectory)
+  }
+
   public func noteFile(_ id: NoteID) -> URL {
     notesFolder.appending(path: "\(id.rawValue).md", directoryHint: .notDirectory)
   }

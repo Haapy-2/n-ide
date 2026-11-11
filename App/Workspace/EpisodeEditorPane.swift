@@ -16,6 +16,7 @@ struct EpisodeEditorPane: View {
           content: content,
           onTextChange: { autosaver.textDidChange() },
           onFocusLost: { Task { await autosaver.flush() } },
+          onFocusGained: { Task { await autosaver.checkExternalChange() } },
           onReady: { autosaver.attach($0) })
       } else if let errorMessage {
         Text(errorMessage)
@@ -38,10 +39,12 @@ struct EpisodeEditorPane: View {
     autosaver.leaveEpisode()
     let id = episodeID
     do {
-      let text = try autosaver.pendingText(for: id) ?? autosaver.store.readEpisode(id)
+      // 메모리에 남은 본문이 있으면 그것을, 없으면 디스크에서 읽고 그때의 파일 상태를 외부 변경 기준으로 넘긴다.
+      let pending = autosaver.pendingText(for: id)
+      let version = pending == nil ? try autosaver.store.readEpisodeVersion(id) : nil
       errorMessage = nil
-      content = ManuscriptEditor.Content(token: UUID(), episodeID: id, text: text)
-      autosaver.begin(episode: id)
+      content = ManuscriptEditor.Content(token: UUID(), episodeID: id, text: pending ?? version?.text ?? "")
+      autosaver.begin(episode: id, version: version)
     } catch let error as ProjectError {
       content = nil
       errorMessage = error.userMessage

@@ -65,6 +65,18 @@ final class ManuscriptTextView: NSTextView {
     scroll(.zero)
   }
 
+  /// 앱 밖에서 바뀐 본문으로 갈아 끼운다(8단계). 회차 전환과 달리 커서와 스크롤 위치를 되도록 그대로 둔다.
+  /// 실행 취소 기록은 비운다: 옛 본문 기준의 기록을 새 본문에 적용하면 엉뚱한 곳이 바뀐다.
+  func reloadText(with text: String) {
+    if hasMarkedText() { unmarkText() }
+    let cursor = selectedRange().location
+    let origin = enclosingScrollView?.contentView.bounds.origin ?? .zero
+    textStorage?.setAttributedString(NSAttributedString(string: text, attributes: style.textAttributes))
+    setSelectedRange(NSRange(location: min(cursor, (text as NSString).length), length: 0))
+    episodeUndoManager.removeAllActions()
+    scroll(origin)
+  }
+
   override var undoManager: UndoManager? { episodeUndoManager }
 
   // MARK: - 폭과 여백

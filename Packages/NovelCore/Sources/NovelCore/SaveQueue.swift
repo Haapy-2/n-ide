@@ -35,17 +35,25 @@ public actor SaveQueue {
   public func save(
     _ target: SaveTarget, change: Int, write: @Sendable () throws -> Void
   ) async throws -> SaveOutcome {
+    try await save(target, change: change, writeReturning: write) == nil ? .skippedStale : .written
+  }
+
+  /// `save`와 같지만 쓰기 함수가 돌려준 값을 그대로 돌려준다. 옛 저장이라 건너뛰었으면 nil.
+  /// (회차 저장이 "썼다"와 "외부 변경과 충돌해 쓰지 않았다"를 알려 주려고 쓴다.)
+  public func save<Value: Sendable>(
+    _ target: SaveTarget, change: Int, writeReturning write: @Sendable () throws -> Value
+  ) async throws -> Value? {
     var attempt = 0
     while true {
       // 재시도를 기다리는 동안(await) 더 새 저장이 끝났을 수 있으므로 매번 다시 확인한다.
       if let written = writtenChange[target], written >= change {
-        return .skippedStale
+        return nil
       }
       do {
         // 이 사이에는 await가 없어서, actor 안에서 쓰기 하나가 끝날 때까지 다른 저장이 끼어들지 못한다.
-        try write()
+        let value = try write()
         writtenChange[target] = change
-        return .written
+        return value
       } catch {
         guard attempt < retryDelays.count else { throw error }
         try await Task.sleep(for: retryDelays[attempt])

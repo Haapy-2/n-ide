@@ -86,7 +86,7 @@ public struct ProjectStore: Sendable {
   }
 
   /// 본문은 UTF-8 그대로 읽는다. 다른 편집기가 붙인 BOM만 떼고, 줄바꿈 등 나머지는 손대지 않는다.
-  private func readText(at url: URL) throws -> String {
+  func readText(at url: URL) throws -> String {
     guard var data = FileManager.default.contents(atPath: url.path(percentEncoded: false)) else {
       throw ProjectError.missingTextFile(url)
     }

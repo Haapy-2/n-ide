@@ -78,6 +78,12 @@ struct WorkspaceView: View {
     } message: {
       Text("본문 파일을 휴지통으로 옮겨요. 휴지통에서 꺼내면 되살릴 수 있어요.")
     }
+    .alert(conflictTitle, isPresented: isShowingConflict, presenting: readyConflict) { conflict in
+      Button("이 앱의 내용 쓰기") { Task { await model?.autosaver.keepAppVersion(conflict.episodeID) } }
+      Button("바깥에서 바뀐 내용 쓰기") { model?.autosaver.useDiskVersion(conflict.episodeID) }
+    } message: { conflict in
+      Text(conflictMessage(conflict))
+    }
     .alert("알림", isPresented: isShowingAlert) {
       Button("확인") { alertMessage = nil; model?.errorMessage = nil }
     } message: {
@@ -168,6 +174,32 @@ struct WorkspaceView: View {
     guard let id = trashing, let index = project.episodes.firstIndex(where: { $0.id == id }) else { return "" }
     let title = project.episodes[index].title
     return "\(index + 1)화\(title.isEmpty ? "" : " ‘\(title)’")을(를) 휴지통으로 옮길까요?"
+  }
+
+  // MARK: - 외부 변경 충돌
+
+  /// 스냅샷을 다 남긴, 사용자에게 물을 충돌 하나.
+  private var readyConflict: EpisodeAutosaver.Conflict? {
+    model?.autosaver.conflicts.values.first { $0.isReady }
+  }
+
+  private var conflictTitle: String {
+    guard let id = readyConflict?.episodeID, let index = project.episodes.firstIndex(where: { $0.id == id }) else {
+      return "회차 파일이 앱 밖에서 바뀌었어요"
+    }
+    let title = project.episodes[index].title
+    return "\(index + 1)화\(title.isEmpty ? "" : " ‘\(title)’") 파일이 앱 밖에서 바뀌었어요"
+  }
+
+  private func conflictMessage(_ conflict: EpisodeAutosaver.Conflict) -> String {
+    let kept = conflict.snapshot.map { "이 앱에서 쓰던 내용은 스냅샷(\($0.lastPathComponent))으로 남겨 두었어요." }
+      ?? "이 앱에서 쓰던 내용을 스냅샷으로 남기지 못했어요. 고르기 전까지 메모리에 들고 있어요."
+    return "이 앱에서도 고친 내용이 있어서 덮어쓰지 않았어요. \(kept)\n어느 쪽을 쓸까요? 고르지 않은 쪽도 스냅샷으로 남아요."
+  }
+
+  /// 반드시 둘 중 하나를 골라야 한다. 닫기만 하면 다시 뜬다.
+  private var isShowingConflict: Binding<Bool> {
+    Binding(get: { readyConflict != nil }, set: { _ in })
   }
 
   private var isRenaming: Binding<Bool> {
