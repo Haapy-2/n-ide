@@ -11,4 +11,6 @@ struct WorkspaceActions {
 
 extension FocusedValues {
   @Entry var workspaceActions: WorkspaceActions?
+  /// 사이드바(회차 목록)가 키보드 초점을 갖고 있는지. 회차 메뉴가 단축키를 바꾸는 데 쓴다.
+  @Entry var episodeSidebarFocused: Bool?
 }

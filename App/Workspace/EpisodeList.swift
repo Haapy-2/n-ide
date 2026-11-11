@@ -64,11 +64,9 @@ struct EpisodeList: View {
       onRename(selection)
       return .handled
     }
-    .onKeyPress(keys: [.delete]) { press in
-      guard press.modifiers.contains(.command), let selection, let onTrash else { return .ignored }
-      onTrash(selection)
-      return .handled
-    }
+    // ⌘⌫ 같은 ⌘ 조합은 메뉴가 먼저 가져가서 여기까지 오지 않는다. 그래서 회차 메뉴가 이 값을 보고
+    // 사이드바에 초점이 있을 때만 "휴지통으로 이동"의 단축키를 ⌘⌫로 바꿔 처리한다(EpisodeCommands).
+    .focusedValue(\.episodeSidebarFocused, isFocused)
   }
 
   private func move(by offset: Int) -> KeyPress.Result {
