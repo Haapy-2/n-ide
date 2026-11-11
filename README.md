@@ -37,6 +37,7 @@ Packages/NovelCore/  공통 로직 패키지(모델, 저장, 검색, 글자 수,
 Tests/AppTests/      앱 쪽 테스트, 디자인 스냅샷
 Scripts/             build.sh, run.sh, test.sh, snapshots.sh, perf.sh (lib.sh는 공통 부분)
 docs/                모든 문서
+log/                 날짜별 작업 기록 (이유, 근거, 결과, 에러, 수정)
 build/               빌드 산출물과 임시 파일 (git 제외, 지워도 됨)
 ```
 
@@ -47,3 +48,4 @@ build/               빌드 산출물과 임시 파일 (git 제외, 지워도 �
 - [docs/DESIGN.md](docs/DESIGN.md): 디자인 값과 결정
 - [docs/PROGRESS.md](docs/PROGRESS.md): 진행 상황과 성능 측정
 - docs/design-snapshots/: 단계별 화면 스냅샷
+- [log/](log/): 날짜별 작업 기록
