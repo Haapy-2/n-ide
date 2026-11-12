@@ -43,10 +43,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   /// 설정 창 크기를 앱 전체에 하나 저장하는 이름(UserDefaults). 작품마다 따로 두지 않는다(2026-11-12 사용자 요청).
   static let settingsFrameName = "NovelEditorSettingsWindow"
-  /// 처음 열 때 크기. 슬라이더와 숫자가 넉넉하고, 13인치 노트북 화면(높이 약 900pt)에서 메뉴 막대·독을 빼도 들어가는 높이.
+  /// 처음 열 때 창 크기(설정 장면 `defaultSize`). 슬라이더와 숫자가 넉넉하고, 13인치 노트북 화면(높이 약 900pt)에서 메뉴 막대·독을 빼도 들어가는 높이.
   static let settingsDefaultSize = NSSize(width: 520, height: 760)
 
-  /// 크기 조절을 켜고, 저장해 둔 크기가 있으면 그 크기로, 없으면 기본 크기로 화면 가운데에 연다.
+  /// 크기 조절을 켜고, 저장해 둔 크기가 있으면 그 크기로 연다(없으면 `defaultSize`로 뜬 그대로).
   /// 그 뒤로 사용자가 바꾼 크기·위치는 맥이 이 이름으로 저장한다.
   static func prepareSettingsWindow(_ window: NSWindow, defaults: UserDefaults = .standard) {
     if !window.styleMask.contains(.resizable) { window.styleMask.insert(.resizable) }
@@ -54,13 +54,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let hasSaved = defaults.string(forKey: "NSWindow Frame \(settingsFrameName)") != nil
     if hasSaved {
       window.setFrameUsingName(settingsFrameName)
-    } else {
-      var size = settingsDefaultSize
-      if let visible = window.screen?.visibleFrame.size {
-        size.height = min(size.height, visible.height - 40)
-      }
-      window.setContentSize(size)
-      window.center()
+    } else if let visible = window.screen?.visibleFrame, window.frame.height > visible.height {
+      // 처음 크기는 설정 장면의 `defaultSize`가 이미 정했다. 여기서 또 바꾸면 열리자마자 화면을 다시 그리므로
+      // 화면보다 클 때만 줄인다.
+      var frame = window.frame
+      frame.size.height = visible.height
+      frame.origin.y = visible.minY
+      window.setFrame(frame, display: true)
     }
     window.setFrameAutosaveName(settingsFrameName)
   }

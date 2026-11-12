@@ -30,10 +30,11 @@ final class SettingsWindowTests: XCTestCase {
     UserDefaults.standard.removeObject(forKey: "NSWindow Frame \(name)")
     defer { UserDefaults.standard.removeObject(forKey: "NSWindow Frame \(name)") }
 
+    // 저장된 크기가 없으면 뜬 크기 그대로 둔다(다시 그리지 않게).
     let first = makeWindow()
     AppDelegate.prepareSettingsWindow(first)
     XCTAssertTrue(first.styleMask.contains(.resizable))
-    XCTAssertEqual(first.contentLayoutRect.width, AppDelegate.settingsDefaultSize.width)
+    XCTAssertEqual(first.contentLayoutRect.size, NSSize(width: 300, height: 300))
     first.setContentSize(NSSize(width: 640, height: 500))
     first.saveFrame(usingName: name)
     first.close()
