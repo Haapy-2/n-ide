@@ -4,8 +4,11 @@ import AppKit
 /// SwiftUI에는 종료를 잠시 미루는 방법이 없어서 AppKit 앱 대리자를 쓴다(AppKit 예외 파일).
 /// 화면 테마도 여기서 앱 전체에 건다: SwiftUI `preferredColorScheme`은 창마다 걸어야 하고,
 /// "기기 설정"(nil)으로 되돌릴 때 이미 열린 창이 바뀌지 않는다.
+/// 입력 칸(설정 창의 목표 등) 밖을 누르면 입력을 끝내는 것도 여기서 한다. 맥은 원래 커서를 그대로 두고,
+/// SwiftUI에는 "창 어디든 누르면"을 받는 방법이 없다(2026-11-12 사용자 요청).
 final class AppDelegate: NSObject, NSApplicationDelegate {
   private var themeObserver: NSObjectProtocol?
+  private var clickMonitor: Any?
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     applyTheme()
@@ -13,6 +16,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       forName: UserDefaults.didChangeNotification, object: nil, queue: .main
     ) { [weak self] _ in
       MainActor.assumeIsolated { self?.applyTheme() }
+    }
+    clickMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { event in
+      MainActor.assumeIsolated { Self.endFieldEditingIfClickedOutside(event) }
+      return event
+    }
+  }
+
+  /// 한 줄 입력 칸을 고치는 중(창의 공용 입력기 = field editor)에 그 칸 밖을 누르면 입력을 끝낸다.
+  /// 입력한 값은 확정되고, 누른 곳(버튼·슬라이더 등)은 평소대로 동작한다. 원고 편집기는 field editor가 아니라 상관없다.
+  static func endFieldEditingIfClickedOutside(_ event: NSEvent) {
+    guard let window = event.window, let editor = window.firstResponder as? NSTextView, editor.isFieldEditor,
+      let field = editor.delegate as? NSView
+    else { return }
+    if !field.bounds.contains(field.convert(event.locationInWindow, from: nil)) {
+      window.makeFirstResponder(nil)
     }
   }
 

@@ -41,6 +41,12 @@ struct ProjectGoalSection: View {
     .onChange(of: active.model?.project.settings.defaultEpisodeGoal, initial: true) { _, goal in
       if !isEditing, let goal { draft = goal }
     }
+    // 설정 창을 열면 맥이 첫 입력 칸에 커서를 넣는데, 목표 칸이 저절로 입력 상태가 되지 않게 바로 뺀다(2026-11-12 사용자 요청).
+    // 창이 뜨고 맥이 커서를 넣은 다음 차례에 빼야 해서 조금 기다린다.
+    .task {
+      try? await Task.sleep(for: .milliseconds(50))
+      isEditing = false
+    }
     .onChange(of: isEditing) { _, editing in
       if !editing, let model = active.model { commit(model) }
     }

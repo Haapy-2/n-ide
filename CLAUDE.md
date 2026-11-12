@@ -45,7 +45,7 @@ build/                 빌드 산출물·임시 파일·더미 작품·로그 (g
 - Swift, SwiftUI(창·사이드바·설정), 편집기는 `NSTextView`(TextKit 1 명시) + `NSViewRepresentable`
 - 저장은 일반 파일: 회차마다 `.md`, 작품 정보는 `project.json`. DB 없음, 외부 라이브러리 없음(Pretendard 글꼴만 예외)
 - `NovelCore`는 Foundation만 import. AppKit/SwiftUI 금지, macOS 전용 API 금지, 경로는 밖에서 받는다 (나중에 iOS에서 재사용)
-- AppKit 코드는 편집기 관련 파일 안에만 둔다. 예외: `App/Project/SystemDialogs.swift`(저장·열기 창, Finder, 경고 창), `App/AppDelegate.swift`(종료 전 저장 대기), `App/Workspace/TrafficLightAlignment.swift`(창 닫기 버튼 위치 재기). 모두 SwiftUI에 대응하는 것이 없음
+- AppKit 코드는 편집기 관련 파일 안에만 둔다. 예외: `App/Project/SystemDialogs.swift`(저장·열기 창, Finder, 경고 창), `App/AppDelegate.swift`(종료 전 저장 대기, 앱 전체 테마, 입력 칸 밖 클릭 때 입력 끝내기), `App/Workspace/TrafficLightAlignment.swift`(창 닫기 버튼 위치 재기). 모두 SwiftUI에 대응하는 것이 없음
 
 ## 코드 규칙
 
