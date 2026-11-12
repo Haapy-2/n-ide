@@ -24,20 +24,21 @@ struct SettingsView: View {
       // 시스템 선택(파란 강조색 칸) 대신 작업 공간 사이드바와 같은 회색 칸을 직접 그린다(2026-11-12 사용자 결정).
       VStack(spacing: 0) {
         ForEach(SettingsSection.allCases) { item in
-          // 아이콘은 빨간 닫기 버튼과 같은 선, 이름은 패널 가운데(2026-11-12 사용자 요청, A안).
-          // 이름 길이가 달라 이름끼리 왼쪽 끝은 맞지 않는다. 회색 칸이 좌우로 같게 띄워져 있어 칸 가운데 = 패널 가운데.
-          ZStack(alignment: .leading) {
+          // 아이콘은 빨간 닫기 버튼과 같은 선, 이름은 아이콘 오른쪽에 왼쪽 정렬(2026-11-12 사용자 요청).
+          // 간격은 따로 정하지 않고 시스템 기본(예전 15pt는 없앰). 이름 가운데 정렬은 해 보고 되돌림(사용자).
+          HStack {
             // 색 없는 아이콘: 라이트에서는 진한 회색, 다크에서는 밝은 회색(시스템 보조 글자색, 사용자 요청)
+            // 아이콘 칸 폭을 같게 두어 이름의 왼쪽 끝이 한 줄로 맞는다. 아이콘은 칸 왼쪽에 붙여 버튼 선을 지킨다.
             // 잰 값이 오기 전에는 숨긴다: 기본 위치에 한 번 그렸다가 옮겨지는 것이 보이지 않게(사용자 선택).
             Image(systemName: item.symbolName)
               .foregroundStyle(.secondary)
-              .padding(.leading, layout?.iconPadding ?? 0)
+              .frame(width: 20, alignment: .leading)
               .opacity(layout == nil ? 0 : 1)
             Text(item.title)
-              .frame(maxWidth: .infinity)
           }
+          .padding(.leading, layout?.iconPadding ?? 0)
           .padding(.vertical, 6)
-          .frame(maxWidth: .infinity)
+          .frame(maxWidth: .infinity, alignment: .leading)
           .rowHighlight(isSelected: item == section)
           .padding(.horizontal, layout?.boxMargin ?? 0)
           // 칸 사이 틈까지 눌리게(작업 공간 사이드바와 같은 이유)
