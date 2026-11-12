@@ -32,7 +32,7 @@ App/                 앱 소스: 화면(SwiftUI)과 편집기(AppKit)
   Editor/            원고 편집기 (NSTextView)
   Project/           작품 만들기·열기, 최근 작품 목록
   Perf/              성능 측정용 갈고리 (perf.sh 전용)
-  Theme/             색 토큰 이름
+  Theme/             색 토큰 이름, 줄 선택·마우스 올림 칸
   Resources/         글꼴(Fonts/), 색 값(Colors.xcassets)
 Packages/NovelCore/  공통 로직 패키지(모델, 저장, 검색, 글자 수, 스냅샷), 테스트, 더미 작품 생성기
 Tests/AppTests/      앱 쪽 테스트, 디자인 스냅샷

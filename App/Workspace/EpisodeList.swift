@@ -55,9 +55,7 @@ struct EpisodeList: View {
             .padding(.horizontal, contentInset)
             .padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-              RoundedRectangle(cornerRadius: 6)
-                .fill(episode.id == selection ? Color.ink.opacity(0.08) : .clear))
+            .rowHighlight(isSelected: episode.id == selection)
             // 회색 칸 사이의 1pt 틈도 클릭 영역에 넣는다. 틈을 줄 여백(listRowInsets)으로 두면
             // 그곳을 누를 때 아무 반응이 없어 목록이 버벅이는 것처럼 느껴진다.
             .padding(.vertical, 1)
