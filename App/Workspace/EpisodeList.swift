@@ -22,18 +22,29 @@ struct EpisodeList: View {
   @AppStorage(AppSettingKey.characterCountGoalBasis) private var basis: CharacterCountBasis = .withSpaces
   @AppStorage(AppSettingKey.sidebarShowsCharacterCount) private var showsCount = true
 
-  /// 줄 안쪽 왼쪽 여백. "회차" 제목과 회차 번호가 같은 선에서 시작하도록 둘 다 이 값을 쓴다(2026-11-12 사용자 요청).
-  private static let contentInset: CGFloat = 8
+  /// 줄 왼쪽 끝 → 창 닫기 버튼 왼쪽 끝 거리. 실행 중에 잰다(TrafficLightOffsetReader).
+  @State private var trafficLightOffset: CGFloat?
+  /// 줄 안쪽 왼쪽 여백. "회차" 제목·번호·제목이 모두 이 값을 써서 창 닫기 버튼과 같은 선에서 시작한다(2026-11-12 사용자 요청).
+  /// 버튼이 안 보이면(전체 화면) 8. 너무 붙거나 멀어지지 않게 4~40으로 묶는다.
+  private var contentInset: CGFloat {
+    guard let trafficLightOffset else { return 8 }
+    return min(max(trafficLightOffset, 4), 40)
+  }
+  /// 줄 좌우 여백 0: 회색 선택 칸이 줄 끝까지 차서, 글자를 버튼 선에 맞춰도 칸이 잘리지 않는다.
+  private static let rowInsets = EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0)
   var body: some View {
     List {
       // 시스템 구역 제목은 줄과 왼쪽 시작점이 달라 번호와 맞출 수 없어서, 같은 여백을 쓰는 제목 줄을 직접 둔다.
       Text("회차")
         .font(.system(size: 11, weight: .semibold))
         .foregroundStyle(Color.inkMuted)
-        .padding(.leading, Self.contentInset)
+        .padding(.leading, contentInset)
         .padding(.top, 4)
         .padding(.bottom, 2)
-        .listRowInsets(EdgeInsets(top: 0, leading: 10, bottom: 0, trailing: 10))
+        .frame(maxWidth: .infinity, alignment: .leading)
+        // 줄 왼쪽 끝에서 잰다. 여백이 바뀌어도 줄 끝은 그대로라 값이 흔들리지 않는다.
+        .background(TrafficLightOffsetReader { trafficLightOffset = $0 })
+        .listRowInsets(Self.rowInsets)
         .listRowBackground(Color.clear)
         .accessibilityAddTraits(.isHeader)
       Section {
@@ -41,7 +52,7 @@ struct EpisodeList: View {
           // 클릭 영역 = 회색 선택 칸 전체. 줄 여백을 0으로 하고 여백을 칸 안쪽에 직접 넣어
           // 글자뿐 아니라 칸의 빈 곳을 눌러도 선택되게 한다.
           EpisodeRow(number: index + 1, title: episode.title, count: showsCount ? episode.characterCount?.value(for: basis) : nil)
-            .padding(.horizontal, Self.contentInset)
+            .padding(.horizontal, contentInset)
             .padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
@@ -66,7 +77,7 @@ struct EpisodeList: View {
                 Button("휴지통으로 이동…") { onTrash(episode.id) }
               }
             }
-            .listRowInsets(EdgeInsets(top: 0, leading: 10, bottom: 0, trailing: 10))
+            .listRowInsets(Self.rowInsets)
             .listRowBackground(Color.clear)
             .accessibilityAddTraits(episode.id == selection ? [.isButton, .isSelected] : .isButton)
         }
