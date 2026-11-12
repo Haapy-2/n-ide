@@ -21,6 +21,8 @@ struct WorkspaceView: View {
   @State private var stopAskingUndo = false
   /// 창의 실행 취소 기록. 편집기는 회차별로 따로 갖고 있어서, 사이드바에 초점이 있을 때 ⌘Z가 이것을 쓴다.
   @Environment(\.undoManager) private var undoManager
+  /// 이 창이 앞(키 창)에 오면 설정 창이 이 작품의 목표를 보여 준다.
+  @Environment(\.appearsActive) private var appearsActive
 
   init(model: ProjectModel) {
     self.model = model
@@ -113,7 +115,11 @@ struct WorkspaceView: View {
       selection = new.isEmpty ? nil : new[min(oldIndex, new.count - 1)]
     }
     // 창을 닫을 때 남은 저장을 마친다(Task가 저장기를 붙잡고 있어 창이 사라져도 끝까지 저장된다).
+    .onChange(of: appearsActive, initial: true) {
+      if appearsActive, let model { ActiveWorkspace.shared.activate(model, undoManager: undoManager) }
+    }
     .onDisappear {
+      if let model { ActiveWorkspace.shared.deactivate(model) }
       if let model {
         Task {
           await model.autosaver.flush()

@@ -250,4 +250,36 @@ final class ProjectModelTests: XCTestCase {
     await model.setDefaultEpisodeGoal(0).value
     XCTAssertEqual(model.project.settings.defaultEpisodeGoal, 5_000)
   }
+
+  /// 설정 창 "모든 회차에 적용": 모든 회차 목표가 바뀌어 저장되고 ⌘Z 한 번에 되돌아간다.
+  func testSetGoalForAllEpisodesSavesAndUndoes() async throws {
+    let model = try makeModel()
+    let a = try await model.addEpisode()
+    let b = try await model.addEpisode()
+    await model.setGoal(b, to: 4_000)
+    let undo = UndoManager()
+    undo.groupsByEvent = false
+
+    try await grouped(undo) { await model.setGoalForAllEpisodes(3_000, undoManager: undo) }
+    XCTAssertEqual(model.episodes.map(\.goal), [3_000, 3_000])
+    XCTAssertEqual(try store.loadProject().episodes.map(\.goal), [3_000, 3_000])
+
+    undo.undo()
+    try await Task.sleep(for: .milliseconds(100))
+    XCTAssertEqual(model.episode(a)?.goal, 5_000)
+    XCTAssertEqual(model.episode(b)?.goal, 4_000)
+  }
+
+  /// 설정 창은 맨 마지막으로 앞에 있던 작품을 본다. 다른 작품 창이 닫혀도 지금 작품은 남는다.
+  func testActiveWorkspaceKeepsLastActivatedModel() throws {
+    let first = try makeModel()
+    let second = try makeModel()
+    let registry = ActiveWorkspace()
+    registry.activate(first, undoManager: nil)
+    registry.activate(second, undoManager: nil)
+    registry.deactivate(first)
+    XCTAssertTrue(registry.model === second)
+    registry.deactivate(second)
+    XCTAssertNil(registry.model)
+  }
 }

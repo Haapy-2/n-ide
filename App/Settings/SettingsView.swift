@@ -45,6 +45,7 @@ struct SettingsView: View {
           $0 == 0 ? "실시간" : String(format: "%.1f초", $0)
         }
       }
+      ProjectGoalSection()
       Section("화면") {
         // 아이콘만 보이고, 마우스를 올리면 이름이 뜬다. 색 없이 시스템 보조 글자색(2026-11-12 사용자 요청, DESIGN 5장 예외).
         Picker("테마", selection: $theme) {

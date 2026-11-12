@@ -99,6 +99,17 @@ final class ProjectModel {
     return Task { await saveProject() }
   }
 
+  /// 모든 회차의 목표를 한 번에 바꾼다(설정 창 "모든 회차에 적용"). ⌘Z 한 번에 모두 되돌아간다.
+  func setGoalForAllEpisodes(_ goal: Int, undoManager: UndoManager? = nil) async {
+    guard goal > 0, project.episodes.contains(where: { $0.goal != goal }) else { return }
+    let episodes = project.episodes.map { episode in
+      var episode = episode
+      episode.goal = goal
+      return episode
+    }
+    await replaceEpisodes(with: episodes, actionName: "모든 회차 목표", undoManager: undoManager).value
+  }
+
   /// 드래그로 순서 바꾸기. `undoManager`를 주면 ⌘Z로 직전 순서로 되돌릴 수 있다.
   func moveEpisodes(fromOffsets source: IndexSet, toOffset destination: Int, undoManager: UndoManager? = nil) async {
     var episodes = project.episodes
