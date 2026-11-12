@@ -20,7 +20,7 @@ final class UndoTests: XCTestCase {
     // 입력 묶음은 한 차례가 끝나야 닫힌다.
     RunLoop.main.run(until: Date().addingTimeInterval(0.05))
 
-    XCTAssertTrue(textView.responds(to: Selector(("undo:"))))
+    XCTAssertTrue(textView.responds(to: #selector(ManuscriptTextView.undo(_:))))
     textView.undo(nil)
     XCTAssertEqual(textView.string, "그는")
     textView.redo(nil)
@@ -95,7 +95,7 @@ final class UndoTests: XCTestCase {
   func testUndoMenuIsDisabledWithNothingToUndo() {
     let textView = ManuscriptTextView.make()
     textView.replaceAllText(with: "가")
-    let item = NSMenuItem(title: "실행 취소", action: Selector(("undo:")), keyEquivalent: "z")
+    let item = NSMenuItem(title: "실행 취소", action: #selector(ManuscriptTextView.undo(_:)), keyEquivalent: "z")
     XCTAssertFalse(textView.validateUserInterfaceItem(item))
   }
 
