@@ -9,7 +9,7 @@ struct SettingsView: View {
   static let windowSize = CGSize(width: 700, height: 640)
   static let sidebarWidth: CGFloat = 180
 
-  @State private var section: SettingsSection? = .general
+  @State private var section: SettingsSection = .general
 
   init(section: SettingsSection = .general) {
     _section = State(initialValue: section)
@@ -17,8 +17,9 @@ struct SettingsView: View {
 
   var body: some View {
     NavigationSplitView {
-      List(SettingsSection.allCases, selection: $section) { item in
-        // Label 기본 간격은 답답해 보여서 아이콘과 이름 사이를 직접 띄운다(2026-11-12 사용자 요청).
+      // 시스템 선택(파란 강조색 칸) 대신 작업 공간 사이드바와 같은 회색 칸을 직접 그린다(2026-11-12 사용자 결정).
+      List(SettingsSection.allCases) { item in
+        // Label 기본 간격은 답답해 보여서 아이콘과 이름 사이를 직접 띄운다(2026-11-12 사용자 요청: 15pt).
         // 아이콘 칸 폭을 같게 두어 이름의 왼쪽 끝이 한 줄로 맞는다.
         HStack(spacing: 15) {
           // 색 없는 아이콘: 라이트에서는 진한 회색, 다크에서는 밝은 회색(시스템 보조 글자색, 사용자 요청)
@@ -27,19 +28,29 @@ struct SettingsView: View {
             .frame(width: 20)
           Text(item.title)
         }
-        .padding(.vertical, 2)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .rowHighlight(isSelected: item == section)
+        // 칸 사이 틈까지 눌리게(작업 공간 사이드바와 같은 이유)
+        .padding(.vertical, 1)
+        .contentShape(Rectangle())
+        .onTapGesture { section = item }
+        .listRowInsets(EdgeInsets(top: 0, leading: 10, bottom: 0, trailing: 10))
+        .listRowBackground(Color.clear)
+        .accessibilityAddTraits(item == section ? [.isButton, .isSelected] : .isButton)
       }
       .navigationSplitViewColumnWidth(Self.sidebarWidth)
       // 창이 고정 크기라 목록을 접을 일이 없다.
       .toolbar(removing: .sidebarToggle)
     } detail: {
-      switch section ?? .general {
+      switch section {
       case .general: GeneralSettingsPane()
       case .editor: EditorSettingsPane()
       case .sidebar: SidebarSettingsPane()
       }
     }
-    .navigationTitle((section ?? .general).title)
+    .navigationTitle(section.title)
     .frame(width: Self.windowSize.width, height: Self.windowSize.height)
   }
 }
@@ -61,7 +72,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
   var symbolName: String {
     switch self {
     case .general: "gearshape"
-    case .editor: "textformat"
+    case .editor: "doc.text"
     case .sidebar: "sidebar.left"
     }
   }
