@@ -27,6 +27,58 @@ final class UndoTests: XCTestCase {
     XCTAssertEqual(textView.string, "그는 웃었다")
   }
 
+  /// 한 번에 한 글자씩 되돌린다. 한글은 조합이 끝난 한 글자가 한 단위.
+  func testUndoRemovesOneCharacterAtATime() {
+    let textView = ManuscriptTextView.make()
+    textView.replaceAllText(with: "")
+    let none = NSRange(location: NSNotFound, length: 0)
+    // 실제 앱에서는 키 입력마다 이벤트 한 차례가 끝나며 되돌리기 묶음이 닫힌다. 테스트에서는 그 경계를 직접 만든다.
+    let undo = textView.episodeUndoManager
+    undo.groupsByEvent = false
+    for letter in ["가", "나", "다"] {
+      undo.beginUndoGrouping()
+      // 입력기처럼 조합(자모) → 확정 순서로 넣는다.
+      textView.setMarkedText("ㄱ", selectedRange: NSRange(location: 1, length: 0), replacementRange: none)
+      textView.insertText(letter, replacementRange: none)
+      undo.endUndoGrouping()
+    }
+    XCTAssertEqual(textView.string, "가나다")
+
+    textView.undo(nil)
+    XCTAssertEqual(textView.string, "가나")
+    textView.undo(nil)
+    XCTAssertEqual(textView.string, "가")
+    textView.redo(nil)
+    XCTAssertEqual(textView.string, "가나")
+  }
+
+  /// 실제 키 입력(keyDown)으로 친 글자도 한 글자씩 되돌린다. NSTextView는 키로 이어 친 글자를 한 묶음으로 합치므로
+  /// 이 테스트가 묶음 끊기를 확인한다. 숫자는 한글 입력기에서도 조합 없이 바로 들어간다.
+  func testTypedKeysUndoOneAtATime() throws {
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    defer { window.close() }
+    let textView = ManuscriptTextView.make()
+    textView.frame = window.contentLayoutRect
+    window.contentView = textView
+    window.makeFirstResponder(textView)
+    textView.replaceAllText(with: "")
+    let undo = textView.episodeUndoManager
+    undo.groupsByEvent = false
+    for key in ["1", "2", "3"] {
+      let event = try XCTUnwrap(NSEvent.keyEvent(
+        with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
+        context: nil, characters: key, charactersIgnoringModifiers: key, isARepeat: false, keyCode: 18))
+      undo.beginUndoGrouping()
+      textView.keyDown(with: event)
+      undo.endUndoGrouping()
+    }
+    XCTAssertEqual(textView.string, "123")
+
+    textView.undo(nil)
+    XCTAssertEqual(textView.string, "12")
+  }
+
   /// 조합 중에 ⌘Z를 누르면 조합을 먼저 확정하고 되돌려, 조합 글자가 남거나 깨지지 않는다.
   func testUndoDuringCompositionFinishesCompositionFirst() {
     let textView = ManuscriptTextView.make()

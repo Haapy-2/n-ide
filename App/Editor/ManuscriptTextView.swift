@@ -100,6 +100,13 @@ final class ManuscriptTextView: NSTextView {
     episodeUndoManager.redo()
   }
 
+  /// 되돌리기 단위를 한 글자로 한다(2026-11-12 사용자 요청). NSTextView는 이어서 친 글자를 한 묶음으로 합쳐
+  /// ⌘Z 한 번에 문장째 지우므로, 고칠 때마다 묶음을 끊는다. 조합 중에는 끊지 않아 조합이 끝난 한 글자("한")가 한 단위가 된다.
+  override func didChangeText() {
+    super.didChangeText()
+    if !hasMarkedText() { breakUndoCoalescing() }
+  }
+
   /// 조합 중인 글자를 확정한다. 조합 중에 되돌리면 입력기와 텍스트 저장소가 서로 다른 글자를 가리켜 깨질 수 있다.
   private func finishComposition() {
     guard hasMarkedText() else { return }
