@@ -31,5 +31,7 @@ struct NovelEditorApp: App {
     Settings {
       SettingsView()
     }
+    // 내용의 최소 크기까지만 줄어들고, 그보다 크게는 마음대로 늘릴 수 있다.
+    .windowResizability(.contentMinSize)
   }
 }
