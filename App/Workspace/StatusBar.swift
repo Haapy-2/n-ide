@@ -13,6 +13,7 @@ struct StatusBar: View {
   var textWidth: CGFloat = EditorStyle().textWidth
   @AppStorage(AppSettingKey.characterCountDisplay) private var display: CharacterCountDisplay = .both
   @AppStorage(AppSettingKey.characterCountGoalBasis) private var basis: CharacterCountBasis = .withSpaces
+  @AppStorage(AppSettingKey.goalProgressStyle) private var progressStyle: GoalProgressStyle = .ring
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var showsFailureReason = false
 
@@ -24,7 +25,7 @@ struct StatusBar: View {
         }
         Spacer(minLength: 0)
         if let count = counter.current, goal > 0 {
-          GoalProgress(value: count.value(for: basis), goal: goal)
+          GoalProgress(value: count.value(for: basis), goal: goal, style: progressStyle)
         }
       }
       .opacity(fade.isHidden ? 0 : 1)
@@ -67,23 +68,49 @@ struct StatusBar: View {
   }
 }
 
-/// `24%`와 그 아래 2pt 진행 막대(accent). 100%를 넘으면 숫자는 그대로, 막대는 가득.
-private struct GoalProgress: View {
+/// 목표 진행률: `97%` 옆에 작은 고리(원) 또는 가는 막대. 채운 부분은 accent, 남은 부분은 흐린 회색 트랙.
+/// 트랙을 `rule` 색으로 그리면 다크 모드에서 종이와 거의 같아 남은 부분이 안 보였다(2026-11-12 사용자 지적).
+/// 100%를 넘으면 숫자는 그대로 올라가고 모양은 가득 찬 채로 있다.
+struct GoalProgress: View {
   let value: Int
   let goal: Int
-  private static let barWidth: CGFloat = 36
+  let style: GoalProgressStyle
+
+  private static let ringSize: CGFloat = 14
+  private static let ringLine: CGFloat = 2
+  private static let barWidth: CGFloat = 80
+  private static let barHeight: CGFloat = 4
+  private static let trackOpacity = 0.35
 
   var body: some View {
-    let fraction = Double(value) / Double(goal)
-    VStack(alignment: .trailing, spacing: 2) {
-      Text("\(Int(fraction * 100))%")
-      ZStack(alignment: .leading) {
-        Rectangle().fill(Color.rule)
-        Rectangle().fill(Color.accent).frame(width: Self.barWidth * min(fraction, 1))
+    let fraction = min(Double(value) / Double(goal), 1)
+    HStack(spacing: 6) {
+      Text("\(Int(Double(value) / Double(goal) * 100))%")
+      switch style {
+      case .ring:
+        ZStack {
+          Circle().stroke(Color.inkMuted.opacity(Self.trackOpacity), lineWidth: Self.ringLine)
+          Circle()
+            .trim(from: 0, to: fraction)
+            .stroke(Color.accent, style: StrokeStyle(lineWidth: Self.ringLine, lineCap: .butt))
+            // 12시 방향에서 시계 방향으로 채운다. 끝을 둥글게 하면 97%처럼 조금 남았을 때 틈이 덮여 안 보여서 각지게.
+            .rotationEffect(.degrees(-90))
+        }
+        .frame(width: Self.ringSize, height: Self.ringSize)
+      case .bar:
+        ZStack(alignment: .leading) {
+          Capsule().fill(Color.inkMuted.opacity(Self.trackOpacity))
+          Capsule().fill(Color.accent).frame(width: Self.barWidth * fraction)
+        }
+        .frame(width: Self.barWidth, height: Self.barHeight)
       }
-      .frame(width: Self.barWidth, height: 2)
     }
-    .help("목표 \(goal.formatted())자")
+    .help(helpText)
+  }
+
+  private var helpText: String {
+    let left = goal - value
+    return left > 0 ? "목표 \(goal.formatted())자 · \(left.formatted())자 남음" : "목표 \(goal.formatted())자 달성"
   }
 }
 
@@ -133,4 +160,19 @@ final class StatusBarFade {
     burstStart = nil
     if isHidden { isHidden = false }
   }
+}
+
+// Xcode 캔버스(⌥⌘↩)에서 두 모양을 바로 비교할 수 있다.
+#Preview("목표 진행률") {
+  VStack(alignment: .trailing, spacing: 12) {
+    ForEach(GoalProgressStyle.allCases, id: \.self) { style in
+      ForEach([4_850, 2_400, 5_600], id: \.self) { value in
+        GoalProgress(value: value, goal: 5_000, style: style)
+      }
+    }
+  }
+  .font(.system(size: 11).monospacedDigit())
+  .foregroundStyle(Color.inkMuted)
+  .padding(24)
+  .background(Color.paper)
 }

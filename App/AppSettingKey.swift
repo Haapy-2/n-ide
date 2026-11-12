@@ -8,4 +8,6 @@ enum AppSettingKey {
   static let characterCountDisplay = "characterCountDisplay"
   /// 목표 진행률과 사이드바 글자 수의 기준 `CharacterCountBasis` (기본: 공백 포함)
   static let characterCountGoalBasis = "characterCountGoalBasis"
+  /// 상태 줄의 목표 진행률 모양 `GoalProgressStyle` (기본: 원형)
+  static let goalProgressStyle = "goalProgressStyle"
 }
