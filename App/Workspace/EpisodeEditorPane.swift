@@ -15,6 +15,9 @@ struct EpisodeEditorPane: View {
   @State private var fade = StatusBarFade()
   /// 설정 창에서 바꾼 글꼴·크기·간격·폭. 바뀌면 열려 있는 편집 영역에 바로 반영된다.
   private var editorSettings = EditorStyleSettings()
+  @AppStorage(AppSettingKey.characterCountInterval) private var countInterval = EditorSetting.characterCountInterval.defaultValue
+  @AppStorage(AppSettingKey.statusBarHidesWhileTyping) private var hidesWhileTyping = false
+  @AppStorage(AppSettingKey.statusBarHidesWhenIdle) private var hidesWhenIdle = true
 
   var body: some View {
     let style = editorSettings.style
@@ -51,6 +54,14 @@ struct EpisodeEditorPane: View {
       if case .active = phase { fade.show() }
     }
     .onChange(of: episodeID, initial: true) { switchEpisode() }
+    .onChange(of: countInterval, initial: true) {
+      counter.interval = .milliseconds(Int(EditorSetting.characterCountInterval.clamped(countInterval) * 1_000))
+    }
+    .onChange(of: [hidesWhileTyping, hidesWhenIdle], initial: true) {
+      fade.hidesWhileTyping = hidesWhileTyping
+      fade.hidesWhenIdle = hidesWhenIdle
+      fade.reconsider()
+    }
   }
 
   /// 회차 전환은 기다림 없이 한 번에 한다: 떠나는 회차 저장은 뒤에서 시작만 하고,

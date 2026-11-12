@@ -11,7 +11,8 @@ struct EditorStyle: Equatable {
   /// 한 줄에 들어가는 한글 글자 수
   var lineWidthInCharacters: CGFloat = 40
 
-  static let topInset: CGFloat = 72
+  /// 첫 줄 위 여백. 72pt였다가 사용자 요청으로 반(2026-11-12).
+  static let topInset: CGFloat = 36
   static let minimumSideInset: CGFloat = 32
 
   var font: NSFont {

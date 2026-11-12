@@ -10,6 +10,12 @@ enum AppSettingKey {
   static let characterCountGoalBasis = "characterCountGoalBasis"
   /// 상태 줄의 목표 진행률 모양 `GoalProgressStyle` (기본: 원형)
   static let goalProgressStyle = "goalProgressStyle"
+  /// 글자 수를 다시 세기까지 기다리는 초. 0이면 실시간 (기본: 0.2)
+  static let characterCountInterval = "characterCountInterval"
+  /// 타이핑 중 상태 줄 숨기기 (기본: 끔 = 계속 보이기)
+  static let statusBarHidesWhileTyping = "statusBarHidesWhileTyping"
+  /// 쉬고 있을 때 10초 뒤 상태 줄 숨기기 (기본: 켬)
+  static let statusBarHidesWhenIdle = "statusBarHidesWhenIdle"
   /// 본문 글꼴 `BodyFont` (기본: Pretendard)
   static let bodyFont = "bodyFont"
   /// 글자 크기 pt (기본: 17)

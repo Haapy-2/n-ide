@@ -9,6 +9,9 @@ struct SettingsView: View {
   @AppStorage(AppSettingKey.characterCountGoalBasis) private var basis: CharacterCountBasis = .withSpaces
   @AppStorage(AppSettingKey.goalProgressStyle) private var progressStyle: GoalProgressStyle = .ring
   @AppStorage(AppSettingKey.sidebarSeesThroughWindow) private var sidebarSeesThroughWindow = true
+  @AppStorage(AppSettingKey.characterCountInterval) private var countInterval = EditorSetting.characterCountInterval.defaultValue
+  @AppStorage(AppSettingKey.statusBarHidesWhileTyping) private var hidesWhileTyping = false
+  @AppStorage(AppSettingKey.statusBarHidesWhenIdle) private var hidesWhenIdle = true
 
   var body: some View {
     Form {
@@ -33,8 +36,19 @@ struct SettingsView: View {
         Picker("진행률 모양", selection: $progressStyle) {
           ForEach(GoalProgressStyle.allCases, id: \.self) { Text($0.title) }
         }
+        NumberSlider(title: "글자 수 갱신", value: $countInterval, setting: .characterCountInterval) {
+          $0 == 0 ? "실시간" : String(format: "%.1f초", $0)
+        }
       }
       Section("화면") {
+        Picker("타이핑 중 상태 줄", selection: $hidesWhileTyping) {
+          Text("계속 보이기").tag(false)
+          Text("숨기기").tag(true)
+        }
+        Picker("쉬고 있을 때 상태 줄", selection: $hidesWhenIdle) {
+          Text("계속 보이기").tag(false)
+          Text("10초 뒤 숨기기").tag(true)
+        }
         Toggle("사이드바 뒤로 창 비치기", isOn: $sidebarSeesThroughWindow)
       }
     }

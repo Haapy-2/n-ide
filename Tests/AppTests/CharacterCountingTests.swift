@@ -167,30 +167,41 @@ final class CharacterCountingTests: XCTestCase {
     XCTAssertEqual(CharacterCountDisplay.withoutSpaces.text(for: count), "공백 제외 987자")
   }
 
-  // MARK: - 상태 줄 흐려짐
+  // MARK: - 상태 줄 숨기기
 
-  func testFadeHidesWhileTypingAndShowsAfterPause() async throws {
-    let fade = StatusBarFade(hideAfter: .milliseconds(100), showAfter: .milliseconds(150))
+  /// "타이핑 중 숨기기"를 골랐을 때(SPEC 원래 방식).
+  private func typingHidingFade(hideAfter: Duration, showAfter: Duration) -> StatusBarFade {
+    let fade = StatusBarFade(hideAfter: hideAfter, showAfter: showAfter)
+    fade.hidesWhileTyping = true
+    fade.hidesWhenIdle = false
+    return fade
+  }
+
+  private func typeFor(_ duration: Duration, _ fade: StatusBarFade) async throws {
     let start = ContinuousClock.now
-    // 50ms마다 입력을 300ms 동안 이어 간다.
-    while ContinuousClock.now - start < .milliseconds(300) {
+    while ContinuousClock.now - start < duration {
       fade.noteInput()
       try await Task.sleep(for: .milliseconds(50))
     }
+  }
+
+  func testFadeHidesWhileTypingAndShowsAfterPause() async throws {
+    let fade = typingHidingFade(hideAfter: .milliseconds(100), showAfter: .milliseconds(150))
+    try await typeFor(.milliseconds(300), fade)
     XCTAssertTrue(fade.isHidden, "계속 치면 숨는다")
 
     try await waitUntil { !fade.isHidden }
   }
 
   func testFadeStaysVisibleForShortTyping() async throws {
-    let fade = StatusBarFade(hideAfter: .milliseconds(200), showAfter: .milliseconds(50))
+    let fade = typingHidingFade(hideAfter: .milliseconds(200), showAfter: .milliseconds(50))
     fade.noteInput()
     try await Task.sleep(for: .milliseconds(300))
     XCTAssertFalse(fade.isHidden, "1초 안에 멈추면 숨지 않는다")
   }
 
   func testMouseMoveShowsStatusBar() async throws {
-    let fade = StatusBarFade(hideAfter: .milliseconds(20), showAfter: .seconds(10))
+    let fade = typingHidingFade(hideAfter: .milliseconds(20), showAfter: .seconds(10))
     fade.noteInput()
     try await Task.sleep(for: .milliseconds(30))
     fade.noteInput()
@@ -199,5 +210,41 @@ final class CharacterCountingTests: XCTestCase {
     fade.show()
 
     XCTAssertFalse(fade.isHidden)
+  }
+
+  /// 기본 설정: 치는 동안에는 계속 보이고, 멈추고 (10초 대신) 잠시 뒤 숨는다. 마우스를 움직이면 나타난다.
+  func testDefaultStaysVisibleWhileTypingAndHidesWhenIdle() async throws {
+    let fade = StatusBarFade(hideAfter: .milliseconds(50), showAfter: .milliseconds(50), idleAfter: .milliseconds(400))
+    fade.reconsider()
+    try await typeFor(.milliseconds(300), fade)
+    XCTAssertFalse(fade.isHidden, "기본은 치는 동안 계속 보인다")
+
+    try await waitUntil { fade.isHidden }
+    fade.show()
+    XCTAssertFalse(fade.isHidden)
+    try await waitUntil { fade.isHidden }
+  }
+
+  func testIdleHidingCanBeTurnedOff() async throws {
+    let fade = StatusBarFade(idleAfter: .milliseconds(50))
+    fade.hidesWhenIdle = false
+    fade.reconsider()
+    fade.noteInput()
+    try await Task.sleep(for: .milliseconds(200))
+    XCTAssertFalse(fade.isHidden)
+  }
+
+  /// 갱신 주기를 "실시간"(0)으로 하면 치는 동안 기다리지 않고 센다.
+  func testRealtimeCountingUpdatesWhileTyping() async throws {
+    let model = try makeModel()
+    model.counter.interval = .zero
+    let id = try await model.addEpisode()
+    let textView = try open(id, in: model)
+    try await waitUntil { model.counter.current == CharacterCount(withSpaces: 0, withoutSpaces: 0) }
+
+    for (index, letter) in ["가", "나", "다"].enumerated() {
+      type(letter, in: textView)
+      try await waitUntil({ model.counter.current?.withSpaces == index + 1 }, timeout: .milliseconds(200))
+    }
   }
 }

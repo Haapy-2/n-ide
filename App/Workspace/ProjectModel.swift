@@ -26,7 +26,7 @@ final class ProjectModel {
   init(
     project: ProjectFile, store: ProjectStore, queue: SaveQueue = SaveQueue(),
     autosaveDelay: Duration = .seconds(1),
-    countDelay: Duration = .milliseconds(300),
+    countDelay: Duration = .milliseconds(200),
     countSaveDelay: Duration = .seconds(3),
     moveToTrash: @escaping @Sendable (URL) throws -> URL = ProjectModel.systemTrash
   ) {
@@ -36,7 +36,7 @@ final class ProjectModel {
     self.moveToTrash = moveToTrash
     self.countSaveDelay = countSaveDelay
     autosaver = EpisodeAutosaver(store: store, queue: queue, delay: autosaveDelay)
-    counter = CharacterCounter(delay: countDelay)
+    counter = CharacterCounter(interval: countDelay)
     counter.onCount = { [weak self] id, count in self?.recordCount(count, for: id) }
   }
 

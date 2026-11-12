@@ -114,51 +114,95 @@ struct GoalProgress: View {
   }
 }
 
-/// 상태 줄 흐려짐: 타이핑을 시작하고 1초가 지나면 사라지고, 입력이 1.5초 멈추거나 마우스를 움직이면 나타난다.
-/// 키 입력마다 SwiftUI 상태를 바꾸지 않는다(docs/PERFORMANCE.md 2장). `isHidden`은 한 번 타이핑하는 동안
-/// 숨길 때와 다시 보일 때 두 번만 바뀌고, 나머지는 관찰하지 않는 값(시각)만 적는다.
+/// 상태 줄 숨기기 (2026-11-12 사용자 요청, 설정 창 "화면" 묶음):
+/// - 타이핑 중: 기본은 계속 보인다. "숨기기"를 고르면 치기 시작하고 1초 뒤 사라졌다가 입력이 1.5초 멈추면 나타난다.
+/// - 쉬고 있을 때: 기본은 마지막 입력·마우스 움직임 10초 뒤에 사라진다. "계속 보이기"를 고를 수 있다.
+/// - 숨어 있어도 마우스를 움직이거나 다시 치면 나타난다(타이핑 중 숨기기를 골랐으면 칠 때는 그대로 숨김).
+/// 키 입력마다 SwiftUI 상태를 바꾸지 않는다(docs/PERFORMANCE.md 2장). `isHidden`은 보이기·숨기기가 실제로 바뀔 때만 바뀌고,
+/// 나머지는 관찰하지 않는 값(시각)만 적는다. 기다리는 작업은 하나만 둔다.
 @MainActor
 @Observable
 final class StatusBarFade {
   private(set) var isHidden = false
 
+  /// 설정 값. 바꾼 뒤에는 `reconsider()`.
+  @ObservationIgnored var hidesWhileTyping = false
+  @ObservationIgnored var hidesWhenIdle = true
+
   @ObservationIgnored private var burstStart: ContinuousClock.Instant?
   @ObservationIgnored private var lastInput = ContinuousClock.now
+  @ObservationIgnored private var lastActivity = ContinuousClock.now
   @ObservationIgnored private var watcher: Task<Void, Never>?
   private let hideAfter: Duration
   private let showAfter: Duration
+  private let idleAfter: Duration
 
-  init(hideAfter: Duration = .seconds(1), showAfter: Duration = .milliseconds(1_500)) {
+  init(hideAfter: Duration = .seconds(1), showAfter: Duration = .milliseconds(1_500), idleAfter: Duration = .seconds(10)) {
     self.hideAfter = hideAfter
     self.showAfter = showAfter
+    self.idleAfter = idleAfter
   }
 
   /// 편집기에서 글을 고칠 때마다.
   func noteInput() {
     let now = ContinuousClock.now
     lastInput = now
+    lastActivity = now
     if burstStart == nil { burstStart = now }
+    watch()
+  }
+
+  /// 마우스를 움직였을 때. 이어서 타이핑하면 처음부터 다시 판단한다.
+  func show() {
+    burstStart = nil
+    lastActivity = .now
+    if isHidden { isHidden = false }
+    watch()
+  }
+
+  /// 설정이 바뀌었을 때: 기다리던 작업을 버리고 지금 설정으로 다시 판단한다.
+  func reconsider() {
+    watcher?.cancel()
+    watcher = nil
+    watch()
+  }
+
+  private func watch() {
     guard watcher == nil else { return }
     watcher = Task {
-      while let start = burstStart {
-        let now = ContinuousClock.now
-        if now - lastInput >= showAfter {
-          burstStart = nil
-          if isHidden { isHidden = false }
-          break
-        }
-        if !isHidden, now - start >= hideAfter { isHidden = true }
-        let next = isHidden ? lastInput + showAfter : min(start + hideAfter, lastInput + showAfter)
+      while let next = step() {
         try? await Task.sleep(until: next, clock: .continuous)
+        if Task.isCancelled { return }
       }
       watcher = nil
     }
   }
 
-  /// 마우스를 움직였을 때. 이어서 타이핑하면 다시 1초 뒤에 사라진다.
-  func show() {
-    burstStart = nil
-    if isHidden { isHidden = false }
+  /// 지금 보일지 숨길지 정하고, 다음에 다시 판단할 시각을 돌려준다. nil이면 더 기다릴 일이 없다.
+  private func step() -> ContinuousClock.Instant? {
+    let now = ContinuousClock.now
+    if let start = burstStart {
+      if now - lastInput < showAfter {
+        // 타이핑 중
+        let hide = hidesWhileTyping && now - start >= hideAfter
+        setHidden(hide)
+        let showCheck = lastInput + showAfter
+        return hidesWhileTyping && !hide ? min(start + hideAfter, showCheck) : showCheck
+      }
+      burstStart = nil
+    }
+    // 쉬는 중
+    guard hidesWhenIdle else {
+      setHidden(false)
+      return nil
+    }
+    let due = lastActivity + idleAfter
+    setHidden(now >= due)
+    return now >= due ? nil : due
+  }
+
+  private func setHidden(_ hidden: Bool) {
+    if isHidden != hidden { isHidden = hidden }
   }
 }
 

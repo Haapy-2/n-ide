@@ -51,6 +51,33 @@ final class EditorPerformanceTests: XCTestCase {
     report("keystroke_ms", samples)
   }
 
+  /// 글자 수 갱신을 "실시간"으로 했을 때 가장 무거운 경우: 10만 자 회차에서 키 입력마다 본문을 복사해 세기를 맡긴다.
+  /// 메인 스레드에서 하는 일(입력, 본문 복사, 세기 작업 시작, 레이아웃·그리기)만 잰다. 세기 자체는 밖에서 돈다.
+  func testKeystrokeRealtimeCount100k() throws {
+    let (window, textView) = makeEditorWindow()
+    defer { window.close() }
+    let counter = CharacterCounter(interval: .zero)
+    counter.attach(textView)
+    let text = String(repeating: try store.readEpisode(project.episodes[0].id), count: 20)
+    counter.begin(episode: project.episodes[0].id, text: text, known: nil)
+    textView.replaceAllText(with: text)
+    textView.setSelectedRange(NSRange(location: 50_000, length: 0))
+    settle()
+
+    var samples: [Double] = []
+    let clock = ContinuousClock()
+    for _ in 0..<300 {
+      let elapsed = clock.measure {
+        textView.insertText("가", replacementRange: NSRange(location: NSNotFound, length: 0))
+        counter.recountNow()
+        textView.layoutManager?.ensureLayout(for: textView.textContainer!)
+        textView.displayIfNeeded()
+      }
+      samples.append(milliseconds(elapsed))
+    }
+    report("keystroke_realtime_100k_ms", samples)
+  }
+
   /// 회차 전환: 이번 실행에서 처음 여는 5,000자 회차를 읽어 편집기에 올리고 레이아웃·그리기를 마칠 때까지.
   func testEpisodeSwitch() throws {
     let (window, textView) = makeEditorWindow()
