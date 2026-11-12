@@ -18,13 +18,16 @@ struct SettingsView: View {
   var body: some View {
     NavigationSplitView {
       List(SettingsSection.allCases, selection: $section) { item in
-        Label {
-          Text(item.title)
-        } icon: {
+        // Label 기본 간격은 답답해 보여서 아이콘과 이름 사이를 직접 띄운다(2026-11-12 사용자 요청).
+        // 아이콘 칸 폭을 같게 두어 이름의 왼쪽 끝이 한 줄로 맞는다.
+        HStack(spacing: 10) {
           // 색 없는 아이콘: 라이트에서는 진한 회색, 다크에서는 밝은 회색(시스템 보조 글자색, 사용자 요청)
           Image(systemName: item.symbolName)
             .foregroundStyle(.secondary)
+            .frame(width: 20)
+          Text(item.title)
         }
+        .padding(.vertical, 2)
       }
       .navigationSplitViewColumnWidth(Self.sidebarWidth)
       // 창이 고정 크기라 목록을 접을 일이 없다.
