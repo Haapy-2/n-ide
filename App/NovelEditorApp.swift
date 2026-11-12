@@ -31,9 +31,7 @@ struct NovelEditorApp: App {
     Settings {
       SettingsView()
     }
-    // 처음부터 기본 크기로 띄운다. 맥 기본(900×450)으로 띄운 뒤 바꾸면 열리자마자 화면을 한 번 더 그려 늦어진다.
-    .defaultSize(width: AppDelegate.settingsDefaultSize.width, height: AppDelegate.settingsDefaultSize.height)
-    // 내용의 최소 크기까지만 줄어들고, 그보다 크게는 마음대로 늘릴 수 있다.
-    .windowResizability(.contentMinSize)
+    // 창 크기는 고정(SettingsView.windowSize). 크기 조절 테두리도 없다(2026-11-12 사용자 요청).
+    .windowResizability(.contentSize)
   }
 }

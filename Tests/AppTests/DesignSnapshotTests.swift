@@ -18,7 +18,9 @@ final class DesignSnapshotTests: XCTestCase {
       try render(ProjectPickerView(recent: []), name: "picker-empty", size: CGSize(width: 560, height: 420), dark: dark)
       try render(ProjectPickerView(recent: Self.sampleRecent), name: "picker-recent", size: CGSize(width: 560, height: 420), dark: dark)
       try render(ManuscriptEditor(content: Self.longText), name: "editor-long-text", size: CGSize(width: 1100, height: 760), dark: dark)
-      try render(SettingsView(), name: "settings", size: CGSize(width: 460, height: 960), dark: dark)
+      for section in SettingsSection.allCases {
+        try render(SettingsView(section: section), name: "settings-\(section.rawValue)", size: SettingsView.windowSize, dark: dark)
+      }
       try render(Self.progressStyles, name: "progress-styles", size: CGSize(width: 560, height: 200), dark: dark)
       try render(ManuscriptEditor(content: Self.longText, style: Self.myungjoStyle), name: "editor-myungjo", size: CGSize(width: 1100, height: 760), dark: dark)
       try render(WorkspaceView(previewProject: ProjectFile(title: "회귀한 검성은 이번 생에서만큼은 조용히 살고 싶다")), name: "workspace-empty", size: CGSize(width: 1100, height: 760), dark: dark)

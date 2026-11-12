@@ -1,7 +1,7 @@
 import NovelCore
 import SwiftUI
 
-/// 설정 창 "목표" 묶음: 맨 마지막으로 앞에 있던 작품의 회차 목표(project.json, 작품별 값).
+/// 설정 창 "일반"의 "목표" 묶음: 맨 마지막으로 앞에 있던 작품의 회차 목표(project.json, 작품별 값)와 목표 기준(앱 전체).
 /// 바꾸면 이미 있는 모든 회차와 앞으로 만들 회차에 함께 적용된다(2026-11-12 사용자 요청: 기본으로 모든 회차).
 /// 회차 하나만 다르게 하려면 회차 메뉴의 "목표 글자 수…"를 쓴다. 작품 창이 없으면 안내 한 줄만 보인다.
 struct ProjectGoalSection: View {
@@ -28,6 +28,10 @@ struct ProjectGoalSection: View {
       } else {
         Text("작품을 열면 바꿀 수 있어요.")
           .foregroundStyle(.secondary)
+      }
+      // 기준은 앱 전체 값이라 작품이 없어도 바꿀 수 있다.
+      Picker("목표 기준", selection: $basis) {
+        ForEach(CharacterCountBasis.allCases, id: \.self) { Text($0.title) }
       }
     } header: {
       Text("목표")
