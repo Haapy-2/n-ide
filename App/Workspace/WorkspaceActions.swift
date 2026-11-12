@@ -5,6 +5,7 @@ struct WorkspaceActions {
   var addEpisode: () -> Void
   var renameSelected: (() -> Void)?
   var trashSelected: (() -> Void)?
+  var setGoalSelected: (() -> Void)?
   var selectPrevious: (() -> Void)?
   var selectNext: (() -> Void)?
 }

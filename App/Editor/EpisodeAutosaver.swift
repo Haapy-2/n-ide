@@ -15,6 +15,8 @@ final class EpisodeAutosaver {
   enum Status: Equatable {
     case idle
     case saving
+    /// 저장이 실패해 다시 시도하는 중.
+    case retrying
     case failed(String)
   }
 
@@ -269,11 +271,15 @@ final class EpisodeAutosaver {
         let result = try store.writeEpisode(job.text, id: job.id, ifUnchangedSince: disk[job.id])
         if case .written(let version) = result { disk[job.id] = version }
         return result
+      }, onRetry: { [weak self] in
+        Task { @MainActor in
+          if self?.status == .saving { self?.status = .retrying }
+        }
       })
       if case .conflict(let diskVersion) = result {
         if inFlight[job.id] == job.text { inFlight[job.id] = nil }
         raiseConflict(job.id, disk: diskVersion, appText: job.text)
-        if status == .saving { status = .idle }
+        if status == .saving || status == .retrying { status = .idle }
         return
       }
       savedChanges[job.id] = max(savedChanges[job.id, default: 0], job.change)

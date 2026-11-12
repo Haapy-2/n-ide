@@ -20,10 +20,16 @@ final class EditorPerformanceTests: XCTestCase {
 
   /// 키 입력: 5,000자 회차에서 1,000번. 한글 IME처럼 조합(setMarkedText) 두 번 + 확정(insertText) 한 번을 한 글자로.
   /// 이벤트를 받은 때부터 글자가 반영되고 레이아웃과 그리기가 끝날 때까지.
+  /// 키 입력마다 함께 불리는 글자 수 세기(텍스트 저장소 알림)와 상태 줄 흐려짐도 붙여서 잰다(9단계).
   func testKeystroke() throws {
     let (window, textView) = makeEditorWindow()
     defer { window.close() }
-    textView.replaceAllText(with: try store.readEpisode(project.episodes[0].id))
+    let counter = CharacterCounter()
+    counter.attach(textView)
+    let fade = StatusBarFade()
+    let text = try store.readEpisode(project.episodes[0].id)
+    counter.begin(episode: project.episodes[0].id, text: text, known: nil)
+    textView.replaceAllText(with: text)
     textView.setSelectedRange(NSRange(location: 2_500, length: 0))
     settle()
 
@@ -36,6 +42,7 @@ final class EditorPerformanceTests: XCTestCase {
         case 1: textView.setMarkedText("가", selectedRange: NSRange(location: 1, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
         default: textView.insertText("가", replacementRange: NSRange(location: NSNotFound, length: 0))
         }
+        fade.noteInput()
         textView.layoutManager?.ensureLayout(for: textView.textContainer!)
         textView.displayIfNeeded()
       }

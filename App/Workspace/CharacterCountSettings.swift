@@ -1,0 +1,36 @@
+import NovelCore
+
+/// 상태 줄에 글자 수를 어떻게 보일지 (PLAN 결정 사항 3). 설정 창(10단계)에서 고른다.
+enum CharacterCountDisplay: String, CaseIterable {
+  case both
+  case withSpaces
+  case withoutSpaces
+
+  var title: String {
+    switch self {
+    case .both: "둘 다"
+    case .withSpaces: "공백 포함"
+    case .withoutSpaces: "공백 제외"
+    }
+  }
+
+  /// 상태 줄 왼쪽 글자. 예: `1,204자 · 공백 제외 987자`
+  func text(for count: CharacterCount) -> String {
+    let with = "\(count.withSpaces.formatted())자"
+    let without = "공백 제외 \(count.withoutSpaces.formatted())자"
+    switch self {
+    case .both: return "\(with) · \(without)"
+    case .withSpaces: return with
+    case .withoutSpaces: return without
+    }
+  }
+}
+
+extension CharacterCountBasis {
+  var title: String {
+    switch self {
+    case .withSpaces: "공백 포함"
+    case .withoutSpaces: "공백 제외"
+    }
+  }
+}

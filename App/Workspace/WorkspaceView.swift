@@ -8,10 +8,13 @@ struct WorkspaceView: View {
   private let previewProject: ProjectFile?
   /// 사이드바 뒤로 다른 앱·바탕화면이 흐릿하게 비치는 효과. 설정 창(10단계)에서 끄고 켠다.
   @AppStorage(AppSettingKey.sidebarSeesThroughWindow) private var sidebarSeesThroughWindow = true
+  @AppStorage(AppSettingKey.characterCountGoalBasis) private var goalBasis: CharacterCountBasis = .withSpaces
   @State private var selection: EpisodeID?
   @State private var renaming: EpisodeID?
   @State private var renameText = ""
   @State private var trashing: EpisodeID?
+  @State private var settingGoal: EpisodeID?
+  @State private var goalText = ""
   @State private var alertMessage: String?
   /// 창의 실행 취소 기록. 편집기는 회차별로 따로 갖고 있어서, 사이드바에 초점이 있을 때 ⌘Z가 이것을 쓴다.
   @Environment(\.undoManager) private var undoManager
@@ -37,6 +40,7 @@ struct WorkspaceView: View {
         selection: $selection,
         onRename: model == nil ? nil : { beginRename($0) },
         onTrash: model == nil ? nil : { trashing = $0 },
+        onSetGoal: model == nil ? nil : { beginSetGoal($0) },
         onAddAfter: model == nil ? nil : { id in addEpisode(after: id) },
         onMove: model == nil ? nil : { source, destination in
           Task { await model?.moveEpisodes(fromOffsets: source, toOffset: destination, undoManager: undoManager) }
@@ -72,6 +76,13 @@ struct WorkspaceView: View {
     } message: {
       Text("비워 두면 \"제목 없음\"으로 보여요.")
     }
+    .alert("목표 글자 수", isPresented: isSettingGoal) {
+      TextField("글자 수", text: $goalText)
+      Button("변경") { commitGoal() }
+      Button("취소", role: .cancel) { settingGoal = nil }
+    } message: {
+      Text("이 회차의 목표예요. \(goalBasis.title) 기준으로 셉니다.")
+    }
     .alert(trashTitle, isPresented: isTrashing) {
       Button("휴지통으로 이동", role: .destructive) { commitTrash() }
       Button("취소", role: .cancel) { trashing = nil }
@@ -96,7 +107,14 @@ struct WorkspaceView: View {
       selection = new.isEmpty ? nil : new[min(oldIndex, new.count - 1)]
     }
     // 창을 닫을 때 남은 저장을 마친다(Task가 저장기를 붙잡고 있어 창이 사라져도 끝까지 저장된다).
-    .onDisappear { if let model { Task { await model.autosaver.flush() } } }
+    .onDisappear {
+      if let model {
+        Task {
+          await model.autosaver.flush()
+          await model.saveCountsNow()
+        }
+      }
+    }
   }
 
   @ViewBuilder
@@ -104,7 +122,9 @@ struct WorkspaceView: View {
     if project.episodes.isEmpty {
       EmptyStateView(message: "첫 회차를 추가해 주세요.", buttonTitle: "새 회차", action: model == nil ? nil : { addEpisode(after: nil) })
     } else if let model, let selection {
-      EpisodeEditorPane(autosaver: model.autosaver, episodeID: selection)
+      EpisodeEditorPane(
+        autosaver: model.autosaver, counter: model.counter, episodeID: selection,
+        goal: model.episode(selection)?.goal ?? 0, knownCount: model.episode(selection)?.characterCount)
     } else {
       Color.clear
     }
@@ -118,6 +138,7 @@ struct WorkspaceView: View {
       addEpisode: { addEpisode(after: selection) },
       renameSelected: selection.map { id in { beginRename(id) } },
       trashSelected: selection.map { id in { trashing = id } },
+      setGoalSelected: selection.map { id in { beginSetGoal(id) } },
       selectPrevious: neighbor(of: index, offset: -1),
       selectNext: neighbor(of: index, offset: 1))
   }
@@ -149,6 +170,19 @@ struct WorkspaceView: View {
     guard let model, let id = renaming else { return }
     renaming = nil
     Task { await model.rename(id, to: renameText, undoManager: undoManager) }
+  }
+
+  private func beginSetGoal(_ id: EpisodeID) {
+    goalText = String(model?.episode(id)?.goal ?? 5_000)
+    settingGoal = id
+  }
+
+  /// 숫자만 받는다(쉼표·"자"는 무시). 0 이하나 숫자가 아니면 바꾸지 않는다.
+  private func commitGoal() {
+    guard let model, let id = settingGoal else { return }
+    settingGoal = nil
+    guard let goal = Int(goalText.filter(\.isNumber)), goal > 0 else { return }
+    Task { await model.setGoal(id, to: goal, undoManager: undoManager) }
   }
 
   private func commitTrash() {
@@ -204,6 +238,10 @@ struct WorkspaceView: View {
 
   private var isRenaming: Binding<Bool> {
     Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })
+  }
+
+  private var isSettingGoal: Binding<Bool> {
+    Binding(get: { settingGoal != nil }, set: { if !$0 { settingGoal = nil } })
   }
 
   private var isTrashing: Binding<Bool> {

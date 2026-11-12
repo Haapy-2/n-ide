@@ -40,8 +40,10 @@ public actor SaveQueue {
 
   /// `save`와 같지만 쓰기 함수가 돌려준 값을 그대로 돌려준다. 옛 저장이라 건너뛰었으면 nil.
   /// (회차 저장이 "썼다"와 "외부 변경과 충돌해 쓰지 않았다"를 알려 주려고 쓴다.)
+  /// `onRetry`는 실패한 뒤 다시 시도하기 전마다 불린다(상태 줄의 "다시 시도 중" 표시용).
   public func save<Value: Sendable>(
-    _ target: SaveTarget, change: Int, writeReturning write: @Sendable () throws -> Value
+    _ target: SaveTarget, change: Int, writeReturning write: @Sendable () throws -> Value,
+    onRetry: (@Sendable () -> Void)? = nil
   ) async throws -> Value? {
     var attempt = 0
     while true {
@@ -56,6 +58,7 @@ public actor SaveQueue {
         return value
       } catch {
         guard attempt < retryDelays.count else { throw error }
+        onRetry?()
         try await Task.sleep(for: retryDelays[attempt])
         attempt += 1
       }

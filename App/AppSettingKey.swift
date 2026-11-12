@@ -4,4 +4,8 @@ import Foundation
 enum AppSettingKey {
   /// 사이드바 뒤로 다른 앱·바탕화면이 흐릿하게 비치는 효과 (기본: 켬)
   static let sidebarSeesThroughWindow = "sidebarSeesThroughWindow"
+  /// 상태 줄의 글자 수 표시 방식 `CharacterCountDisplay` (기본: 둘 다)
+  static let characterCountDisplay = "characterCountDisplay"
+  /// 목표 진행률과 사이드바 글자 수의 기준 `CharacterCountBasis` (기본: 공백 포함)
+  static let characterCountGoalBasis = "characterCountGoalBasis"
 }

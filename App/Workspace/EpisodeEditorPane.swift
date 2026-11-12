@@ -1,33 +1,50 @@
 import NovelCore
 import SwiftUI
 
-/// 편집 영역: 선택한 회차의 본문만 백그라운드에서 읽어 편집기에 올리고, 자동 저장기에 연결한다.
+/// 편집 영역: 선택한 회차의 본문만 백그라운드에서 읽어 편집기에 올리고, 자동 저장기·글자 수 세기에 연결한다.
+/// 아래에는 상태 줄(글자 수·목표 진행률·저장 상태).
 struct EpisodeEditorPane: View {
   let autosaver: EpisodeAutosaver
+  let counter: CharacterCounter
   let episodeID: EpisodeID
+  let goal: Int
+  /// project.json에 남아 있던 이 회차의 글자 수. 회차를 연 직전, 새로 세기 전까지 보여준다.
+  let knownCount: CharacterCount?
   @State private var content: ManuscriptEditor.Content?
   @State private var errorMessage: String?
+  @State private var fade = StatusBarFade()
 
   var body: some View {
-    ZStack(alignment: .bottomTrailing) {
-      Color.paper
-      if let content {
-        ManuscriptEditor(
-          content: content,
-          onTextChange: { autosaver.textDidChange() },
-          onFocusLost: { Task { await autosaver.flush() } },
-          onFocusGained: { Task { await autosaver.checkExternalChange() } },
-          onReady: { autosaver.attach($0) })
-      } else if let errorMessage {
-        Text(errorMessage)
-          .font(.system(size: 13))
-          .foregroundStyle(Color.error)
-          .padding(40)
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
+    VStack(spacing: 0) {
+      ZStack {
+        Color.paper
+        if let content {
+          ManuscriptEditor(
+            content: content,
+            onTextChange: {
+              autosaver.textDidChange()
+              fade.noteInput()
+            },
+            onFocusLost: { Task { await autosaver.flush() } },
+            onFocusGained: { Task { await autosaver.checkExternalChange() } },
+            onReady: {
+              autosaver.attach($0)
+              counter.attach($0)
+            })
+        } else if let errorMessage {
+          Text(errorMessage)
+            .font(.system(size: 13))
+            .foregroundStyle(Color.error)
+            .padding(40)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
       }
-      SaveStatusLabel(autosaver: autosaver)
-        .padding(.trailing, 20)
-        .padding(.bottom, 10)
+      StatusBar(counter: counter, autosaver: autosaver, fade: fade, goal: goal)
+    }
+    .background(Color.paper)
+    // 마우스를 움직이면 흐려진 상태 줄이 다시 나타난다. 숨겨져 있을 때만 상태가 바뀐다.
+    .onContinuousHover { phase in
+      if case .active = phase { fade.show() }
     }
     .onChange(of: episodeID, initial: true) { switchEpisode() }
   }
@@ -43,36 +60,16 @@ struct EpisodeEditorPane: View {
       let pending = autosaver.pendingText(for: id)
       let version = pending == nil ? try autosaver.store.readEpisodeVersion(id) : nil
       errorMessage = nil
-      content = ManuscriptEditor.Content(token: UUID(), episodeID: id, text: pending ?? version?.text ?? "")
+      let text = pending ?? version?.text ?? ""
+      content = ManuscriptEditor.Content(token: UUID(), episodeID: id, text: text)
       autosaver.begin(episode: id, version: version)
+      counter.begin(episode: id, text: text, known: knownCount)
     } catch let error as ProjectError {
       content = nil
       errorMessage = error.userMessage
     } catch {
       content = nil
       errorMessage = error.localizedDescription
-    }
-  }
-}
-
-/// 저장 상태: 평소엔 비어 있고, 오래 걸리는 저장과 실패만 보인다(DESIGN.md 4장 상태 줄).
-/// 9단계에서 상태 줄로 옮겨 간다.
-private struct SaveStatusLabel: View {
-  let autosaver: EpisodeAutosaver
-
-  var body: some View {
-    switch autosaver.status {
-    case .failed(let message):
-      Text("저장 실패 · 원고는 메모리에 있음")
-        .font(.system(size: 11))
-        .foregroundStyle(Color.error)
-        .help(message)
-    case .saving where autosaver.showsSavingIndicator:
-      Text("저장 중…")
-        .font(.system(size: 11))
-        .foregroundStyle(Color.inkMuted)
-    default:
-      EmptyView()
     }
   }
 }

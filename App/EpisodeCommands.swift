@@ -26,10 +26,15 @@ struct EpisodeCommands: Commands {
         .keyboardShortcut("r", modifiers: [.command, .shift])
         .disabled(actions?.renameSelected == nil)
       // 사이드바에 초점이 있으면 ⌘⌫, 편집기에 있으면 ⌥⌘⌫.
-      // 편집기의 ⌘⌫는 "줄 앞까지 지우기"라서 그때는 메뉴가 가로채면 안 된다.
+      // /Users/book/Desktop/n-ide/App/EpisodeCommands.swift편집기의 ⌘⌫는 "줄 앞까지 지우기"라서 그때는 메뉴가 가로채면 안 된다.
       Button("휴지통으로 이동…") { actions?.trashSelected?() }
         .keyboardShortcut(.delete, modifiers: sidebarFocused == true ? [.command] : [.command, .option])
         .disabled(actions?.trashSelected == nil)
+
+      Divider()
+
+      Button("목표 글자 수…") { actions?.setGoalSelected?() }
+        .disabled(actions?.setGoalSelected == nil)
     }
   }
 }

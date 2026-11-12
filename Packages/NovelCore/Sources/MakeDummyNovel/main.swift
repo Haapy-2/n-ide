@@ -66,9 +66,12 @@ do {
   let store = try ProjectStore.create(at: root, title: root.deletingPathExtension().lastPathComponent)
   var project = try store.loadProject()
   project.episodes = (1...episodeCount).map { EpisodeMeta(id: EpisodeID(rawValue: String(format: "dummy-%04d", $0)), title: "\($0)화", goal: 5_000) }
-  for (index, episode) in project.episodes.enumerated() {
+  for index in project.episodes.indices {
     let length = index < longEpisodeCount ? longEpisodeLength : shortEpisodeLength
-    try store.writeEpisode(makeEpisodeText(seed: UInt64(index + 1), length: length), id: episode.id)
+    let text = makeEpisodeText(seed: UInt64(index + 1), length: length)
+    try store.writeEpisode(text, id: project.episodes[index].id)
+    // 앱이 저장하는 것처럼 글자 수도 project.json에 넣어 둔다(사이드바가 본문을 읽지 않고 보여준다).
+    project.episodes[index].characterCount = CharacterCount(counting: text)
   }
   try store.saveProject(project)
   print("✓ \(episodeCount)회차 더미 작품 (앞 \(longEpisodeCount)화 \(longEpisodeLength)자, 나머지 \(shortEpisodeLength)자): \(root.path(percentEncoded: false))")

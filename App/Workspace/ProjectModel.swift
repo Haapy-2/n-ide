@@ -14,21 +14,30 @@ final class ProjectModel {
   let store: ProjectStore
   @ObservationIgnored let queue: SaveQueue
   @ObservationIgnored let autosaver: EpisodeAutosaver
+  @ObservationIgnored let counter: CharacterCounter
   @ObservationIgnored private var projectChange = 0
   /// 파일을 휴지통으로 옮기고 휴지통 안의 새 위치를 돌려준다(되돌리기 때 다시 꺼내려고).
   /// 테스트에서는 진짜 휴지통 대신 다른 곳으로 옮기도록 바꿔 끼운다.
   @ObservationIgnored private let moveToTrash: @Sendable (URL) throws -> URL
+  /// 글자 수만 바뀌었을 때 project.json 저장을 미뤄 묶는 시간(docs/PERFORMANCE.md 2장).
+  @ObservationIgnored private let countSaveDelay: Duration
+  @ObservationIgnored private var countSave: Task<Void, Never>?
 
   init(
     project: ProjectFile, store: ProjectStore, queue: SaveQueue = SaveQueue(),
     autosaveDelay: Duration = .seconds(1),
+    countDelay: Duration = .milliseconds(300),
+    countSaveDelay: Duration = .seconds(3),
     moveToTrash: @escaping @Sendable (URL) throws -> URL = ProjectModel.systemTrash
   ) {
     self.project = project
     self.store = store
     self.queue = queue
     self.moveToTrash = moveToTrash
+    self.countSaveDelay = countSaveDelay
     autosaver = EpisodeAutosaver(store: store, queue: queue, delay: autosaveDelay)
+    counter = CharacterCounter(delay: countDelay)
+    counter.onCount = { [weak self] id, count in self?.recordCount(count, for: id) }
   }
 
   var episodes: [EpisodeMeta] { project.episodes }
@@ -66,6 +75,16 @@ final class ProjectModel {
     await replaceEpisodes(with: episodes, actionName: "이름 변경", undoManager: undoManager).value
   }
 
+  /// 회차 목표 글자 수. `undoManager`를 주면 ⌘Z로 되돌릴 수 있다.
+  func setGoal(_ id: EpisodeID, to goal: Int, undoManager: UndoManager? = nil) async {
+    guard goal > 0, let index = project.episodes.firstIndex(where: { $0.id == id }),
+      project.episodes[index].goal != goal
+    else { return }
+    var episodes = project.episodes
+    episodes[index].goal = goal
+    await replaceEpisodes(with: episodes, actionName: "목표 글자 수", undoManager: undoManager).value
+  }
+
   /// 드래그로 순서 바꾸기. `undoManager`를 주면 ⌘Z로 직전 순서로 되돌릴 수 있다.
   func moveEpisodes(fromOffsets source: IndexSet, toOffset destination: Int, undoManager: UndoManager? = nil) async {
     var episodes = project.episodes
@@ -91,7 +110,13 @@ final class ProjectModel {
       }
     }
     undoManager?.setActionName(actionName)
-    project.episodes = episodes
+    // 글자 수는 되돌리기 대상이 아니다. 기록해 둔 옛 목록의 글자 수가 아니라 지금 값을 이어받는다.
+    let counts = Dictionary(project.episodes.map { ($0.id, $0.characterCount) }, uniquingKeysWith: { first, _ in first })
+    project.episodes = episodes.map { episode in
+      var episode = episode
+      if let count = counts[episode.id] { episode.characterCount = count }
+      return episode
+    }
     return Task { await saveProject() }
   }
 
@@ -183,6 +208,32 @@ final class ProjectModel {
     try FileManager.default.trashItem(at: url, resultingItemURL: &resulting)
     guard let resulting else { throw CocoaError(.fileWriteUnknown) }
     return resulting as URL
+  }
+
+  // MARK: - 글자 수
+
+  /// 센 글자 수를 회차 목록에 적는다. 바뀌었을 때만 적고, project.json 저장은 미뤄서 묶는다.
+  /// (입력이 멈출 때마다 쓰지 않으려는 것. 저장 전에 앱이 꺼져도 그 회차를 다시 열면 다시 센다.)
+  func recordCount(_ count: CharacterCount, for id: EpisodeID) {
+    guard let index = project.episodes.firstIndex(where: { $0.id == id }),
+      project.episodes[index].characterCount != count
+    else { return }
+    project.episodes[index].characterCount = count
+    guard countSave == nil else { return }
+    countSave = Task { [countSaveDelay] in
+      try? await Task.sleep(for: countSaveDelay)
+      guard !Task.isCancelled else { return }
+      countSave = nil
+      await saveProject()
+    }
+  }
+
+  /// 미뤄 둔 글자 수 저장을 지금 한다(창을 닫을 때).
+  func saveCountsNow() async {
+    guard let task = countSave else { return }
+    task.cancel()
+    countSave = nil
+    await saveProject()
   }
 
   // MARK: - 저장

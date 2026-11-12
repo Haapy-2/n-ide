@@ -78,6 +78,24 @@ struct SaveQueueTests {
     #expect(attempts.withLock { $0 } == 3)
   }
 
+  /// 다시 시도하기 전마다 알려 준다(상태 줄 "다시 시도 중"). 처음부터 성공하면 부르지 않는다.
+  @Test func reportsEachRetry() async throws {
+    let queue = SaveQueue(retryDelays: fast)
+    let attempts = Mutex(0)
+    let retries = Mutex(0)
+
+    _ = try await queue.save(.project, change: 1, writeReturning: {
+      let count = attempts.withLock { value -> Int in
+        value += 1
+        return value
+      }
+      if count < 3 { throw ProjectError.writeFailed(URL(filePath: "/x"), reason: "잠깐 실패") }
+    }, onRetry: { retries.withLock { $0 += 1 } })
+    _ = try await queue.save(.project, change: 2, writeReturning: {}, onRetry: { retries.withLock { $0 += 100 } })
+
+    #expect(retries.withLock { $0 } == 2)
+  }
+
   @Test func givesUpAfterRetriesAndReportsError() async throws {
     let queue = SaveQueue(retryDelays: fast)
     let attempts = Mutex(0)

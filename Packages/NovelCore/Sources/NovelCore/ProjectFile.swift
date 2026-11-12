@@ -30,11 +30,15 @@ public struct EpisodeMeta: Codable, Equatable, Sendable, Identifiable {
   public var title: String
   /// 목표 글자 수. 어떤 기준(공백 포함/제외)으로 셀지는 앱 설정을 따른다.
   public var goal: Int
+  /// 마지막으로 센 본문 글자 수. 사이드바가 본문을 읽지 않고 보여주려고 둔다(본문에서 다시 셀 수 있는 값).
+  /// 이 값이 생기기 전에 만든 작품이나 아직 센 적 없는 회차는 nil.
+  public var characterCount: CharacterCount?
 
-  public init(id: EpisodeID = .make(), title: String = "", goal: Int) {
+  public init(id: EpisodeID = .make(), title: String = "", goal: Int, characterCount: CharacterCount? = nil) {
     self.id = id
     self.title = title
     self.goal = goal
+    self.characterCount = characterCount
   }
 }
 

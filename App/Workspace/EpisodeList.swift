@@ -1,7 +1,7 @@
 import NovelCore
 import SwiftUI
 
-/// 사이드바의 회차 목록. 한 줄: `번호  제목` (글자 수는 9단계에서 오른쪽 끝에 붙는다).
+/// 사이드바의 회차 목록. 한 줄: `번호  제목  글자 수`. 글자 수는 목표 기준(설정)과 같은 값이다(PLAN 결정 사항 3).
 ///
 /// 선택 표시는 시스템 것을 쓰지 않고 은은한 회색 배경 하나만 직접 그린다.
 /// 시스템 선택은 누르는 순간 파란 강조색으로 칠했다가 편집기로 초점이 넘어가면 회색으로 바뀌어
@@ -12,10 +12,12 @@ struct EpisodeList: View {
   /// nil이면(미리보기) 메뉴와 드래그가 없다.
   var onRename: ((EpisodeID) -> Void)? = nil
   var onTrash: ((EpisodeID) -> Void)? = nil
+  var onSetGoal: ((EpisodeID) -> Void)? = nil
   var onAddAfter: ((EpisodeID) -> Void)? = nil
   var onMove: ((IndexSet, Int) -> Void)? = nil
   /// 회차를 클릭하면 사이드바가 키보드 초점을 받는다. 초점이 있을 때: ↑↓ 이동, ↩ 이름 변경, ⌘⌫ 휴지통.
   @FocusState private var isFocused: Bool
+  @AppStorage(AppSettingKey.characterCountGoalBasis) private var basis: CharacterCountBasis = .withSpaces
 
   var body: some View {
     List {
@@ -23,7 +25,7 @@ struct EpisodeList: View {
         ForEach(Array(episodes.enumerated()), id: \.element.id) { index, episode in
           // 클릭 영역 = 회색 선택 칸 전체. 줄 여백을 0으로 하고 여백을 칸 안쪽에 직접 넣어
           // 글자뿐 아니라 칸의 빈 곳을 눌러도 선택되게 한다.
-          EpisodeRow(number: index + 1, title: episode.title)
+          EpisodeRow(number: index + 1, title: episode.title, count: episode.characterCount?.value(for: basis))
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -41,9 +43,10 @@ struct EpisodeList: View {
               isFocused = true
             })
             .contextMenu {
-              if let onAddAfter, let onRename, let onTrash {
+              if let onAddAfter, let onRename, let onTrash, let onSetGoal {
                 Button("아래에 새 회차") { onAddAfter(episode.id) }
                 Button("이름 변경…") { onRename(episode.id) }
+                Button("목표 글자 수…") { onSetGoal(episode.id) }
                 Divider()
                 Button("휴지통으로 이동…") { onTrash(episode.id) }
               }
@@ -86,6 +89,8 @@ struct EpisodeList: View {
 private struct EpisodeRow: View {
   let number: Int
   let title: String
+  /// 아직 센 적 없는 회차는 nil(비워 둔다).
+  let count: Int?
 
   var body: some View {
     HStack(spacing: 8) {
@@ -97,6 +102,12 @@ private struct EpisodeRow: View {
         .font(.system(size: 13))
         .foregroundStyle(title.isEmpty ? Color.inkMuted : Color.primary)
         .lineLimit(1)
+      Spacer(minLength: 4)
+      if let count {
+        Text(count.formatted())
+          .font(.system(size: 11).monospacedDigit())
+          .foregroundStyle(Color.inkMuted)
+      }
     }
   }
 }
