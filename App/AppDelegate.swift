@@ -9,6 +9,7 @@ import AppKit
 final class AppDelegate: NSObject, NSApplicationDelegate {
   private var themeObserver: NSObjectProtocol?
   private var clickMonitor: Any?
+  private var settingsWindowObserver: NSObjectProtocol?
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     applyTheme()
@@ -17,10 +18,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     ) { [weak self] _ in
       MainActor.assumeIsolated { self?.applyTheme() }
     }
+    // SwiftUI 설정 창은 크기 범위를 줘도 창 테두리를 끌 수 없게(크기 조절 꺼짐) 만들어진다(측정으로 확인).
+    // 창이 앞에 올 때 크기 조절을 켠다(2026-11-12 사용자 요청: 드래그로 크기 바꾸기).
+    settingsWindowObserver = NotificationCenter.default.addObserver(
+      forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main
+    ) { notification in
+      // 알림은 메인 큐에서 오므로 창을 메인 스레드에서만 만진다.
+      nonisolated(unsafe) let object = notification.object
+      MainActor.assumeIsolated {
+        guard let window = object as? NSWindow, Self.isSettingsWindow(window),
+          !window.styleMask.contains(.resizable)
+        else { return }
+        window.styleMask.insert(.resizable)
+      }
+    }
     clickMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { event in
       MainActor.assumeIsolated { Self.endFieldEditingIfClickedOutside(event) }
       return event
     }
+  }
+
+  /// SwiftUI `Settings` 장면이 만드는 창. 이름은 SwiftUI가 붙이는 고정 값이다.
+  static func isSettingsWindow(_ window: NSWindow) -> Bool {
+    window.identifier?.rawValue == "com_apple_SwiftUI_Settings_window"
   }
 
   /// 한 줄 입력 칸을 고치는 중(창의 공용 입력기 = field editor)에 그 칸 밖을 누르면 입력을 끝낸다.
