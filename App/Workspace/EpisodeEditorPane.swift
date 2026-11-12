@@ -13,14 +13,18 @@ struct EpisodeEditorPane: View {
   @State private var content: ManuscriptEditor.Content?
   @State private var errorMessage: String?
   @State private var fade = StatusBarFade()
+  /// 설정 창에서 바꾼 글꼴·크기·간격·폭. 바뀌면 열려 있는 편집 영역에 바로 반영된다.
+  private var editorSettings = EditorStyleSettings()
 
   var body: some View {
+    let style = editorSettings.style
     VStack(spacing: 0) {
       ZStack {
         Color.paper
         if let content {
           ManuscriptEditor(
             content: content,
+            style: style,
             onTextChange: {
               autosaver.textDidChange()
               fade.noteInput()
@@ -39,7 +43,7 @@ struct EpisodeEditorPane: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
       }
-      StatusBar(counter: counter, autosaver: autosaver, fade: fade, goal: goal)
+      StatusBar(counter: counter, autosaver: autosaver, fade: fade, goal: goal, textWidth: style.textWidth)
     }
     .background(Color.paper)
     // 마우스를 움직이면 흐려진 상태 줄이 다시 나타난다. 숨겨져 있을 때만 상태가 바뀐다.

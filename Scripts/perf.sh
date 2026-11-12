@@ -71,6 +71,9 @@ def perf(name, text):
     return [float(v) for v in m.group(1).split(",")] if m else []
 row("키 입력 1,000번 (5,000자 회차)", perf("keystroke_ms", app), 16, stat="p95")
 row("회차 전환 (처음 여는 5,000자 회차)", perf("switch_ms", app), 50)
+# 설정 창 슬라이더를 끌 때 본문에 새 모양 입히기. SPEC에 목표가 없어 한 프레임(16ms)을 기준으로 둔다.
+row("설정 바꿔 모양 다시 입히기 (5,000자)", perf("style_5k_ms", app), 16)
+row("설정 바꿔 모양 다시 입히기 (10만 자)", perf("style_100k_ms", app), 16)
 # 글자 수 전체 계산(메인 스레드 밖). SPEC에 목표가 없어 입력 멈춤 뒤 한 프레임(16ms)을 기준으로 둔다.
 row("글자 수 전체 계산 (5,000자)", perf("count_5k_ms", core), 16)
 row("글자 수 전체 계산 (10만 자, 편집기 문자열)", perf("count_100k_bridged_ms", core), 16)

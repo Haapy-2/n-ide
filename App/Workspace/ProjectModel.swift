@@ -85,6 +85,20 @@ final class ProjectModel {
     await replaceEpisodes(with: episodes, actionName: "목표 글자 수", undoManager: undoManager).value
   }
 
+  /// 작품 기본 목표 글자 수(새 회차에 쓰는 값, project.json의 작품별 설정). `undoManager`를 주면 ⌘Z로 되돌릴 수 있다.
+  /// 되돌리기 기록은 그 자리에서(동기로) 한다. 회차 목표와 같은 순간에 부르면 ⌘Z 한 번에 둘 다 되돌아간다.
+  @discardableResult
+  func setDefaultEpisodeGoal(_ goal: Int, undoManager: UndoManager? = nil) -> Task<Void, Never> {
+    let previous = project.settings.defaultEpisodeGoal
+    guard goal > 0, goal != previous else { return Task {} }
+    undoManager?.registerUndo(withTarget: self) { model in
+      MainActor.assumeIsolated { model.setDefaultEpisodeGoal(previous, undoManager: undoManager) }
+    }
+    undoManager?.setActionName("목표 글자 수")
+    project.settings.defaultEpisodeGoal = goal
+    return Task { await saveProject() }
+  }
+
   /// 드래그로 순서 바꾸기. `undoManager`를 주면 ⌘Z로 직전 순서로 되돌릴 수 있다.
   func moveEpisodes(fromOffsets source: IndexSet, toOffset destination: Int, undoManager: UndoManager? = nil) async {
     var episodes = project.episodes

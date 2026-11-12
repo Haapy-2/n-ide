@@ -216,4 +216,38 @@ final class ProjectModelTests: XCTestCase {
     XCTAssertEqual(model.episodes.map(\.id), [a, c])
     XCTAssertFalse(FileManager.default.fileExists(atPath: store.layout.episodeFile(b).path(percentEncoded: false)))
   }
+
+  /// "새 회차에도 쓰기": 작품 기본 목표가 project.json에 저장되고 그 뒤 만드는 회차가 그 목표로 시작한다.
+  /// 회차 목표와 함께 바꾸면 ⌘Z 한 번에 둘 다 되돌아간다.
+  func testDefaultEpisodeGoalAppliesToNewEpisodesAndUndoesWithGoal() async throws {
+    let model = try makeModel()
+    let first = try await model.addEpisode()
+    let undo = UndoManager()
+    undo.groupsByEvent = false
+
+    try await grouped(undo) {
+      model.setDefaultEpisodeGoal(3_000, undoManager: undo)
+      await model.setGoal(first, to: 3_000, undoManager: undo)
+    }
+    try await Task.sleep(for: .milliseconds(100))
+    XCTAssertEqual(try store.loadProject().settings.defaultEpisodeGoal, 3_000)
+
+    undo.undo()
+    try await Task.sleep(for: .milliseconds(100))
+    XCTAssertEqual(model.project.settings.defaultEpisodeGoal, 5_000)
+    XCTAssertEqual(model.episode(first)?.goal, 5_000)
+    XCTAssertEqual(try store.loadProject().settings.defaultEpisodeGoal, 5_000)
+
+    undo.redo()
+    try await Task.sleep(for: .milliseconds(100))
+    let second = try await model.addEpisode()
+    XCTAssertEqual(model.episode(first)?.goal, 3_000)
+    XCTAssertEqual(model.episode(second)?.goal, 3_000)
+  }
+
+  func testDefaultEpisodeGoalIgnoresZero() async throws {
+    let model = try makeModel()
+    await model.setDefaultEpisodeGoal(0).value
+    XCTAssertEqual(model.project.settings.defaultEpisodeGoal, 5_000)
+  }
 }

@@ -8,7 +8,7 @@ import XCTest
 /// 평소 테스트에서는 건너뛰고, Scripts/snapshots.sh로 실행할 때만 만든다.
 @MainActor
 final class DesignSnapshotTests: XCTestCase {
-  private let stage = "05"
+  private let stage = "10"
 
   func testRenderSnapshots() throws {
     guard ProcessInfo.processInfo.environment["NOVEL_SNAPSHOTS"] == "1" else {
@@ -18,6 +18,8 @@ final class DesignSnapshotTests: XCTestCase {
       try render(ProjectPickerView(recent: []), name: "picker-empty", size: CGSize(width: 560, height: 420), dark: dark)
       try render(ProjectPickerView(recent: Self.sampleRecent), name: "picker-recent", size: CGSize(width: 560, height: 420), dark: dark)
       try render(ManuscriptEditor(content: Self.longText), name: "editor-long-text", size: CGSize(width: 1100, height: 760), dark: dark)
+      try render(SettingsView(), name: "settings", size: CGSize(width: 460, height: 640), dark: dark)
+      try render(ManuscriptEditor(content: Self.longText, style: Self.myungjoStyle), name: "editor-myungjo", size: CGSize(width: 1100, height: 760), dark: dark)
       try render(WorkspaceView(previewProject: ProjectFile(title: "회귀한 검성은 이번 생에서만큼은 조용히 살고 싶다")), name: "workspace-empty", size: CGSize(width: 1100, height: 760), dark: dark)
     }
   }
@@ -33,6 +35,10 @@ final class DesignSnapshotTests: XCTestCase {
       돌아보니 우산도 없이 젖은 소녀가 서 있었다. 그는 대답 대신 검집을 고쳐 쥐었다. 오래된 습관이었다. 낯선 목소리 앞에서는 언제나 손이 먼저 움직였다.
 
       """, count: 6))
+
+  /// 설정을 바꾼 편집 영역 예: 명조, 19pt, 줄 간격 2배, 본문 폭 34자.
+  private static let myungjoStyle = EditorStyle(
+    font: .appleMyungjo, fontSize: 19, lineSpacing: 2, paragraphSpacing: 0.8, lineWidthInCharacters: 34)
 
   private static let sampleRecent = [
     RecentProject(path: NSHomeDirectory() + "/Documents/달빛 아래 검.novel", title: "달빛 아래 검", episodeCount: 212, lastOpened: .now.addingTimeInterval(-86_400)),

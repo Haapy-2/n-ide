@@ -1,6 +1,6 @@
 import NovelCore
 
-/// 상태 줄에 글자 수를 어떻게 보일지 (PLAN 결정 사항 3). 설정 창(10단계)에서 고른다.
+/// 상태 줄에 글자 수를 어떻게 보일지 (PLAN 결정 사항 3). 설정 창에서 고른다.
 enum CharacterCountDisplay: String, CaseIterable {
   case both
   case withSpaces
@@ -26,7 +26,7 @@ enum CharacterCountDisplay: String, CaseIterable {
   }
 }
 
-/// 상태 줄 목표 진행률의 모양. 설정 창(10단계)에서 고른다(2026-11-12 사용자 요청).
+/// 상태 줄 목표 진행률의 모양. 설정 창에서 고른다(2026-11-12 사용자 요청).
 enum GoalProgressStyle: String, CaseIterable {
   case bar
   case ring

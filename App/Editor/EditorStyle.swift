@@ -1,6 +1,6 @@
 import AppKit
 
-/// 편집 영역 모양 값 (DESIGN.md 3장). 설정 창(10단계)이 생기기 전까지는 기본값으로 고정이다.
+/// 편집 영역 모양 값 (DESIGN.md 3장). 설정 값으로 만드는 방법은 `EditorSettings.swift`.
 struct EditorStyle: Equatable {
   var fontName = "Pretendard-Regular"
   var fontSize: CGFloat = 17

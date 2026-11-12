@@ -68,6 +68,30 @@ final class EditorPerformanceTests: XCTestCase {
     report("switch_ms", samples)
   }
 
+  /// 설정 창에서 슬라이더를 끌 때: 모양 값이 바뀌어 본문 전체에 새 속성을 입히고 보이는 곳을 다시 그리기까지.
+  /// 5,000자(보통 회차)와 10만 자(아주 긴 회차) 두 가지. 글자 크기를 17↔18로 번갈아 바꾼다.
+  func testStyleChange() throws {
+    let (window, textView) = makeEditorWindow()
+    defer { window.close() }
+    let text = try store.readEpisode(project.episodes[0].id)
+    for (name, body) in [("style_5k_ms", text), ("style_100k_ms", String(repeating: text, count: 20))] {
+      textView.replaceAllText(with: body)
+      textView.displayIfNeeded()
+      settle()
+      var samples: [Double] = []
+      let clock = ContinuousClock()
+      for index in 0..<20 {
+        let style = EditorStyle(font: .pretendard, fontSize: index % 2 == 0 ? 18 : 17, lineSpacing: 1.75, paragraphSpacing: 0.6, lineWidthInCharacters: 40)
+        let elapsed = clock.measure {
+          textView.style = style
+          textView.displayIfNeeded()
+        }
+        samples.append(milliseconds(elapsed))
+      }
+      report(name, samples)
+    }
+  }
+
   // MARK: - 도구
 
   private func makeEditorWindow() -> (NSWindow, ManuscriptTextView) {

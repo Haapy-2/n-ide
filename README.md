@@ -28,6 +28,7 @@ NovelEditor.xcodeproj  Xcode 프로젝트
 App/                 앱 소스: 화면(SwiftUI)과 편집기(AppKit)
   Picker/            작품 선택 창
   Workspace/         작업 공간 창 (사이드바, 편집 영역)
+  Settings/          설정 창 (⌘,)
   Editor/            원고 편집기 (NSTextView)
   Project/           작품 만들기·열기, 최근 작품 목록
   Perf/              성능 측정용 갈고리 (perf.sh 전용)

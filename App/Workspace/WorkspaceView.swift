@@ -6,7 +6,7 @@ struct WorkspaceView: View {
   /// nil이면 미리보기·스냅샷용이라 본문을 읽지 않고 목록을 바꿀 수 없다.
   private let model: ProjectModel?
   private let previewProject: ProjectFile?
-  /// 사이드바 뒤로 다른 앱·바탕화면이 흐릿하게 비치는 효과. 설정 창(10단계)에서 끄고 켠다.
+  /// 사이드바 뒤로 다른 앱·바탕화면이 흐릿하게 비치는 효과. 설정 창에서 끄고 켠다.
   @AppStorage(AppSettingKey.sidebarSeesThroughWindow) private var sidebarSeesThroughWindow = true
   @AppStorage(AppSettingKey.characterCountGoalBasis) private var goalBasis: CharacterCountBasis = .withSpaces
   @State private var selection: EpisodeID?
@@ -78,10 +78,11 @@ struct WorkspaceView: View {
     }
     .alert("목표 글자 수", isPresented: isSettingGoal) {
       TextField("글자 수", text: $goalText)
-      Button("변경") { commitGoal() }
+      Button("이 회차만") { commitGoal(alsoForNewEpisodes: false) }
+      Button("새 회차에도 쓰기") { commitGoal(alsoForNewEpisodes: true) }
       Button("취소", role: .cancel) { settingGoal = nil }
     } message: {
-      Text("이 회차의 목표예요. \(goalBasis.title) 기준으로 셉니다.")
+      Text("\(goalBasis.title) 기준으로 셉니다. 지금 새 회차는 \(project.settings.defaultEpisodeGoal.formatted())자로 시작해요.")
     }
     .alert(trashTitle, isPresented: isTrashing) {
       Button("휴지통으로 이동", role: .destructive) { commitTrash() }
@@ -178,11 +179,16 @@ struct WorkspaceView: View {
   }
 
   /// 숫자만 받는다(쉼표·"자"는 무시). 0 이하나 숫자가 아니면 바꾸지 않는다.
-  private func commitGoal() {
+  /// `alsoForNewEpisodes`면 작품 기본 목표(project.json)도 같은 값으로 바꾼다. 메뉴 항목을 늘리지 않으려고 같은 창에서 고른다.
+  private func commitGoal(alsoForNewEpisodes: Bool) {
     guard let model, let id = settingGoal else { return }
     settingGoal = nil
     guard let goal = Int(goalText.filter(\.isNumber)), goal > 0 else { return }
-    Task { await model.setGoal(id, to: goal, undoManager: undoManager) }
+    // 두 되돌리기 기록을 같은 차례 안에서 남겨야 ⌘Z 한 번에 함께 되돌아간다.
+    Task {
+      if alsoForNewEpisodes { model.setDefaultEpisodeGoal(goal, undoManager: undoManager) }
+      await model.setGoal(id, to: goal, undoManager: undoManager)
+    }
   }
 
   private func commitTrash() {

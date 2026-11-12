@@ -9,7 +9,7 @@ struct StatusBar: View {
   let autosaver: EpisodeAutosaver
   let fade: StatusBarFade
   let goal: Int
-  /// 편집기와 같은 본문 폭(10단계에서 설정 값으로 바뀐다).
+  /// 편집기와 같은 본문 폭(설정 값).
   var textWidth: CGFloat = EditorStyle().textWidth
   @AppStorage(AppSettingKey.characterCountDisplay) private var display: CharacterCountDisplay = .both
   @AppStorage(AppSettingKey.characterCountGoalBasis) private var basis: CharacterCountBasis = .withSpaces
