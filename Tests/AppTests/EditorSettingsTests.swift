@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import XCTest
 @testable import NovelEditor
 
@@ -55,5 +56,30 @@ final class EditorSettingsTests: XCTestCase {
 
     XCTAssertTrue(textView.hasMarkedText())
     XCTAssertEqual(textView.textStorage?.attribute(.font, at: 0, effectiveRange: nil) as? NSFont, before)
+  }
+
+  /// 설정 창 미리보기: 창 폭을 바꿔도 줄바꿈 폭과 높이가 맞아 문장이 잘리지 않는다(2026-11-12 사용자 지적).
+  func testPreviewFitsTextAfterWidthChanges() throws {
+    let host = NSHostingView(rootView: EditorPreview(style: EditorStyle()))
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 300, height: 400), styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    defer { window.close() }
+    window.contentView = host
+    for width in [300.0, 700.0, 420.0] {
+      window.setContentSize(NSSize(width: width, height: 400))
+      host.layoutSubtreeIfNeeded()
+      let textView = try XCTUnwrap(findTextView(in: host))
+      let layoutManager = try XCTUnwrap(textView.layoutManager)
+      let container = try XCTUnwrap(textView.textContainer)
+      layoutManager.ensureLayout(for: container)
+      let needed = layoutManager.usedRect(for: container).height + textView.textContainerInset.height * 2
+      XCTAssertEqual(container.size.width, textView.bounds.width - textView.textContainerInset.width * 2, accuracy: 1, "폭 \(width)")
+      XCTAssertLessThanOrEqual(needed, textView.bounds.height + 1, "폭 \(width)에서 아래가 잘림")
+    }
+  }
+
+  private func findTextView(in view: NSView) -> NSTextView? {
+    if let textView = view as? NSTextView { return textView }
+    return view.subviews.lazy.compactMap { self.findTextView(in: $0) }.first
   }
 }

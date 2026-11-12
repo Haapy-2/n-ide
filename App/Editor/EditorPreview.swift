@@ -36,11 +36,17 @@ struct EditorPreview: NSViewRepresentable {
     view.invalidateIntrinsicContentSize()
   }
 
-  /// 주어진 폭에서 미리보기 문장이 다 들어가는 높이. 글자 크기·간격이 바뀌면 높이도 따라 바뀐다.
+  /// 주어진 폭에서 미리보기 문장이 다 들어가는 높이.
+  /// 화면에 보이는 뷰의 글 상자를 건드리지 않고 따로 만든 글 상자로 잰다. 전에는 잴 때마다 보이는 뷰의 글 상자 폭을
+  /// 바꿔서, 마지막으로 잰 폭(더 좁은 폭)이 남아 줄이 일찍 꺾이고 높이는 넓은 폭 기준이라 아래가 잘렸다(2026-11-12 사용자 지적).
   func sizeThatFits(_ proposal: ProposedViewSize, nsView view: NSTextView, context: Context) -> CGSize? {
     let width = proposal.width ?? 400
-    guard let container = view.textContainer, let layoutManager = view.layoutManager else { return nil }
-    container.size = NSSize(width: max(width - Self.inset.width * 2, 50), height: .greatestFiniteMagnitude)
+    let storage = NSTextStorage(string: Self.sample, attributes: style.textAttributes)
+    let layoutManager = NSLayoutManager()
+    storage.addLayoutManager(layoutManager)
+    let container = NSTextContainer(size: NSSize(width: max(width - Self.inset.width * 2, 50), height: .greatestFiniteMagnitude))
+    container.lineFragmentPadding = view.textContainer?.lineFragmentPadding ?? 5
+    layoutManager.addTextContainer(container)
     layoutManager.ensureLayout(for: container)
     let height = layoutManager.usedRect(for: container).height + Self.inset.height * 2
     return CGSize(width: width, height: ceil(height))
