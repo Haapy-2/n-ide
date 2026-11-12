@@ -20,7 +20,7 @@ struct SettingsView: View {
       List(SettingsSection.allCases, selection: $section) { item in
         // Label 기본 간격은 답답해 보여서 아이콘과 이름 사이를 직접 띄운다(2026-11-12 사용자 요청).
         // 아이콘 칸 폭을 같게 두어 이름의 왼쪽 끝이 한 줄로 맞는다.
-        HStack(spacing: 10) {
+        HStack(spacing: 15) {
           // 색 없는 아이콘: 라이트에서는 진한 회색, 다크에서는 밝은 회색(시스템 보조 글자색, 사용자 요청)
           Image(systemName: item.symbolName)
             .foregroundStyle(.secondary)
