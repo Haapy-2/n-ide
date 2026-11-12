@@ -18,7 +18,8 @@ final class DesignSnapshotTests: XCTestCase {
       try render(ProjectPickerView(recent: []), name: "picker-empty", size: CGSize(width: 560, height: 420), dark: dark)
       try render(ProjectPickerView(recent: Self.sampleRecent), name: "picker-recent", size: CGSize(width: 560, height: 420), dark: dark)
       try render(ManuscriptEditor(content: Self.longText), name: "editor-long-text", size: CGSize(width: 1100, height: 760), dark: dark)
-      try render(SettingsView(), name: "settings", size: CGSize(width: 460, height: 640), dark: dark)
+      try render(SettingsView(), name: "settings", size: CGSize(width: 460, height: 960), dark: dark)
+      try render(Self.progressStyles, name: "progress-styles", size: CGSize(width: 560, height: 200), dark: dark)
       try render(ManuscriptEditor(content: Self.longText, style: Self.myungjoStyle), name: "editor-myungjo", size: CGSize(width: 1100, height: 760), dark: dark)
       try render(WorkspaceView(previewProject: ProjectFile(title: "회귀한 검성은 이번 생에서만큼은 조용히 살고 싶다")), name: "workspace-empty", size: CGSize(width: 1100, height: 760), dark: dark)
     }
@@ -39,6 +40,23 @@ final class DesignSnapshotTests: XCTestCase {
   /// 설정을 바꾼 편집 영역 예: 명조, 19pt, 줄 간격 2배, 본문 폭 34자.
   private static let myungjoStyle = EditorStyle(
     font: .appleMyungjo, fontSize: 19, lineSpacing: 2, paragraphSpacing: 0.8, lineWidthInCharacters: 34)
+
+  /// 진행률 모양 세 가지(고리, 꽉 찬 원, 막대) × 97%·48%·112%.
+  private static var progressStyles: some View {
+    VStack(alignment: .trailing, spacing: 10) {
+      ForEach(GoalProgressStyle.allCases, id: \.self) { style in
+        HStack(spacing: 24) {
+          ForEach([4_850, 2_400, 5_600], id: \.self) { value in
+            GoalProgress(value: value, goal: 5_000, style: style)
+          }
+        }
+      }
+    }
+    .font(.system(size: 11).monospacedDigit())
+    .foregroundStyle(Color.inkMuted)
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .background(Color.paper)
+  }
 
   private static let sampleRecent = [
     RecentProject(path: NSHomeDirectory() + "/Documents/달빛 아래 검.novel", title: "달빛 아래 검", episodeCount: 212, lastOpened: .now.addingTimeInterval(-86_400)),

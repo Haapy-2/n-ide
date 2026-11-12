@@ -1,7 +1,7 @@
 import NovelCore
 import SwiftUI
 
-/// 사이드바의 회차 목록. 한 줄: `번호  제목  글자 수`. 글자 수는 목표 기준(설정)과 같은 값이다(PLAN 결정 사항 3).
+/// 사이드바의 회차 목록. 한 줄: `번호  제목  글자 수`. 글자 수는 목표 기준(설정)과 같은 값이고, 설정에서 숨길 수 있다.
 ///
 /// 선택 표시는 시스템 것을 쓰지 않고 은은한 회색 배경 하나만 직접 그린다.
 /// 시스템 선택은 누르는 순간 파란 강조색으로 칠했다가 편집기로 초점이 넘어가면 회색으로 바뀌어
@@ -15,18 +15,33 @@ struct EpisodeList: View {
   var onSetGoal: ((EpisodeID) -> Void)? = nil
   var onAddAfter: ((EpisodeID) -> Void)? = nil
   var onMove: ((IndexSet, Int) -> Void)? = nil
+  /// 사이드바에 초점이 있을 때 ⌘Z(false)·⇧⌘Z(true). 바로 되돌리지 않고 확인 창을 거친다.
+  var onUndoCommand: ((_ isRedo: Bool) -> Void)? = nil
   /// 회차를 클릭하면 사이드바가 키보드 초점을 받는다. 초점이 있을 때: ↑↓ 이동, ↩ 이름 변경, ⌘⌫ 휴지통.
   @FocusState private var isFocused: Bool
   @AppStorage(AppSettingKey.characterCountGoalBasis) private var basis: CharacterCountBasis = .withSpaces
+  @AppStorage(AppSettingKey.sidebarShowsCharacterCount) private var showsCount = true
 
+  /// 줄 안쪽 왼쪽 여백. "회차" 제목과 회차 번호가 같은 선에서 시작하도록 둘 다 이 값을 쓴다(2026-11-12 사용자 요청).
+  private static let contentInset: CGFloat = 8
   var body: some View {
     List {
-      Section("회차") {
+      // 시스템 구역 제목은 줄과 왼쪽 시작점이 달라 번호와 맞출 수 없어서, 같은 여백을 쓰는 제목 줄을 직접 둔다.
+      Text("회차")
+        .font(.system(size: 11, weight: .semibold))
+        .foregroundStyle(Color.inkMuted)
+        .padding(.leading, Self.contentInset)
+        .padding(.top, 4)
+        .padding(.bottom, 2)
+        .listRowInsets(EdgeInsets(top: 0, leading: 10, bottom: 0, trailing: 10))
+        .listRowBackground(Color.clear)
+        .accessibilityAddTraits(.isHeader)
+      Section {
         ForEach(Array(episodes.enumerated()), id: \.element.id) { index, episode in
           // 클릭 영역 = 회색 선택 칸 전체. 줄 여백을 0으로 하고 여백을 칸 안쪽에 직접 넣어
           // 글자뿐 아니라 칸의 빈 곳을 눌러도 선택되게 한다.
-          EpisodeRow(number: index + 1, title: episode.title, count: episode.characterCount?.value(for: basis))
-            .padding(.horizontal, 8)
+          EpisodeRow(number: index + 1, title: episode.title, count: showsCount ? episode.characterCount?.value(for: basis) : nil)
+            .padding(.horizontal, Self.contentInset)
             .padding(.vertical, 6)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
@@ -75,6 +90,9 @@ struct EpisodeList: View {
     // ⌘⌫ 같은 ⌘ 조합은 메뉴가 먼저 가져가서 여기까지 오지 않는다. 그래서 회차 메뉴가 이 값을 보고
     // 사이드바에 초점이 있을 때만 "휴지통으로 이동"의 단축키를 ⌘⌫로 바꿔 처리한다(EpisodeCommands).
     .focusedValue(\.episodeSidebarFocused, isFocused)
+    // 편집 메뉴의 실행 취소·다시 실행이 창까지 올라가기 전에 여기서 받는다(확인 창을 띄우려고).
+    .onCommand(Selector(("undo:"))) { onUndoCommand?(false) }
+    .onCommand(Selector(("redo:"))) { onUndoCommand?(true) }
   }
 
   private func move(by offset: Int) -> KeyPress.Result {
@@ -97,7 +115,8 @@ private struct EpisodeRow: View {
       Text("\(number)")
         .font(.system(size: 11).monospacedDigit())
         .foregroundStyle(Color.inkMuted)
-        .frame(minWidth: 24, alignment: .trailing)
+        // 왼쪽 정렬: 1이든 100이든 "회차" 제목 아래 같은 선에서 시작하고, 제목도 모두 같은 선에서 시작한다.
+        .frame(minWidth: 26, alignment: .leading)
       Text(title.isEmpty ? "제목 없음" : title)
         .font(.system(size: 13))
         .foregroundStyle(title.isEmpty ? Color.inkMuted : Color.primary)

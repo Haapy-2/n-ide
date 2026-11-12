@@ -16,6 +16,9 @@ struct WorkspaceView: View {
   @State private var settingGoal: EpisodeID?
   @State private var goalText = ""
   @State private var alertMessage: String?
+  /// 확인을 기다리는 사이드바 되돌리기. nil이 아니면 확인 창이 뜬다.
+  @State private var pendingUndo: PendingUndo?
+  @State private var stopAskingUndo = false
   /// 창의 실행 취소 기록. 편집기는 회차별로 따로 갖고 있어서, 사이드바에 초점이 있을 때 ⌘Z가 이것을 쓴다.
   @Environment(\.undoManager) private var undoManager
 
@@ -44,7 +47,8 @@ struct WorkspaceView: View {
         onAddAfter: model == nil ? nil : { id in addEpisode(after: id) },
         onMove: model == nil ? nil : { source, destination in
           Task { await model?.moveEpisodes(fromOffsets: source, toOffset: destination, undoManager: undoManager) }
-        })
+        },
+        onUndoCommand: model == nil ? nil : { requestUndo(isRedo: $0) })
         .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 340)
     } detail: {
       detail
@@ -84,6 +88,7 @@ struct WorkspaceView: View {
     } message: {
       Text("\(goalBasis.title) 기준으로 셉니다. 지금 새 회차는 \(project.settings.defaultEpisodeGoal.formatted())자로 시작해요.")
     }
+    .modifier(undoConfirmationDialog)
     .alert(trashTitle, isPresented: isTrashing) {
       Button("휴지통으로 이동", role: .destructive) { commitTrash() }
       Button("취소", role: .cancel) { trashing = nil }
@@ -176,6 +181,48 @@ struct WorkspaceView: View {
   private func beginSetGoal(_ id: EpisodeID) {
     goalText = String(model?.episode(id)?.goal ?? 5_000)
     settingGoal = id
+  }
+
+  // MARK: - 사이드바 되돌리기 확인
+
+  /// 사이드바 되돌리기 확인 창. 본문(body)이 길어 컴파일러가 한 번에 못 풀어서 따로 뺐다.
+  private var undoConfirmationDialog: UndoConfirmationDialog {
+    UndoConfirmationDialog(pending: $pendingUndo, stopAsking: $stopAskingUndo, perform: performUndo)
+  }
+
+  struct PendingUndo {
+    let isRedo: Bool
+    let actionName: String
+
+    var title: String {
+      let name = actionName.isEmpty ? "마지막 작업" : actionName
+      let quoted = actionName.isEmpty ? name : "\"\(name)\""
+      return isRedo ? "\(quoted)\(Self.objectParticle(name)) 다시 실행할까요?" : "\(quoted)\(Self.objectParticle(name)) 되돌릴까요?"
+    }
+
+    /// 마지막 글자에 받침이 있으면 "을", 없으면 "를". 예: 이름 변경을, 새 회차를
+    static func objectParticle(_ word: String) -> String {
+      guard let last = word.unicodeScalars.last, (0xAC00...0xD7A3).contains(last.value) else { return "을" }
+      return (last.value - 0xAC00) % 28 == 0 ? "를" : "을"
+    }
+  }
+
+  /// 되돌릴 것이 없으면 아무것도 하지 않는다. 확인 창이 쉬는 중이면 바로 되돌린다.
+  private func requestUndo(isRedo: Bool) {
+    guard let undoManager, isRedo ? undoManager.canRedo : undoManager.canUndo else { return }
+    let pending = PendingUndo(isRedo: isRedo, actionName: isRedo ? undoManager.redoActionName : undoManager.undoActionName)
+    if UndoConfirmation.isPaused() {
+      performUndo(pending)
+    } else {
+      stopAskingUndo = false
+      pendingUndo = pending
+    }
+  }
+
+  private func performUndo(_ pending: PendingUndo) {
+    pendingUndo = nil
+    if stopAskingUndo { UndoConfirmation.pause() }
+    if pending.isRedo { undoManager?.redo() } else { undoManager?.undo() }
   }
 
   /// 숫자만 받는다(쉼표·"자"는 무시). 0 이하나 숫자가 아니면 바꾸지 않는다.
@@ -292,5 +339,29 @@ extension ProjectFile {
     return ProjectFile(
       title: "달빛 아래 검",
       episodes: (0..<500).map { EpisodeMeta(title: titles[$0 % titles.count], goal: 5_000) })
+  }
+}
+
+/// 사이드바 되돌리기 확인 창(맥 기본 확인 창 + "다시 묻지 않기" 체크).
+private struct UndoConfirmationDialog: ViewModifier {
+  @Binding var pending: WorkspaceView.PendingUndo?
+  @Binding var stopAsking: Bool
+  let perform: (WorkspaceView.PendingUndo) -> Void
+
+  func body(content: Content) -> some View {
+    content
+      .confirmationDialog(
+        pending?.title ?? "",
+        isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } }),
+        titleVisibility: .visible, presenting: pending
+      ) { pending in
+        // 엔터는 취소가 받는다(2026-11-12 사용자 요청). 되돌리기는 클릭이나 Tab → Space로.
+        Button("취소", role: .cancel) { self.pending = nil }
+          .keyboardShortcut(.defaultAction)
+        Button(pending.isRedo ? "다시 실행" : "되돌리기") { perform(pending) }
+      } message: { _ in
+        Text("회차 목록이 바뀌기 전으로 돌아가요. 본문은 바뀌지 않아요.")
+      }
+      .dialogSuppressionToggle("다시 묻지 않기", isSuppressed: $stopAsking)
   }
 }

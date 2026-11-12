@@ -16,6 +16,14 @@ enum AppSettingKey {
   static let statusBarHidesWhileTyping = "statusBarHidesWhileTyping"
   /// 쉬고 있을 때 10초 뒤 상태 줄 숨기기 (기본: 켬)
   static let statusBarHidesWhenIdle = "statusBarHidesWhenIdle"
+  /// 사이드바 회차 줄의 글자 수 보이기 (기본: 켬)
+  static let sidebarShowsCharacterCount = "sidebarShowsCharacterCount"
+  /// 앱 화면 테마 `AppTheme` (기본: 기기 설정)
+  static let appTheme = "appTheme"
+  /// 사이드바 되돌리기 확인 창을 "다시 묻지 않기" 뒤 쉬게 하는 기간 `UndoConfirmPause` (기본: 일주일)
+  static let undoConfirmPause = "undoConfirmPause"
+  /// 사이드바 되돌리기 확인 창이 쉬는 끝 시각(1970 기준 초). 없으면 매번 묻는다.
+  static let undoConfirmPausedUntil = "undoConfirmPausedUntil"
   /// 본문 글꼴 `BodyFont` (기본: Pretendard)
   static let bodyFont = "bodyFont"
   /// 글자 크기 pt (기본: 17)

@@ -2,7 +2,31 @@ import AppKit
 
 /// 앱 종료 때 진행 중이거나 남은 저장을 끝까지 마치고 끈다(SPEC 6장).
 /// SwiftUI에는 종료를 잠시 미루는 방법이 없어서 AppKit 앱 대리자를 쓴다(AppKit 예외 파일).
+/// 화면 테마도 여기서 앱 전체에 건다: SwiftUI `preferredColorScheme`은 창마다 걸어야 하고,
+/// "기기 설정"(nil)으로 되돌릴 때 이미 열린 창이 바뀌지 않는다.
 final class AppDelegate: NSObject, NSApplicationDelegate {
+  private var themeObserver: NSObjectProtocol?
+
+  func applicationDidFinishLaunching(_ notification: Notification) {
+    applyTheme()
+    themeObserver = NotificationCenter.default.addObserver(
+      forName: UserDefaults.didChangeNotification, object: nil, queue: .main
+    ) { [weak self] _ in
+      MainActor.assumeIsolated { self?.applyTheme() }
+    }
+  }
+
+  /// 설정이 바뀔 때마다 불리지만 값이 달라졌을 때만 바꾼다.
+  private func applyTheme() {
+    let theme = UserDefaults.standard.string(forKey: AppSettingKey.appTheme).flatMap(AppTheme.init) ?? .system
+    let appearance: NSAppearance? = switch theme {
+    case .dark: NSAppearance(named: .darkAqua)
+    case .light: NSAppearance(named: .aqua)
+    case .system: nil
+    }
+    if NSApp.appearance?.name != appearance?.name { NSApp.appearance = appearance }
+  }
+
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
     let autosavers = AutosaverRegistry.shared.all
     guard autosavers.contains(where: \.hasUnsavedChanges) else { return .terminateNow }

@@ -88,6 +88,38 @@ final class ManuscriptTextView: NSTextView {
 
   override var undoManager: UndoManager? { episodeUndoManager }
 
+  // 편집 메뉴의 실행 취소(⌘Z)·다시 실행(⇧⌘Z)은 처리하는 곳을 응답 사슬에서 찾는데, 편집기가 받지 않으면 창까지 올라가
+  // 창의 기록(사이드바 회차 작업)을 쓴다. 입력은 회차 기록(`episodeUndoManager`)에 쌓이므로 여기서 직접 받는다(2026-11-12 사용자 지적).
+  @objc func undo(_ sender: Any?) {
+    finishComposition()
+    episodeUndoManager.undo()
+  }
+
+  @objc func redo(_ sender: Any?) {
+    finishComposition()
+    episodeUndoManager.redo()
+  }
+
+  /// 조합 중인 글자를 확정한다. 조합 중에 되돌리면 입력기와 텍스트 저장소가 서로 다른 글자를 가리켜 깨질 수 있다.
+  private func finishComposition() {
+    guard hasMarkedText() else { return }
+    unmarkText()
+    inputContext?.discardMarkedText()
+  }
+
+  override func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
+    switch item.action {
+    case #selector(undo(_:)):
+      (item as? NSMenuItem)?.title = episodeUndoManager.undoMenuItemTitle
+      return episodeUndoManager.canUndo
+    case #selector(redo(_:)):
+      (item as? NSMenuItem)?.title = episodeUndoManager.redoMenuItemTitle
+      return episodeUndoManager.canRedo
+    default:
+      return super.validateUserInterfaceItem(item)
+    }
+  }
+
   // MARK: - 폭과 여백
 
   override func setFrameSize(_ newSize: NSSize) {
