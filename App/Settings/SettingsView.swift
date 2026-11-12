@@ -85,7 +85,7 @@ struct SettingsView: View {
     }
     .formStyle(.grouped)
     // 창 크기는 사용자가 바꿀 수 있다(2026-11-12 사용자 요청). 작아지면 내용이 스크롤된다.
-    .frame(minWidth: 420, idealWidth: 460, minHeight: 360, idealHeight: 720)
+    .frame(minWidth: 420, idealWidth: 520, minHeight: 360, idealHeight: 760)
   }
 }
 
