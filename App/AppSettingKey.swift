@@ -30,6 +30,8 @@ enum AppSettingKey {
   static let autoSnapshotMinutes = "autoSnapshotMinutes"
   /// 회차마다 남길 자동·떠날 때 스냅샷 개수. 10~100, 10 단위 (기본: 50)
   static let snapshotRetention = "snapshotRetention"
+  /// 사용자가 바꾼 단축키 `ShortcutSettings.storageText` (기본: 빈 문자열 = 모두 기본값)
+  static let shortcuts = "shortcuts"
   /// 본문 글꼴 `BodyFont` (기본: Pretendard)
   static let bodyFont = "bodyFont"
   /// 글자 크기 pt (기본: 17)

@@ -8,7 +8,9 @@ struct WorkspaceActions {
   var setGoalSelected: (() -> Void)?
   var selectPrevious: (() -> Void)?
   var selectNext: (() -> Void)?
-  /// 지금 회차 스냅샷 찍기(⌥⌘S)
+  /// 기다리지 않고 지금 저장(⌘S). 자동 저장이 이미 하는 일을 앞당길 뿐이다.
+  var saveNow: (() -> Void)?
+  /// 지금 회차 스냅샷 찍기(⌃⌘S)
   var takeSnapshot: (() -> Void)?
   /// 지금 회차 스냅샷 판 열기(⇧⌘S)
   var showSnapshots: (() -> Void)?

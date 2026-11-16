@@ -134,7 +134,7 @@ final class EpisodeAutosaver {
     if let id = episodeID { snapshots.leave(id) { job?.text ?? textView?.string } }
   }
 
-  /// 직접 찍기(⌥⌘S): 저장을 먼저 끝낸 뒤 지금 본문을 찍는다. 열린 회차가 없으면 nil.
+  /// 직접 찍기(⌃⌘S): 저장을 먼저 끝낸 뒤 지금 본문을 찍는다. 열린 회차가 없으면 nil.
   func takeManualSnapshot() async throws -> Snapshot? {
     guard let id = episodeID else { return nil }
     await flush()

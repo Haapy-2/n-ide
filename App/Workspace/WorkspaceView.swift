@@ -177,6 +177,7 @@ struct WorkspaceView: View {
       setGoalSelected: selection.map { id in { beginSetGoal(id) } },
       selectPrevious: neighbor(of: index, offset: -1),
       selectNext: neighbor(of: index, offset: 1),
+      saveNow: model.map { model in { Task { await model.autosaver.flush() } } },
       takeSnapshot: selection == nil || snapshotBrowser != nil ? nil : { takeSnapshot() },
       showSnapshots: selection == nil || snapshotBrowser != nil ? nil : { showSnapshots() })
   }

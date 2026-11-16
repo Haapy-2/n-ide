@@ -62,6 +62,7 @@ struct SettingsView: View {
       case .general: GeneralSettingsPane()
       case .editor: EditorSettingsPane()
       case .sidebar: SidebarSettingsPane()
+      case .shortcuts: ShortcutsSettingsPane()
       }
     }
     .navigationTitle(section.title)
@@ -84,7 +85,7 @@ private struct RowLayout: Equatable {
 
 /// 설정 창 왼쪽 목록의 섹션. 순서는 사용자가 정한 그대로(2026-11-12).
 enum SettingsSection: String, CaseIterable, Identifiable {
-  case general, editor, sidebar
+  case general, editor, sidebar, shortcuts
 
   var id: Self { self }
 
@@ -93,6 +94,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     case .general: "일반"
     case .editor: "편집기"
     case .sidebar: "사이드바"
+    case .shortcuts: "단축키"
     }
   }
 
@@ -101,6 +103,7 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     case .general: "gearshape"
     case .editor: "doc.text"
     case .sidebar: "sidebar.left"
+    case .shortcuts: "keyboard"
     }
   }
 }

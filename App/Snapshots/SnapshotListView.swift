@@ -26,12 +26,19 @@ struct SnapshotListView: View {
     }
     .overlay {
       if browser.items?.isEmpty == true {
-        Text("아직 스냅샷이 없어요.\n⌥⌘S로 찍을 수 있어요.")
+        Text(emptyMessage)
           .font(.system(size: 12))
           .foregroundStyle(Color.inkMuted)
           .multilineTextAlignment(.center)
       }
     }
+  }
+
+  private var emptyMessage: String {
+    guard let combo = ShortcutStore.shared.settings.combo(for: .takeSnapshot) else {
+      return "아직 스냅샷이 없어요.\n파일 → 스냅샷 찍기로 찍을 수 있어요."
+    }
+    return "아직 스냅샷이 없어요.\n\(combo.displayText)로 찍을 수 있어요."
   }
 
   private func row(_ item: SnapshotBrowser.Item) -> some View {
