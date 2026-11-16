@@ -169,4 +169,21 @@ struct ProjectRecoveryTests {
     }
     #expect(try folder.fileNames(in: folder.url).isEmpty)
   }
+
+  /// 같은 초에 두 번 복구해도(연달아 열기) 치워 둔 깨진 파일이 서로 덮이지 않고, 이름이 겹쳐 열기가 실패하지도 않는다.
+  @Test func repeatedRecoveryKeepsEveryBrokenFile() throws {
+    let folder = try TestFolder()
+    defer { folder.remove() }
+    let (store, project) = try makeProject(in: folder)
+    try store.saveProject(project)
+
+    for _ in 0..<3 {
+      try breakProjectFile(store)
+      #expect(try store.open().recovery == .fromBackup)
+    }
+
+    let broken = try folder.fileNames(in: store.layout.root).filter { $0.hasPrefix("project.json.broken-") }
+    #expect(broken.count == 3)
+    #expect(try store.loadProject().episodes.map(\.id) == project.episodes.map(\.id))
+  }
 }

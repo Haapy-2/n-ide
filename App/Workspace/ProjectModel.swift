@@ -16,6 +16,12 @@ final class ProjectModel {
   @ObservationIgnored let autosaver: EpisodeAutosaver
   @ObservationIgnored let counter: CharacterCounter
   @ObservationIgnored private var projectChange = 0
+  /// 아직 안 끝난 `project.json` 저장 수
+  @ObservationIgnored private var projectSaves = 0
+  /// 회차별 글자 수(화면용). `project` 안에 두면 글자 수 하나가 바뀔 때마다 `project`를 읽는 화면 전체
+  /// (작업 공간 + 사이드바 500줄)가 다시 계산된다(측정 17.5ms, 타이핑 중 0.2초마다). 그래서 회차마다 따로 두어
+  /// 그 회차의 줄만 다시 그리게 하고, `project.json`에 쓸 때 합친다.
+  @ObservationIgnored private var countBoxes: [EpisodeID: EpisodeCountBox] = [:]
   /// 파일을 휴지통으로 옮기고 휴지통 안의 새 위치를 돌려준다(되돌리기 때 다시 꺼내려고).
   /// 테스트에서는 진짜 휴지통 대신 다른 곳으로 옮기도록 바꿔 끼운다.
   @ObservationIgnored private let moveToTrash: @Sendable (URL) throws -> URL
@@ -35,15 +41,31 @@ final class ProjectModel {
     self.queue = queue
     self.moveToTrash = moveToTrash
     self.countSaveDelay = countSaveDelay
+    countBoxes = Dictionary(
+      project.episodes.map { ($0.id, EpisodeCountBox($0.characterCount)) }, uniquingKeysWith: { first, _ in first })
     autosaver = EpisodeAutosaver(store: store, queue: queue, delay: autosaveDelay)
     counter = CharacterCounter(interval: countDelay)
     counter.onCount = { [weak self] id, count in self?.recordCount(count, for: id) }
+    autosaver.hasProjectWork = { [weak self] in self.map { $0.countSave != nil || $0.projectSaves > 0 } ?? false }
+    autosaver.finishProjectWork = { [weak self] in await self?.finishProjectSaves() }
   }
 
   var episodes: [EpisodeMeta] { project.episodes }
 
+  /// 회차 정보(글자 수는 지금 값). 화면의 body에서 부르면 그 화면이 이 회차의 글자 수 변화를 따라 다시 그려지므로,
+  /// body에서는 `countBox(for:)`를 줄 단위 뷰에 넘겨 쓴다.
   func episode(_ id: EpisodeID) -> EpisodeMeta? {
-    project.episodes.first { $0.id == id }
+    guard var episode = project.episodes.first(where: { $0.id == id }) else { return nil }
+    if let box = countBoxes[id] { episode.characterCount = box.value }
+    return episode
+  }
+
+  /// 그 회차의 글자 수 칸. 없으면(새 회차) 만든다.
+  func countBox(for id: EpisodeID) -> EpisodeCountBox {
+    if let box = countBoxes[id] { return box }
+    let box = EpisodeCountBox(nil)
+    countBoxes[id] = box
+    return box
   }
 
   // MARK: - 회차 바꾸기
@@ -96,7 +118,7 @@ final class ProjectModel {
     }
     undoManager?.setActionName("목표 글자 수")
     project.settings.defaultEpisodeGoal = goal
-    return Task { await saveProject() }
+    return startProjectSave()
   }
 
   /// 모든 회차의 목표를 한 번에 바꾼다(설정 창 "모든 회차에 적용"). ⌘Z 한 번에 모두 되돌아간다.
@@ -135,14 +157,9 @@ final class ProjectModel {
       }
     }
     undoManager?.setActionName(actionName)
-    // 글자 수는 되돌리기 대상이 아니다. 기록해 둔 옛 목록의 글자 수가 아니라 지금 값을 이어받는다.
-    let counts = Dictionary(project.episodes.map { ($0.id, $0.characterCount) }, uniquingKeysWith: { first, _ in first })
-    project.episodes = episodes.map { episode in
-      var episode = episode
-      if let count = counts[episode.id] { episode.characterCount = count }
-      return episode
-    }
-    return Task { await saveProject() }
+    // 글자 수는 되돌리기 대상이 아니다. 따로 들고 있는 지금 값(countBoxes)이 저장 때 들어간다.
+    project.episodes = episodes
+    return startProjectSave()
   }
 
   /// 회차를 휴지통으로 옮긴다. 휴지통으로 못 옮기면 아무것도 바꾸지 않고 오류를 던진다(영구 삭제로 대신하지 않음).
@@ -240,10 +257,10 @@ final class ProjectModel {
   /// 센 글자 수를 회차 목록에 적는다. 바뀌었을 때만 적고, project.json 저장은 미뤄서 묶는다.
   /// (입력이 멈출 때마다 쓰지 않으려는 것. 저장 전에 앱이 꺼져도 그 회차를 다시 열면 다시 센다.)
   func recordCount(_ count: CharacterCount, for id: EpisodeID) {
-    guard let index = project.episodes.firstIndex(where: { $0.id == id }),
-      project.episodes[index].characterCount != count
-    else { return }
-    project.episodes[index].characterCount = count
+    guard project.episodes.contains(where: { $0.id == id }) else { return }
+    let box = countBox(for: id)
+    guard box.value != count else { return }
+    box.value = count
     guard countSave == nil else { return }
     countSave = Task { [countSaveDelay] in
       try? await Task.sleep(for: countSaveDelay)
@@ -263,10 +280,34 @@ final class ProjectModel {
 
   // MARK: - 저장
 
+  /// 미뤄 둔 글자 수 저장을 지금 하고, 시작된 `project.json` 저장이 모두 끝날 때까지 기다린다(창 닫기, 앱 종료).
+  /// 이름을 바꾸자마자 앱을 꺼도 바뀐 목록이 디스크에 남게 하려는 것.
+  func finishProjectSaves() async {
+    await saveCountsNow()
+    while projectSaves > 0 {
+      try? await Task.sleep(for: .milliseconds(2))
+    }
+  }
+
+  /// 저장을 시작만 하고 돌아온다. 시작한 순간부터 "안 끝난 저장"으로 센다(바로 뒤에 앱을 꺼도 기다리게).
+  private func startProjectSave() -> Task<Void, Never> {
+    projectSaves += 1
+    return Task {
+      await saveProject()
+      projectSaves -= 1
+    }
+  }
+
   private func saveProject() async {
+    projectSaves += 1
+    defer { projectSaves -= 1 }
     projectChange += 1
     let change = projectChange
-    let snapshot = project
+    var merged = project
+    for index in merged.episodes.indices {
+      if let box = countBoxes[merged.episodes[index].id] { merged.episodes[index].characterCount = box.value }
+    }
+    let snapshot = merged
     let store = store
     do {
       _ = try await queue.save(.project, change: change) { try store.saveProject(snapshot) }
@@ -276,4 +317,12 @@ final class ProjectModel {
       errorMessage = "회차 목록(project.json)을 저장하지 못했어요. \(reason)"
     }
   }
+}
+
+/// 회차 하나의 글자 수를 담는 칸. 값이 바뀌면 이 칸을 읽는 뷰(사이드바의 그 줄)만 다시 그려진다.
+@MainActor
+@Observable
+final class EpisodeCountBox {
+  var value: CharacterCount?
+  init(_ value: CharacterCount?) { self.value = value }
 }

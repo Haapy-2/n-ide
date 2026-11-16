@@ -1,5 +1,6 @@
 import AppKit
 import NovelCore
+import SwiftUI
 import XCTest
 @testable import NovelEditor
 
@@ -117,6 +118,35 @@ final class EditorPerformanceTests: XCTestCase {
       }
       report(name, samples)
     }
+  }
+
+  /// 타이핑 중 글자 수가 바뀔 때: 작업 공간 전체(사이드바 500회차 + 편집기)가 떠 있는 채로
+  /// 지금 회차의 글자 수 하나가 바뀌어 화면이 다시 그려질 때까지. 치는 동안 0.2초마다 한 번 일어난다.
+  func testSidebarCountUpdate() throws {
+    let model = ProjectModel(project: project, store: store)
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 760),
+                          styleMask: [.titled, .resizable], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    window.contentView = NSHostingView(rootView: WorkspaceView(model: model))
+    window.orderFront(nil)
+    defer { window.close() }
+    settle()
+    settle()
+
+    let id = project.episodes[0].id
+    var samples: [Double] = []
+    let clock = ContinuousClock()
+    for index in 0..<60 {
+      let elapsed = clock.measure {
+        model.recordCount(CharacterCount(withSpaces: 5_000 + index, withoutSpaces: 4_000 + index), for: id)
+        // SwiftUI는 런루프 한 바퀴 끝에 화면을 갱신한다. 한 바퀴 돌리고 그리기까지 마친다.
+        RunLoop.main.run(mode: .default, before: Date())
+        window.displayIfNeeded()
+        CATransaction.flush()
+      }
+      samples.append(milliseconds(elapsed))
+    }
+    report("sidebar_count_ms", samples)
   }
 
   // MARK: - 도구

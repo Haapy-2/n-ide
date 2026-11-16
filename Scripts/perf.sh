@@ -72,6 +72,8 @@ def perf(name, text):
 row("키 입력 1,000번 (5,000자 회차)", perf("keystroke_ms", app), 16, stat="p95")
 row("키 입력 300번 (10만 자 회차, 글자 수 실시간)", perf("keystroke_realtime_100k_ms", app), 16, stat="p95")
 row("회차 전환 (처음 여는 5,000자 회차)", perf("switch_ms", app), 50)
+# 타이핑 중 0.2초마다: 글자 수 하나가 바뀌어 작업 공간(사이드바 500회차 포함)이 다시 그려질 때까지. 한 프레임 기준.
+row("글자 수 바뀜 → 화면 갱신 (사이드바 500회차)", perf("sidebar_count_ms", app), 16, stat="p95")
 # 설정 창 슬라이더를 끌 때 본문에 새 모양 입히기. SPEC에 목표가 없어 한 프레임(16ms)을 기준으로 둔다.
 row("설정 바꿔 모양 다시 입히기 (5,000자)", perf("style_5k_ms", app), 16)
 row("설정 바꿔 모양 다시 입히기 (10만 자)", perf("style_100k_ms", app), 16)

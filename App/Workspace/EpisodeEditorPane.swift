@@ -8,8 +8,8 @@ struct EpisodeEditorPane: View {
   let counter: CharacterCounter
   let episodeID: EpisodeID
   let goal: Int
-  /// project.json에 남아 있던 이 회차의 글자 수. 회차를 연 직전, 새로 세기 전까지 보여준다.
-  let knownCount: CharacterCount?
+  /// 마지막으로 센 이 회차의 글자 수. 회차를 연 직후, 새로 세기 전까지 보여준다. 회차를 열 때만 읽는다.
+  let knownCount: () -> CharacterCount?
   @State private var content: ManuscriptEditor.Content?
   @State private var errorMessage: String?
   @State private var fade = StatusBarFade()
@@ -87,7 +87,7 @@ struct EpisodeEditorPane: View {
       let text = pending ?? version?.text ?? ""
       content = ManuscriptEditor.Content(token: UUID(), episodeID: id, text: text)
       autosaver.begin(episode: id, version: version)
-      counter.begin(episode: id, text: text, known: knownCount)
+      counter.begin(episode: id, text: text, known: knownCount())
     } catch let error as ProjectError {
       content = nil
       errorMessage = error.userMessage

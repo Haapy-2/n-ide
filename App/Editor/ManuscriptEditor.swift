@@ -50,10 +50,8 @@ struct ManuscriptEditor: NSViewRepresentable {
   func updateNSView(_ scrollView: NSScrollView, context: Context) {
     context.coordinator.parent = self
     guard let textView = context.coordinator.textView else { return }
-    // 조합 중에는 모양도 바꾸지 않는다(ManuscriptTextView.applyStyle도 한 번 더 막는다).
-    if textView.style != style, !textView.hasMarkedText() {
-      textView.style = style
-    }
+    // 조합 중이면 편집기가 본문에 입히는 것을 조합이 끝날 때까지 미룬다(ManuscriptTextView.applyStyle).
+    if textView.style != style { textView.style = style }
     if context.coordinator.appliedToken != content.token {
       apply(content, to: textView, coordinator: context.coordinator)
     }

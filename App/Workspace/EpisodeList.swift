@@ -17,6 +17,8 @@ struct EpisodeList: View {
   var onMove: ((IndexSet, Int) -> Void)? = nil
   /// 사이드바에 초점이 있을 때 ⌘Z(false)·⇧⌘Z(true). 바로 되돌리지 않고 확인 창을 거친다.
   var onUndoCommand: ((_ isRedo: Bool) -> Void)? = nil
+  /// 회차의 글자 수 칸. nil이면(미리보기) 회차 정보에 든 값을 보여준다.
+  var countBox: ((EpisodeID) -> EpisodeCountBox)? = nil
   /// 회차를 클릭하면 사이드바가 키보드 초점을 받는다. 초점이 있을 때: ↑↓ 이동, ↩ 이름 변경, ⌘⌫ 휴지통.
   @FocusState private var isFocused: Bool
   @AppStorage(AppSettingKey.characterCountGoalBasis) private var basis: CharacterCountBasis = .withSpaces
@@ -45,17 +47,11 @@ struct EpisodeList: View {
         .accessibilityAddTraits(.isHeader)
       Section {
         ForEach(Array(episodes.enumerated()), id: \.element.id) { index, episode in
-          // 클릭 영역 = 회색 선택 칸 전체. 줄 여백을 0으로 하고 여백을 칸 안쪽에 직접 넣어
-          // 글자뿐 아니라 칸의 빈 곳을 눌러도 선택되게 한다.
-          EpisodeRow(number: index + 1, title: episode.title, count: showsCount ? episode.characterCount?.value(for: basis) : nil)
-            .padding(.horizontal, contentInset)
-            .padding(.vertical, 6)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .rowHighlight(isSelected: episode.id == selection)
-            // 회색 칸 사이의 1pt 틈도 클릭 영역에 넣는다. 틈을 줄 여백(listRowInsets)으로 두면
-            // 그곳을 누를 때 아무 반응이 없어 목록이 버벅이는 것처럼 느껴진다.
-            .padding(.vertical, 1)
-            .contentShape(Rectangle())
+          EpisodeRowCell(
+            number: index + 1, title: episode.title,
+            box: countBox?(episode.id), fallbackCount: episode.characterCount,
+            basis: showsCount ? basis : nil,
+            isSelected: episode.id == selection, inset: contentInset)
             // 두 번 클릭하면 이름 변경. 한 번 클릭 선택은 두 번 클릭 판정을 기다리지 않고 바로 한다.
             .onTapGesture(count: 2) { onRename?(episode.id) }
             .simultaneousGesture(TapGesture().onEnded {
@@ -106,6 +102,39 @@ struct EpisodeList: View {
     else { return .ignored }
     self.selection = episodes[index + offset].id
     return .handled
+  }
+}
+
+/// 회차 한 줄의 보이는 부분: 글자 + 회색 선택 칸 + 클릭 영역.
+/// 글자 수는 회차마다 따로 있는 칸(`EpisodeCountBox`)에서 읽는다. 타이핑 중에는 0.2초마다 지금 회차의 글자 수 하나만
+/// 바뀌는데, 이 줄만 다시 그려지고 나머지 줄과 작업 공간은 그대로다(측정: docs/log/log26-11-17.md).
+private struct EpisodeRowCell: View {
+  let number: Int
+  let title: String
+  let box: EpisodeCountBox?
+  let fallbackCount: CharacterCount?
+  /// nil이면 글자 수를 숨긴다(설정).
+  let basis: CharacterCountBasis?
+  let isSelected: Bool
+  let inset: CGFloat
+
+  private var count: Int? {
+    guard let basis else { return nil }
+    return (box?.value ?? fallbackCount)?.value(for: basis)
+  }
+
+  var body: some View {
+    // 클릭 영역 = 회색 선택 칸 전체. 줄 여백을 0으로 하고 여백을 칸 안쪽에 직접 넣어
+    // 글자뿐 아니라 칸의 빈 곳을 눌러도 선택되게 한다.
+    EpisodeRow(number: number, title: title, count: count)
+      .padding(.horizontal, inset)
+      .padding(.vertical, 6)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .rowHighlight(isSelected: isSelected)
+      // 회색 칸 사이의 1pt 틈도 클릭 영역에 넣는다. 틈을 줄 여백(listRowInsets)으로 두면
+      // 그곳을 누를 때 아무 반응이 없어 목록이 버벅이는 것처럼 느껴진다.
+      .padding(.vertical, 1)
+      .contentShape(Rectangle())
   }
 }
 

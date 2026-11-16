@@ -6,6 +6,8 @@ final class ManuscriptTextView: NSTextView {
   var style = EditorStyle() {
     didSet { if style != oldValue { applyStyle() } }
   }
+  /// 조합 중에 모양이 바뀌어 본문 전체에는 아직 못 입혔다. 조합이 끝나면 입힌다.
+  private var needsRestyle = false
 
   /// 회차마다 따로 쓰는 실행 취소 기록. 회차를 바꾸면 비운다(PLAN.md 세부 기준).
   let episodeUndoManager = UndoManager()
@@ -56,8 +58,11 @@ final class ManuscriptTextView: NSTextView {
     let attributes = style.textAttributes
     typingAttributes = attributes
     defaultParagraphStyle = style.paragraphStyle
-    // 조합 중에는 텍스트 저장소를 건드리지 않는다(한글 입력 보호). 조합이 끝난 뒤 다음 변경 때 다시 적용된다.
-    if !hasMarkedText(), let storage = textStorage, storage.length > 0 {
+    // 조합 중에는 텍스트 저장소를 건드리지 않는다(한글 입력 보호). 조합이 끝난 직후(`didChangeText`)에 입힌다.
+    if hasMarkedText() {
+      needsRestyle = true
+    } else if let storage = textStorage, storage.length > 0 {
+      needsRestyle = false
       storage.beginEditing()
       storage.setAttributes(attributes, range: NSRange(location: 0, length: storage.length))
       storage.endEditing()
@@ -104,7 +109,9 @@ final class ManuscriptTextView: NSTextView {
   /// ⌘Z 한 번에 문장째 지우므로, 고칠 때마다 묶음을 끊는다. 조합 중에는 끊지 않아 조합이 끝난 한 글자("한")가 한 단위가 된다.
   override func didChangeText() {
     super.didChangeText()
-    if !hasMarkedText() { breakUndoCoalescing() }
+    guard !hasMarkedText() else { return }
+    breakUndoCoalescing()
+    if needsRestyle { applyStyle() }
   }
 
   /// 조합 중인 글자를 확정한다. 조합 중에 되돌리면 입력기와 텍스트 저장소가 서로 다른 글자를 가리켜 깨질 수 있다.

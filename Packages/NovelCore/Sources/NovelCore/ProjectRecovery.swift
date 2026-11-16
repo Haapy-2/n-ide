@@ -55,7 +55,13 @@ extension ProjectStore {
     let broken = layout.projectFile
     guard fileManager.fileExists(atPath: broken.path(percentEncoded: false)) else { return }
     let stamp = Int(Date().timeIntervalSince1970)
-    let aside = layout.root.appending(path: "project.json.broken-\(stamp)", directoryHint: .notDirectory)
+    var aside = layout.root.appending(path: "project.json.broken-\(stamp)", directoryHint: .notDirectory)
+    // 같은 초에 두 번 치우게 돼도(연달아 열기) 앞에 치워 둔 것을 덮지 않고, 이름이 겹쳐 열기가 실패하지도 않게 번호를 붙인다.
+    var number = 2
+    while fileManager.fileExists(atPath: aside.path(percentEncoded: false)) {
+      aside = layout.root.appending(path: "project.json.broken-\(stamp)-\(number)", directoryHint: .notDirectory)
+      number += 1
+    }
     try fileManager.moveItem(at: broken, to: aside)
   }
 

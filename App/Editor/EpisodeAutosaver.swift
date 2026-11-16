@@ -67,7 +67,12 @@ final class EpisodeAutosaver {
 
   /// 저장 안 된 변경이 있는지 (지금 회차 또는 저장에 실패한 회차).
   /// 앱을 끄기 전에 마칠 일이 있는지: 저장 안 된 변경, 아직 안 찍은 떠날 때 스냅샷, 쓰는 중인 스냅샷.
-  var hasWorkBeforeQuit: Bool { hasUnsavedChanges || snapshots.hasPendingWork }
+  var hasWorkBeforeQuit: Bool { hasUnsavedChanges || snapshots.hasPendingWork || hasProjectWork() }
+
+  /// 작품 쪽(`project.json`: 회차 목록, 미뤄 둔 글자 수)에 끝낼 저장이 있는지와 그것을 끝내는 일. `ProjectModel`이 건다.
+  /// 앱 종료는 자동 저장기 목록만 보므로 여기에 걸어 함께 기다리게 한다.
+  @ObservationIgnored var hasProjectWork: () -> Bool = { false }
+  @ObservationIgnored var finishProjectWork: () async -> Void = {}
 
   var hasUnsavedChanges: Bool {
     if let episodeID, isDirty(episodeID) { return true }
@@ -117,6 +122,7 @@ final class EpisodeAutosaver {
     snapshotLeaving()
     await flush()
     await snapshots.waitForWrites()
+    await finishProjectWork()
   }
 
   /// 저장을 시작하고, 이번에 고친 회차면 같은 본문으로 `leave` 스냅샷을 남긴다.

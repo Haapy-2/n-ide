@@ -53,7 +53,8 @@ struct WorkspaceView: View {
         onMove: model == nil ? nil : { source, destination in
           Task { await model?.moveEpisodes(fromOffsets: source, toOffset: destination, undoManager: undoManager) }
         },
-        onUndoCommand: model == nil ? nil : { requestUndo(isRedo: $0) })
+        onUndoCommand: model == nil ? nil : { requestUndo(isRedo: $0) },
+        countBox: model.map { model in { model.countBox(for: $0) } })
         .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 340)
     } detail: {
       detail
@@ -146,7 +147,9 @@ struct WorkspaceView: View {
     } else if let model, let selection {
       EpisodeEditorPane(
         autosaver: model.autosaver, counter: model.counter, episodeID: selection,
-        goal: model.episode(selection)?.goal ?? 0, knownCount: model.episode(selection)?.characterCount)
+        goal: project.episodes.first { $0.id == selection }?.goal ?? 0,
+        // 글자 수는 body에서 읽지 않는다(읽으면 글자 수가 바뀔 때마다 작업 공간 전체가 다시 계산된다).
+        knownCount: { model.countBox(for: selection).value })
     } else {
       Color.clear
     }
