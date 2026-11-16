@@ -35,7 +35,7 @@ struct GeneralSettingsPane: View {
       } header: {
         Text("스냅샷")
       } footer: {
-        Text("자동 스냅샷은 그사이 고친 회차만 찍어요. 회차를 떠날 때는 늘 찍어요. 보관 개수를 넘으면 자동·떠날 때 스냅샷 중 오래된 것부터 지우고, 직접 찍은 것(⌥⌘S)은 지우지 않아요.")
+        Text("자동 스냅샷은 그사이 고친 회차만 찍어요. 회차를 떠날 때는 늘 찍어요. 보관 개수를 넘으면 자동·떠날 때 스냅샷 중 오래된 것부터 지우고, 직접 찍은 것(⌥⌘S)과 메모를 단 것은 지우지 않아요.")
           .font(.footnote)
           .foregroundStyle(.secondary)
       }

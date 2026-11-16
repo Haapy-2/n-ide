@@ -178,10 +178,11 @@ extension ProjectStore {
   }
 
   /// `auto`·`leave`만 함께 세어 `limit`개를 넘으면 오래된 것부터 바로 지운다(휴지통 아님). 지운 목록을 돌려준다.
-  /// 다른 종류와 모르는 파일은 세지도 지우지도 않는다. 지운 스냅샷에 메모가 있었다면 메모도 함께 지운다.
+  /// 다른 종류와 모르는 파일은 세지도 지우지도 않는다. 메모를 단 것도 "남겨야지"라는 뜻이라 세지도 지우지도 않는다
+  /// (2026-11-17 사용자 결정).
   @discardableResult
   public func pruneSnapshots(of id: EpisodeID, keeping limit: Int) throws -> [Snapshot] {
-    let prunable = try snapshots(of: id).filter(\.kind.isPrunable)
+    let prunable = try snapshots(of: id).filter { $0.kind.isPrunable && !Self.isRegularFile($0.memoURL) }
     // 0 이하가 들어와도 전부 지우지 않도록 적어도 하나는 남긴다.
     let excess = prunable.count - max(limit, 1)
     guard excess > 0 else { return [] }
@@ -189,9 +190,9 @@ extension ProjectStore {
     var done: [Snapshot] = []
     for snapshot in removed {
       // 목록에서 이미 걸렀지만, 그 사이에 바뀌었을 수 있어 지우기 직전에 한 번 더 본다(폴더를 지우면 안의 것이 통째로 사라진다).
-      guard Self.isRegularFile(snapshot.url) else { continue }
+      // 그사이 메모가 붙었으면(판에서 메모를 단 직후 등) 지키기로 한 것이라 건너뛴다.
+      guard Self.isRegularFile(snapshot.url), !Self.isRegularFile(snapshot.memoURL) else { continue }
       try FileManager.default.removeItem(at: snapshot.url)
-      if Self.isRegularFile(snapshot.memoURL) { try? FileManager.default.removeItem(at: snapshot.memoURL) }
       done.append(snapshot)
     }
     return done

@@ -184,20 +184,25 @@ struct SnapshotTests {
     #expect(try names(store, id) == ["20261111-090002-leave.md"])
   }
 
-  @Test func pruneRemovesMemoOfRemovedSnapshot() throws {
+  @Test func pruneKeepsSnapshotsWithMemo() throws {
     let folder = try TestFolder()
     defer { folder.remove() }
     let (store, id) = try makeStore(folder)
-    try store.writeSnapshot("옛", episode: id, kind: .auto, memo: "옛 메모", at: time(0))
-    try store.writeSnapshot("새", episode: id, kind: .auto, at: time(1))
-    let manual = try #require(try store.writeSnapshot("직접", episode: id, kind: .manual, memo: "남는 메모", at: time(2)))
+    let kept = try #require(try store.writeSnapshot("옛", episode: id, kind: .auto, memo: "남길 것", at: time(0)))
+    try store.writeSnapshot("가운데", episode: id, kind: .leave, at: time(1))
+    let later = try #require(try store.writeSnapshot("뒤", episode: id, kind: .auto, at: time(2)))
+    try store.writeSnapshot("새", episode: id, kind: .auto, at: time(3))
+    // 나중에 메모를 단 것도 지킨다.
+    try store.writeMemo("이것도", for: later)
 
-    try store.pruneSnapshots(of: id, keeping: 1)
+    let removed = try store.pruneSnapshots(of: id, keeping: 1)
 
+    #expect(removed.map(\.id) == ["20261111-090001-leave.md"], "메모 단 것은 세지도 지우지도 않는다")
     #expect(try folder.fileNames(in: store.layout.snapshotFolder(id)) == [
-      "20261111-090001-auto.md", "20261111-090002-manual.md", "20261111-090002-manual.memo",
+      "20261111-090000-auto.md", "20261111-090000-auto.memo",
+      "20261111-090002-auto.md", "20261111-090002-auto.memo", "20261111-090003-auto.md",
     ])
-    #expect(store.readMemo(manual) == "남는 메모")
+    #expect(store.readMemo(kept) == "남길 것")
   }
 
   @Test func pruneLeavesOtherEpisodesAlone() throws {
