@@ -81,6 +81,10 @@ row("글자 수 전체 계산 (10만 자, 편집기 문자열)", perf("count_100
 # 스냅샷 찍기(메인 스레드 밖): 50개 찬 회차에 비교 → 쓰기 → 정리. SPEC에 목표가 없어 회차 전환 목표(50ms)를 기준으로 둔다.
 row("스냅샷 찍기 (5,000자, 50개 찬 회차)", perf("snapshot_5k_ms", core), 50)
 row("스냅샷 찍기 (10만 자, 50개 찬 회차)", perf("snapshot_100k_ms", core), 50)
+# 비교(메인 스레드 밖): 스냅샷을 누르면 바로 보여야 해서 100ms를 기준으로 둔다(SPEC에 목표 없음).
+row("비교 (5,000자, 문단 30% 고침)", perf("diff_5k_ms", core), 100)
+row("비교 (10만 자, 문단 30% 고침)", perf("diff_100k_ms", core), 100)
+row("비교 (10만 자, 겹치는 문단 없음)", perf("diff_100k_unrelated_ms", core), 100)
 runs = [float(v) for v in re.findall(r"launch_ms ([0-9.]+)", launch)]
 hung = launch.count("launch_hung")
 row("앱 실행 → 입력 가능 (첫 실행 제외 5회)", runs[1:], 500)
