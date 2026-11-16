@@ -146,4 +146,21 @@ final class SnapshotTimingTests: XCTestCase {
     await autosaver.snapshots.waitForWrites()
     XCTAssertEqual(try snapshots().count, 2, "직접 찍은 뒤 고치지 않았으면 떠날 때 찍지 않는다")
   }
+
+  /// 스냅샷을 못 썼으면 고친 표시를 되돌려, 쓸 수 있게 된 뒤 다음 간격에 다시 찍는다.
+  func testFailedAutoSnapshotIsRetried() async throws {
+    let snapshotsFolder = store.layout.snapshotsFolder.path(percentEncoded: false)
+    try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: snapshotsFolder)
+    type(" 둘째")
+    autosaver.snapshots.autoTick()
+    await autosaver.snapshots.waitForWrites()
+    XCTAssertTrue(try snapshots().isEmpty)
+    XCTAssertTrue(autosaver.snapshots.hasPendingWork)
+
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: snapshotsFolder)
+    autosaver.snapshots.autoTick()
+    await autosaver.snapshots.waitForWrites()
+    XCTAssertEqual(try snapshots().map(\.kind), [.auto])
+    XCTAssertFalse(autosaver.snapshots.hasPendingWork)
+  }
 }

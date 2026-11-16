@@ -42,7 +42,8 @@ public struct Snapshot: Hashable, Sendable, Identifiable {
   var memoURL: URL { url.deletingPathExtension().appendingPathExtension("memo") }
 
   /// `20261111-094512-auto.md`, `20261111-094512-auto-2.md`를 읽는다. 모르는 모양이면 nil(목록에도 정리에도 안 잡힘).
-  init?(url: URL, episodeID: EpisodeID) {
+  /// 시각은 `DateFormatter` 대신 숫자를 직접 잘라 달력으로 만든다(측정: 50개 목록 12.6ms → 아래 값, docs/log/log26-11-17.md).
+  init?(url: URL, episodeID: EpisodeID, calendar: Calendar = Snapshot.calendar) {
     let name = url.lastPathComponent
     guard !name.hasPrefix("."), url.pathExtension == "md" else { return nil }
     let parts = url.deletingPathExtension().lastPathComponent.split(separator: "-", omittingEmptySubsequences: false)
@@ -57,7 +58,13 @@ public struct Snapshot: Hashable, Sendable, Identifiable {
       sequence = number
     }
     let stamp = "\(parts[0])-\(parts[1])"
-    guard let date = Snapshot.timeFormatter.date(from: stamp) else { return nil }
+    let digits = Array(parts[0].utf8) + Array(parts[1].utf8)
+    func number(_ range: Range<Int>) -> Int { digits[range].reduce(0) { $0 * 10 + Int($1 - 48) } }
+    let fields = DateComponents(
+      year: number(0..<4), month: number(4..<6), day: number(6..<8),
+      hour: number(8..<10), minute: number(10..<12), second: number(12..<14))
+    // 13월, 25시 같은 없는 시각은 모르는 파일로 본다.
+    guard fields.isValidDate(in: calendar), let date = calendar.date(from: fields) else { return nil }
     self.episodeID = episodeID
     self.kind = kind
     self.date = date
@@ -66,14 +73,21 @@ public struct Snapshot: Hashable, Sendable, Identifiable {
     self.stamp = stamp
   }
 
-  /// 파일 이름용 시각. 이름순이 시간순이 되도록 자릿수를 고정한다. 이 기기의 시간대 기준.
-  static var timeFormatter: DateFormatter {
-    let formatter = DateFormatter()
-    formatter.locale = Locale(identifier: "en_US_POSIX")
-    formatter.calendar = Calendar(identifier: .gregorian)
-    formatter.timeZone = .current
-    formatter.dateFormat = "yyyyMMdd-HHmmss"
-    return formatter
+  /// 파일 이름의 시각은 이 기기의 시간대 기준, 양력.
+  static var calendar: Calendar {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = .current
+    return calendar
+  }
+
+  /// 파일 이름용 시각 `yyyyMMdd-HHmmss`. 이름순이 시간순이 되도록 자릿수를 고정한다.
+  static func stamp(for date: Date) -> String {
+    let c = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
+    func pad(_ value: Int?, _ width: Int) -> String {
+      let text = String(value ?? 0)
+      return String(repeating: "0", count: max(0, width - text.count)) + text
+    }
+    return "\(pad(c.year, 4))\(pad(c.month, 2))\(pad(c.day, 2))-\(pad(c.hour, 2))\(pad(c.minute, 2))\(pad(c.second, 2))"
   }
 }
 
@@ -95,7 +109,7 @@ extension ProjectStore {
     }
     let folder = layout.snapshotFolder(id)
     try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-    let base = "\(Snapshot.timeFormatter.string(from: date))-\(kind.rawValue)"
+    let base = "\(Snapshot.stamp(for: date))-\(kind.rawValue)"
     var url = folder.appending(path: "\(base).md", directoryHint: .notDirectory)
     var number = 2
     while FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) {
@@ -115,7 +129,8 @@ extension ProjectStore {
     let folder = layout.snapshotFolder(id)
     guard FileManager.default.fileExists(atPath: folder.path(percentEncoded: false)) else { return [] }
     let urls = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
-    return urls.compactMap { Snapshot(url: $0, episodeID: id) }.sorted {
+    let calendar = Snapshot.calendar
+    return urls.compactMap { Snapshot(url: $0, episodeID: id, calendar: calendar) }.sorted {
       ($0.stamp, $0.sequence, $0.kind.rawValue) < ($1.stamp, $1.sequence, $1.kind.rawValue)
     }
   }

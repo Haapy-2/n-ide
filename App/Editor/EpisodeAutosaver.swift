@@ -97,8 +97,20 @@ final class EpisodeAutosaver {
   /// 저장이 끝나길 기다렸다 다음 회차를 보여주면 전환이 끊겨 보이기 때문이다.
   func leaveEpisode() {
     snapshotLeaving()
+    let left = episodeID
     episodeID = nil
+    if let left { releaseBaselineIfIdle(left) }
   }
+
+  /// 떠난 회차의 디스크 기준을 놓는다. 기준은 본문 전체를 들고 있어서, 그대로 두면 훑어본 회차만큼 메모리에 쌓인다.
+  /// 저장할 것도 쓰는 중인 것도 없을 때만 놓는다. 다시 열면 디스크에서 새로 읽어 기준을 잡는다.
+  private func releaseBaselineIfIdle(_ id: EpisodeID) {
+    guard id != episodeID, !isDirty(id), inFlight[id] == nil, conflicts[id] == nil else { return }
+    disk[id] = nil
+  }
+
+  /// 디스크 기준을 들고 있는 회차인지(테스트용).
+  func holdsBaseline(for id: EpisodeID) -> Bool { disk[id] != nil }
 
   /// 창을 닫거나 앱을 끌 때: 떠날 때 스냅샷을 남기고, 저장과 스냅샷 쓰기가 다 끝날 때까지 기다린다.
   func finish() async {
@@ -324,6 +336,7 @@ final class EpisodeAutosaver {
       status = .failed(message)
     }
     if inFlight[job.id] == job.text { inFlight[job.id] = nil }
+    releaseBaselineIfIdle(job.id)
   }
 }
 

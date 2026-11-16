@@ -76,6 +76,7 @@ struct SnapshotTests {
     for name in [
       "메모.txt", "20261111-090000-odd.md", "2026-auto.md", "20261111-090000-auto-1.md",
       ".20261111-090000-auto.md.tmp", "20261111-0900xx-auto.md", "README.md",
+      "20261311-090000-auto.md", "20261111-256000-auto.md",
     ] {
       try Data("?".utf8).write(to: snapshotFolder.appending(path: name))
     }
@@ -211,5 +212,12 @@ struct SnapshotTests {
 
     try store.pruneSnapshots(of: id, keeping: 1)
     #expect(try store.snapshots(of: other).count == 3)
+  }
+
+  @Test func nameKeepsFixedWidthAndLocalTime() throws {
+    var parts = DateComponents()
+    (parts.year, parts.month, parts.day, parts.hour, parts.minute, parts.second) = (2027, 1, 2, 3, 4, 5)
+    let date = Calendar(identifier: .gregorian).date(from: parts)!
+    #expect(Snapshot.stamp(for: date) == "20270102-030405", "한 자리 수도 0을 채워 이름순이 시간순이 되게")
   }
 }

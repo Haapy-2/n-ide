@@ -42,6 +42,8 @@ final class EpisodeSnapshotter {
   /// 마지막 스냅샷 뒤에 고친 회차
   private var edited: Set<EpisodeID> = []
   private var tail: Task<Void, Never>?
+  /// 아직 안 끝난 쓰기 수
+  private var pending = 0
   private var timer: Task<Void, Never>?
 
   init(store: ProjectStore) {
@@ -50,7 +52,7 @@ final class EpisodeSnapshotter {
   }
 
   /// 찍어야 할 것이 남았는지(앱 종료 때 기다릴지 정한다).
-  var hasPendingWork: Bool { !edited.isEmpty || tail != nil }
+  var hasPendingWork: Bool { !edited.isEmpty || pending > 0 }
 
   func noteEdit(_ id: EpisodeID) {
     edited.insert(id)
@@ -75,9 +77,8 @@ final class EpisodeSnapshotter {
 
   /// 지금까지 맡은 쓰기가 다 끝날 때까지 기다린다.
   func waitForWrites() async {
-    while let task = tail {
+    while pending > 0, let task = tail {
       await task.value
-      if tail == task { tail = nil }
     }
   }
 
@@ -107,18 +108,30 @@ final class EpisodeSnapshotter {
   @discardableResult
   private func enqueue(_ text: String, _ id: EpisodeID, _ kind: SnapshotKind) -> Task<Snapshot?, any Error> {
     let previous = tail
-    let store = store
     let retention = settings.retention
     let task = Task<Snapshot?, any Error> {
       await previous?.value
-      return try await Task.detached {
-        let snapshot = try store.writeSnapshot(text, episode: id, kind: kind, skipIfSameAsLatest: kind != .manual)
-        // 정리가 실패해도 방금 찍은 것은 남았으니 실패로 치지 않는다. 다음에 찍을 때 다시 정리한다.
-        if kind.isPrunable { _ = try? store.pruneSnapshots(of: id, keeping: retention) }
-        return snapshot
-      }.value
+      defer { pending -= 1 }
+      do {
+        return try await write(text, id, kind, retention: retention)
+      } catch {
+        // 못 찍었으면(디스크가 꽉 찼을 때 등) "고친 회차"로 되돌린다. 아직 그 회차를 보고 있으면 다음 간격이나 떠날 때 다시 찍는다.
+        if kind != .manual { edited.insert(id) }
+        throw error
+      }
     }
+    pending += 1
     tail = Task { _ = await task.result }
     return task
+  }
+
+  private func write(_ text: String, _ id: EpisodeID, _ kind: SnapshotKind, retention: Int) async throws -> Snapshot? {
+    let store = store
+    return try await Task.detached {
+      let snapshot = try store.writeSnapshot(text, episode: id, kind: kind, skipIfSameAsLatest: kind != .manual)
+      // 정리가 실패해도 방금 찍은 것은 남았으니 실패로 치지 않는다. 다음에 찍을 때 다시 정리한다.
+      if kind.isPrunable { _ = try? store.pruneSnapshots(of: id, keeping: retention) }
+      return snapshot
+    }.value
   }
 }

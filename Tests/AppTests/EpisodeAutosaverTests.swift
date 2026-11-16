@@ -105,4 +105,39 @@ final class EpisodeAutosaverTests: XCTestCase {
     XCTAssertEqual(try store.readEpisode(episode), "첫 문장 방금 쓴 문장")
     XCTAssertNil(autosaver.pendingText(for: episode))
   }
+
+  /// 떠난 회차의 본문 기준을 계속 들고 있지 않는다(훑어본 회차만큼 메모리가 늘지 않게). 저장이 끝난 뒤에 놓는다.
+  func testReleasesBaselineAfterLeaving() async throws {
+    let version = try store.readEpisodeVersion(episode)
+    autosaver.begin(episode: episode, version: version)
+    type(" 떠나기 전")
+    autosaver.leaveEpisode()
+    XCTAssertTrue(autosaver.holdsBaseline(for: episode), "저장이 끝나기 전에는 외부 변경 확인에 필요하다")
+
+    await autosaver.flush()
+    XCTAssertFalse(autosaver.holdsBaseline(for: episode))
+    XCTAssertEqual(try store.readEpisode(episode), "첫 문장 떠나기 전")
+
+    // 다시 열어 고치면 평소처럼 저장된다.
+    let again = try store.readEpisodeVersion(episode)
+    textView.replaceAllText(with: again.text)
+    autosaver.begin(episode: episode, version: again)
+    type(" 다시")
+    await autosaver.flush()
+    XCTAssertEqual(try store.readEpisode(episode), "첫 문장 떠나기 전 다시")
+  }
+
+  /// 저장에 실패해 메모리에 남은 회차는 떠나도 기준을 놓지 않는다(다시 저장할 때 외부 변경을 확인해야 한다).
+  func testKeepsBaselineWhileUnsaved() async throws {
+    let version = try store.readEpisodeVersion(episode)
+    autosaver.begin(episode: episode, version: version)
+    let episodes = store.layout.episodesFolder.path(percentEncoded: false)
+    try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: episodes)
+    type(" 못 쓴 문장")
+    autosaver.leaveEpisode()
+    await autosaver.flush()
+
+    XCTAssertTrue(autosaver.holdsBaseline(for: episode))
+    XCTAssertEqual(autosaver.pendingText(for: episode), "첫 문장 못 쓴 문장")
+  }
 }
