@@ -8,6 +8,8 @@ struct WorkspaceActions {
   var setGoalSelected: (() -> Void)?
   var selectPrevious: (() -> Void)?
   var selectNext: (() -> Void)?
+  /// 지금 회차 스냅샷 찍기(⌥⌘S)
+  var takeSnapshot: (() -> Void)?
 }
 
 extension FocusedValues {

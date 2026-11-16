@@ -24,6 +24,12 @@ enum AppSettingKey {
   static let undoConfirmPause = "undoConfirmPause"
   /// 사이드바 되돌리기 확인 창이 쉬는 끝 시각(1970 기준 초). 없으면 매번 묻는다.
   static let undoConfirmPausedUntil = "undoConfirmPausedUntil"
+  /// 자동 스냅샷 켜기 (기본: 켬). 꺼도 회차를 떠날 때와 직접 찍기는 그대로
+  static let autoSnapshotEnabled = "autoSnapshotEnabled"
+  /// 자동 스냅샷 간격, 분. 5·10·15·30·60 중 하나 (기본: 30)
+  static let autoSnapshotMinutes = "autoSnapshotMinutes"
+  /// 회차마다 남길 자동·떠날 때 스냅샷 개수. 10~100, 10 단위 (기본: 50)
+  static let snapshotRetention = "snapshotRetention"
   /// 본문 글꼴 `BodyFont` (기본: Pretendard)
   static let bodyFont = "bodyFont"
   /// 글자 크기 pt (기본: 17)

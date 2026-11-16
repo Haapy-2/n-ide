@@ -47,9 +47,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
     let autosavers = AutosaverRegistry.shared.all
-    guard autosavers.contains(where: \.hasUnsavedChanges) else { return .terminateNow }
+    guard autosavers.contains(where: \.hasWorkBeforeQuit) else { return .terminateNow }
     Task { @MainActor in
-      for autosaver in autosavers { await autosaver.flush() }
+      for autosaver in autosavers { await autosaver.finish() }
       if autosavers.contains(where: \.hasUnsavedChanges) {
         let alert = NSAlert()
         alert.alertStyle = .critical

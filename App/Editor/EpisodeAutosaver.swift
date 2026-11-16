@@ -9,6 +9,7 @@ import Observation
 /// - 텍스트 저장소는 읽기만 한다. 그래서 한글 조합 중에 저장해도 조합이 끊기지 않는다.
 /// - 외부 변경(8단계): 창이 다시 활성화될 때와 저장 직전에 파일이 앱 밖에서 바뀌었는지 본다.
 ///   앱 쪽 변경이 없으면 조용히 다시 읽고, 양쪽 다 바뀌었으면 앱 쪽을 스냅샷으로 남긴 뒤 사용자에게 묻는다(`conflicts`).
+/// - 버전 스냅샷(11단계)은 `snapshots`가 찍는다. 떠날 때는 저장하려고 복사한 본문을 그대로 넘겨 한 번 더 복사하지 않는다.
 @MainActor
 @Observable
 final class EpisodeAutosaver {
@@ -37,6 +38,7 @@ final class EpisodeAutosaver {
   private(set) var showsSavingIndicator = false
 
   let store: ProjectStore
+  let snapshots: EpisodeSnapshotter
   private let queue: SaveQueue
   private let delay: Duration
   @ObservationIgnored private weak var textView: ManuscriptTextView?
@@ -57,10 +59,16 @@ final class EpisodeAutosaver {
     self.store = store
     self.queue = queue
     self.delay = delay
+    snapshots = EpisodeSnapshotter(store: store)
     AutosaverRegistry.shared.register(self)
+    snapshots.currentEpisode = { [weak self] in self?.episodeID }
+    snapshots.currentText = { [weak self] in self?.textView?.string }
   }
 
   /// 저장 안 된 변경이 있는지 (지금 회차 또는 저장에 실패한 회차).
+  /// 앱을 끄기 전에 마칠 일이 있는지: 저장 안 된 변경, 아직 안 찍은 떠날 때 스냅샷, 쓰는 중인 스냅샷.
+  var hasWorkBeforeQuit: Bool { hasUnsavedChanges || snapshots.hasPendingWork }
+
   var hasUnsavedChanges: Bool {
     if let episodeID, isDirty(episodeID) { return true }
     return !unsaved.isEmpty || !running.isEmpty
@@ -88,10 +96,32 @@ final class EpisodeAutosaver {
   /// 회차를 떠날 때. 지금 본문을 바로 복사해 저장을 시작하되 기다리지 않는다.
   /// 저장이 끝나길 기다렸다 다음 회차를 보여주면 전환이 끊겨 보이기 때문이다.
   func leaveEpisode() {
+    snapshotLeaving()
+    episodeID = nil
+  }
+
+  /// 창을 닫거나 앱을 끌 때: 떠날 때 스냅샷을 남기고, 저장과 스냅샷 쓰기가 다 끝날 때까지 기다린다.
+  func finish() async {
+    snapshotLeaving()
+    await flush()
+    await snapshots.waitForWrites()
+  }
+
+  /// 저장을 시작하고, 이번에 고친 회차면 같은 본문으로 `leave` 스냅샷을 남긴다.
+  private func snapshotLeaving() {
     pendingSave?.cancel()
     pendingSave = nil
-    if let job = makeSaveJob() { start(job) }
-    episodeID = nil
+    let job = makeSaveJob()
+    if let job { start(job) }
+    if let id = episodeID { snapshots.leave(id) { job?.text ?? textView?.string } }
+  }
+
+  /// 직접 찍기(⌥⌘S): 저장을 먼저 끝낸 뒤 지금 본문을 찍는다. 열린 회차가 없으면 nil.
+  func takeManualSnapshot() async throws -> Snapshot? {
+    guard let id = episodeID else { return nil }
+    await flush()
+    guard id == episodeID, let text = textView?.string else { return nil }
+    return try await snapshots.takeManual(id, text: text)
   }
 
   /// 회차를 휴지통으로 보낸 뒤 부른다. 그 회차에 대해 남은 저장 정보를 버린다.
@@ -108,6 +138,7 @@ final class EpisodeAutosaver {
     inFlight[id] = nil
     conflicts[id] = nil
     disk[id] = nil
+    snapshots.forget(id)
     if unsaved.isEmpty, case .failed = status { status = .idle }
   }
 
@@ -115,6 +146,7 @@ final class EpisodeAutosaver {
   func textDidChange() {
     guard let episodeID else { return }
     changes[episodeID, default: 0] += 1
+    snapshots.noteEdit(episodeID)
     scheduleSave()
   }
 

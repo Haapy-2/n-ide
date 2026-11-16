@@ -16,6 +16,9 @@ struct WorkspaceView: View {
   @State private var settingGoal: EpisodeID?
   @State private var goalText = ""
   @State private var alertMessage: String?
+  /// 방금 직접 찍은 스냅샷. nil이 아니면 메모 칸이 뜬다.
+  @State private var memoTarget: Snapshot?
+  @State private var memoText = ""
   /// 확인을 기다리는 사이드바 되돌리기. nil이 아니면 확인 창이 뜬다.
   @State private var pendingUndo: PendingUndo?
   @State private var stopAskingUndo = false
@@ -91,6 +94,13 @@ struct WorkspaceView: View {
       Text("\(goalBasis.title) 기준으로 셉니다. 지금 새 회차는 \(project.settings.defaultEpisodeGoal.formatted())자로 시작해요.")
     }
     .modifier(undoConfirmationDialog)
+    .alert("스냅샷을 찍었어요", isPresented: isWritingMemo) {
+      TextField("메모 (선택)", text: $memoText)
+      Button("확인") { commitMemo() }
+      Button("메모 없이", role: .cancel) { memoTarget = nil }
+    } message: {
+      Text("나중에 알아보기 쉽게 한 줄 남길 수 있어요.")
+    }
     .alert(trashTitle, isPresented: isTrashing) {
       Button("휴지통으로 이동", role: .destructive) { commitTrash() }
       Button("취소", role: .cancel) { trashing = nil }
@@ -122,7 +132,7 @@ struct WorkspaceView: View {
       if let model { ActiveWorkspace.shared.deactivate(model) }
       if let model {
         Task {
-          await model.autosaver.flush()
+          await model.autosaver.finish()
           await model.saveCountsNow()
         }
       }
@@ -152,7 +162,8 @@ struct WorkspaceView: View {
       trashSelected: selection.map { id in { trashing = id } },
       setGoalSelected: selection.map { id in { beginSetGoal(id) } },
       selectPrevious: neighbor(of: index, offset: -1),
-      selectNext: neighbor(of: index, offset: 1))
+      selectNext: neighbor(of: index, offset: 1),
+      takeSnapshot: selection == nil ? nil : { takeSnapshot() })
   }
 
   /// 선택한 회차의 앞(-1)·뒤(+1) 회차로 옮기는 명령. 없으면 nil.
@@ -169,6 +180,34 @@ struct WorkspaceView: View {
         selection = try await model.addEpisode(after: id, undoManager: undoManager)
       } catch {
         alertMessage = "새 회차를 만들지 못했어요. \((error as? ProjectError)?.userMessage ?? error.localizedDescription)"
+      }
+    }
+  }
+
+  /// 저장을 먼저 끝내고 찍은 뒤 메모 칸을 띄운다. 비워 두고 엔터를 눌러도 된다.
+  private func takeSnapshot() {
+    guard let model else { return }
+    Task {
+      do {
+        guard let snapshot = try await model.autosaver.takeManualSnapshot() else { return }
+        memoText = ""
+        memoTarget = snapshot
+      } catch {
+        alertMessage = "스냅샷을 찍지 못했어요. \((error as? ProjectError)?.userMessage ?? error.localizedDescription)"
+      }
+    }
+  }
+
+  private func commitMemo() {
+    guard let model, let snapshot = memoTarget else { return }
+    memoTarget = nil
+    let store = model.store
+    let memo = memoText
+    Task {
+      do {
+        try await Task.detached { try store.writeMemo(memo, for: snapshot) }.value
+      } catch {
+        alertMessage = "메모를 남기지 못했어요. 스냅샷은 남아 있어요."
       }
     }
   }
@@ -293,6 +332,10 @@ struct WorkspaceView: View {
   /// 반드시 둘 중 하나를 골라야 한다. 닫기만 하면 다시 뜬다.
   private var isShowingConflict: Binding<Bool> {
     Binding(get: { readyConflict != nil }, set: { _ in })
+  }
+
+  private var isWritingMemo: Binding<Bool> {
+    Binding(get: { memoTarget != nil }, set: { if !$0 { memoTarget = nil } })
   }
 
   private var isRenaming: Binding<Bool> {

@@ -18,6 +18,9 @@ struct EpisodeEditorPane: View {
   @AppStorage(AppSettingKey.characterCountInterval) private var countInterval = EditorSetting.characterCountInterval.defaultValue
   @AppStorage(AppSettingKey.statusBarHidesWhileTyping) private var hidesWhileTyping = false
   @AppStorage(AppSettingKey.statusBarHidesWhenIdle) private var hidesWhenIdle = true
+  @AppStorage(AppSettingKey.autoSnapshotEnabled) private var autoSnapshot = true
+  @AppStorage(AppSettingKey.autoSnapshotMinutes) private var snapshotMinutes = 30
+  @AppStorage(AppSettingKey.snapshotRetention) private var snapshotRetention = 50
 
   var body: some View {
     let style = editorSettings.style
@@ -57,6 +60,11 @@ struct EpisodeEditorPane: View {
     .onChange(of: episodeID, initial: true) { switchEpisode() }
     .onChange(of: countInterval, initial: true) {
       counter.interval = .milliseconds(Int(EditorSetting.characterCountInterval.clamped(countInterval) * 1_000))
+    }
+    // 바꾸면 바로 적용: 간격이나 켜기가 바뀌면 타이머를 다시 건다.
+    .onChange(of: [snapshotMinutes, snapshotRetention, autoSnapshot ? 1 : 0], initial: true) {
+      autosaver.snapshots.settings = EpisodeSnapshotter.Settings(
+        autoEnabled: autoSnapshot, minutes: snapshotMinutes, retention: snapshotRetention)
     }
     .onChange(of: [hidesWhileTyping, hidesWhenIdle], initial: true) {
       fade.hidesWhileTyping = hidesWhileTyping

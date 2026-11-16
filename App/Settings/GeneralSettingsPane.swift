@@ -5,6 +5,9 @@ struct GeneralSettingsPane: View {
   @AppStorage(AppSettingKey.appTheme) private var theme: AppTheme = .system
   @AppStorage(AppSettingKey.undoConfirmPause) private var undoPause: UndoConfirmPause = .week
   @AppStorage(AppSettingKey.undoConfirmPausedUntil) private var undoPausedUntil: Double = 0
+  @AppStorage(AppSettingKey.autoSnapshotEnabled) private var autoSnapshot = true
+  @AppStorage(AppSettingKey.autoSnapshotMinutes) private var snapshotMinutes = 30
+  @AppStorage(AppSettingKey.snapshotRetention) private var snapshotRetention = 50
 
   var body: some View {
     Form {
@@ -20,6 +23,22 @@ struct GeneralSettingsPane: View {
         .pickerStyle(.segmented)
       }
       ProjectGoalSection()
+      Section {
+        Toggle("자동 스냅샷", isOn: $autoSnapshot)
+        Picker("간격", selection: $snapshotMinutes) {
+          ForEach(EpisodeSnapshotter.Settings.intervalChoices, id: \.self) { Text("\($0)분") }
+        }
+        .disabled(!autoSnapshot)
+        Picker("보관 개수", selection: $snapshotRetention) {
+          ForEach(Array(stride(from: 10, through: 100, by: 10)), id: \.self) { Text("\($0)개") }
+        }
+      } header: {
+        Text("스냅샷")
+      } footer: {
+        Text("자동 스냅샷은 그사이 고친 회차만 찍어요. 회차를 떠날 때는 늘 찍어요. 보관 개수를 넘으면 자동·떠날 때 스냅샷 중 오래된 것부터 지우고, 직접 찍은 것(⌥⌘S)은 지우지 않아요.")
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+      }
       Section {
         Picker("확인 창 다시 띄우기", selection: $undoPause) {
           ForEach(UndoConfirmPause.allCases, id: \.self) { Text($0.title) }
