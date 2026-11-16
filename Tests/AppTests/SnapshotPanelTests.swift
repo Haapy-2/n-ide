@@ -157,4 +157,10 @@ final class SnapshotPanelTests: XCTestCase {
       XCTAssertFalse(SnapshotListView.kindName(kind).isEmpty)
     }
   }
+
+  /// 목록과 비교 칸 제목의 시각은 초까지 보인다.
+  func testTimeShowsSeconds() throws {
+    let date = try XCTUnwrap(Calendar.current.date(from: DateComponents(year: 2026, month: 11, day: 17, hour: 14, minute: 23, second: 5)))
+    XCTAssertEqual(SnapshotListView.time(date), "14:23:05")
+  }
 }
