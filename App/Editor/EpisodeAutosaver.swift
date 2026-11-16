@@ -142,6 +142,18 @@ final class EpisodeAutosaver {
     return try await snapshots.takeManual(id, text: text)
   }
 
+  /// 떠 있는 판(⇧⌘S)을 열 때: 편집기의 조합을 끝내고 초점을 내려놓은 뒤 지금 본문을 한 번 복사해 준다.
+  /// 편집기가 없으면 nil. `hadFocus`는 닫을 때 `endPanel`에 그대로 돌려준다.
+  func beginPanel() -> (text: String, hadFocus: Bool)? {
+    guard let textView else { return nil }
+    let hadFocus = textView.yieldFocusForPanel()
+    return (textView.string, hadFocus)
+  }
+
+  func endPanel(hadFocus: Bool) {
+    if hadFocus { textView?.regainFocusAfterPanel() }
+  }
+
   /// 회차를 휴지통으로 보낸 뒤 부른다. 그 회차에 대해 남은 저장 정보를 버린다.
   /// (지운 회차를 나중에 저장해 파일이 되살아나는 일을 막는다. 부르기 전에 `flush`로 저장을 끝내 둔다.)
   func forget(episode id: EpisodeID) {

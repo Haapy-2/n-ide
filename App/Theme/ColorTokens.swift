@@ -10,4 +10,13 @@ extension Color {
   static let rule = Color("rule")
   static let error = Color("error")
   static let accent = Color("accent")
+  /// 비교 화면: 넣은 줄 바탕, 그 안의 바뀐 부분, 줄 왼쪽 막대 (PLAN 10장 5번)
+  static let diffAdded = Color("diffAdded")
+  static let diffAddedStrong = Color("diffAddedStrong")
+  static let diffAddedMark = Color("diffAddedMark")
+  /// 비교 화면: 지운 줄 바탕, 그 안의 바뀐 부분 (왼쪽 빗금은 error 색)
+  static let diffRemoved = Color("diffRemoved")
+  static let diffRemovedStrong = Color("diffRemovedStrong")
+  /// 떠 있는 판 뒤를 어둡게 덮는 막
+  static let scrim = Color("scrim")
 }

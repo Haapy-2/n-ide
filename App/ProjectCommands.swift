@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 파일 메뉴: 새 작품, 다른 위치에서 열기, 작품 전환, 스냅샷 찍기 (DESIGN.md 7장).
+/// 파일 메뉴: 새 작품, 다른 위치에서 열기, 작품 전환, 스냅샷 찍기·보기 (DESIGN.md 7장).
 struct ProjectCommands: Commands {
   @FocusedValue(\.workspaceActions) private var actions
   @Environment(\.openWindow) private var openWindow
@@ -24,6 +24,9 @@ struct ProjectCommands: Commands {
       Button("스냅샷 찍기") { actions?.takeSnapshot?() }
         .keyboardShortcut("s", modifiers: [.command, .option])
         .disabled(actions?.takeSnapshot == nil)
+      Button("스냅샷 보기…") { actions?.showSnapshots?() }
+        .keyboardShortcut("s", modifiers: [.command, .shift])
+        .disabled(actions?.showSnapshots == nil)
     }
   }
 

@@ -19,6 +19,10 @@ struct WorkspaceView: View {
   /// 방금 직접 찍은 스냅샷. nil이 아니면 메모 칸이 뜬다.
   @State private var memoTarget: Snapshot?
   @State private var memoText = ""
+  /// 열려 있는 스냅샷 판(⇧⌘S). nil이면 닫힘.
+  @State private var snapshotBrowser: SnapshotBrowser?
+  /// 판을 열 때 편집기가 초점을 갖고 있었는지. 닫을 때 그 자리로 돌려준다.
+  @State private var editorHadFocus = false
   /// 확인을 기다리는 사이드바 되돌리기. nil이 아니면 확인 창이 뜬다.
   @State private var pendingUndo: PendingUndo?
   @State private var stopAskingUndo = false
@@ -73,6 +77,11 @@ struct WorkspaceView: View {
           }
         }
     }
+    .overlay {
+      if let snapshotBrowser {
+        SnapshotPanel(browser: snapshotBrowser, title: snapshotPanelTitle, onClose: closeSnapshots)
+      }
+    }
     .frame(minWidth: 720, minHeight: 480)
     // 창 바탕을 반투명 재질로 바꾸면 그 위에 떠 있는 유리 사이드바로 창 뒤의 다른 앱과 바탕화면이 비친다.
     // 종이(편집 영역)는 불투명 paper 색이라 본문 쪽은 비치지 않는다.
@@ -119,6 +128,8 @@ struct WorkspaceView: View {
     } message: {
       Text(alertMessage ?? model?.errorMessage ?? "")
     }
+    // 판이 보고 있던 회차에서 벗어나면(메뉴·단축키로 회차를 옮기거나 휴지통으로 보냄) 판을 닫는다.
+    .onChange(of: selection) { if snapshotBrowser?.episodeID != selection { closeSnapshots() } }
     // 되돌리기 등으로 보고 있던 회차가 목록에서 사라지면 가까운 회차로 옮긴다.
     .onChange(of: project.episodes.map(\.id)) { old, new in
       guard let current = selection, !new.contains(current) else { return }
@@ -166,7 +177,8 @@ struct WorkspaceView: View {
       setGoalSelected: selection.map { id in { beginSetGoal(id) } },
       selectPrevious: neighbor(of: index, offset: -1),
       selectNext: neighbor(of: index, offset: 1),
-      takeSnapshot: selection == nil ? nil : { takeSnapshot() })
+      takeSnapshot: selection == nil || snapshotBrowser != nil ? nil : { takeSnapshot() },
+      showSnapshots: selection == nil || snapshotBrowser != nil ? nil : { showSnapshots() })
   }
 
   /// 선택한 회차의 앞(-1)·뒤(+1) 회차로 옮기는 명령. 없으면 nil.
@@ -199,6 +211,30 @@ struct WorkspaceView: View {
         alertMessage = "스냅샷을 찍지 못했어요. \((error as? ProjectError)?.userMessage ?? error.localizedDescription)"
       }
     }
+  }
+
+  /// 판을 열기 전에 편집기의 조합을 끝내고 초점을 내려놓는다. 지금 본문은 이때 한 번만 복사한다.
+  private func showSnapshots() {
+    guard let model, let id = selection, snapshotBrowser == nil, let editor = model.autosaver.beginPanel() else { return }
+    editorHadFocus = editor.hadFocus
+    let browser = SnapshotBrowser(store: model.store, episodeID: id, currentText: editor.text)
+    snapshotBrowser = browser
+    Task { await browser.load() }
+  }
+
+  private func closeSnapshots() {
+    guard let browser = snapshotBrowser else { return }
+    browser.cancel()
+    snapshotBrowser = nil
+    model?.autosaver.endPanel(hadFocus: editorHadFocus)
+  }
+
+  private var snapshotPanelTitle: String {
+    guard let id = snapshotBrowser?.episodeID, let index = project.episodes.firstIndex(where: { $0.id == id }) else {
+      return "스냅샷"
+    }
+    let title = project.episodes[index].title
+    return "스냅샷 · \(index + 1)화\(title.isEmpty ? "" : " \(title)")"
   }
 
   private func commitMemo() {

@@ -1,0 +1,111 @@
+import Foundation
+import NovelCore
+import Observation
+
+/// 떠 있는 판(⇧⌘S) 하나의 상태: 한 회차의 스냅샷 목록, 고른 스냅샷, 과거↔현재 비교 (11d, PLAN 10장 5번).
+/// 목록·메모 읽기와 비교는 모두 메인 스레드 밖에서 한다. 다른 스냅샷을 고르면 하던 비교는 취소한다.
+@MainActor
+@Observable
+final class SnapshotBrowser {
+  struct Item: Identifiable, Equatable {
+    let snapshot: Snapshot
+    var memo: String?
+    var id: String { snapshot.id }
+  }
+
+  enum Comparison: Equatable {
+    case idle
+    case comparing
+    case ready(TextDiff)
+    case failed(String)
+  }
+
+  /// 고친 줄에서 바뀐 글자가 이 비율을 넘으면 줄 전체를 칠한다. 실제 원고로 보고 사용자와 정한다(PLAN 10장 4번).
+  static let wholeLineRatio = 0.5
+
+  let episodeID: EpisodeID
+  /// 판을 열 때 편집기에서 한 번 복사한 지금 본문. 판이 열려 있는 동안은 편집기에 초점이 없어 바뀌지 않는다.
+  let currentText: String
+  /// nil이면 아직 읽는 중
+  private(set) var items: [Item]?
+  private(set) var selectedID: String?
+  private(set) var comparison: Comparison = .idle
+  private(set) var errorMessage: String?
+
+  @ObservationIgnored private let store: ProjectStore
+  @ObservationIgnored private var job: Task<TextDiff, any Error>?
+
+  init(store: ProjectStore, episodeID: EpisodeID, currentText: String) {
+    self.store = store
+    self.episodeID = episodeID
+    self.currentText = currentText
+  }
+
+  var selected: Item? { items?.first { $0.id == selectedID } }
+
+  /// 목록과 메모를 읽고 가장 최근 것을 고른다.
+  func load() async {
+    let store = store
+    let id = episodeID
+    do {
+      let loaded = try await Task.detached(priority: .userInitiated) {
+        try store.snapshots(of: id).reversed().map { Item(snapshot: $0, memo: store.readMemo($0)) }
+      }.value
+      items = loaded
+      if let first = loaded.first { select(first.id) }
+    } catch {
+      items = []
+      errorMessage = "스냅샷 목록을 읽지 못했어요."
+    }
+  }
+
+  func select(_ id: String) {
+    guard id != selectedID, let item = items?.first(where: { $0.id == id }) else { return }
+    selectedID = id
+    job?.cancel()
+    comparison = .comparing
+    let store = store
+    let current = currentText
+    let ratio = Self.wholeLineRatio
+    let job = Task.detached(priority: .userInitiated) {
+      let old = try store.readSnapshot(item.snapshot)
+      try Task.checkCancellation()
+      return try TextDiff(old: old, new: current, wholeLineRatio: ratio)
+    }
+    self.job = job
+    Task {
+      let result = await job.result
+      // 그사이 다른 스냅샷을 골랐으면 버린다.
+      guard self.job == job else { return }
+      switch result {
+      case .success(let diff): comparison = .ready(diff)
+      case .failure(is CancellationError): break
+      case .failure: comparison = .failed("이 스냅샷을 읽지 못했어요.")
+      }
+    }
+  }
+
+  /// 판을 닫을 때 하던 비교를 멈춘다.
+  func cancel() {
+    job?.cancel()
+    job = nil
+  }
+
+  /// 앞뒤 공백을 다듬어 쓰고, 비우면 메모를 없앤다. 쓰기에 성공한 뒤에 목록을 바꾼다.
+  func updateMemo(_ id: String, to text: String) {
+    guard let index = items?.firstIndex(where: { $0.id == id }), let item = items?[index] else { return }
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard trimmed != (item.memo ?? "") else { return }
+    let store = store
+    Task {
+      do {
+        try await Task.detached { try store.writeMemo(trimmed, for: item.snapshot) }.value
+        if let index = items?.firstIndex(where: { $0.id == id }) {
+          items?[index].memo = trimmed.isEmpty ? nil : trimmed
+        }
+      } catch {
+        errorMessage = "메모를 남기지 못했어요."
+      }
+    }
+  }
+}

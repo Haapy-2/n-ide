@@ -121,6 +121,20 @@ final class ManuscriptTextView: NSTextView {
     inputContext?.discardMarkedText()
   }
 
+  /// 떠 있는 판(⇧⌘S)을 열기 전: 조합을 끝내고 키보드 초점을 내려놓는다. 커서·선택은 그대로 남는다.
+  /// 판을 열 때 편집기가 초점을 갖고 있었는지 돌려준다(닫을 때 돌려줄지 정하려고).
+  func yieldFocusForPanel() -> Bool {
+    finishComposition()
+    guard let window, window.firstResponder === self else { return false }
+    window.makeFirstResponder(nil)
+    return true
+  }
+
+  /// 판을 닫은 뒤: 커서가 있던 자리로 초점을 돌려준다.
+  func regainFocusAfterPanel() {
+    window?.makeFirstResponder(self)
+  }
+
   override func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
     switch item.action {
     case #selector(undo(_:)):

@@ -10,6 +10,8 @@ struct WorkspaceActions {
   var selectNext: (() -> Void)?
   /// 지금 회차 스냅샷 찍기(⌥⌘S)
   var takeSnapshot: (() -> Void)?
+  /// 지금 회차 스냅샷 판 열기(⇧⌘S)
+  var showSnapshots: (() -> Void)?
 }
 
 extension FocusedValues {

@@ -27,6 +27,68 @@ final class DesignSnapshotTests: XCTestCase {
     }
   }
 
+  /// 11d 스냅샷 판: 과거 원고와 고친 지금 원고를 실제처럼 비교해 띄운다.
+  func testRenderSnapshotPanel() async throws {
+    guard ProcessInfo.processInfo.environment["NOVEL_SNAPSHOTS"] == "1" else {
+      throw XCTSkip("Scripts/snapshots.sh로 실행할 때만 스냅샷을 만든다")
+    }
+    let folder = snapshotsFolder.deletingLastPathComponent().deletingLastPathComponent()
+      .appendingPathComponent("build/tmp/\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let store = try ProjectStore.create(at: folder.appendingPathComponent("작품.novel"), title: "x")
+    let episode = EpisodeID.make()
+    let now = Date()
+    try store.writeSnapshot(Self.panelPast, episode: episode, kind: .leave, at: now.addingTimeInterval(-86_400))
+    try store.writeSnapshot(Self.panelPast, episode: episode, kind: .manual, memo: "골목 장면 고치기 전", at: now.addingTimeInterval(-3_600))
+    try store.writeSnapshot(Self.panelPast + "\n", episode: episode, kind: .auto, at: now.addingTimeInterval(-600))
+    let browser = SnapshotBrowser(store: store, episodeID: episode, currentText: Self.panelCurrent)
+    await browser.load()
+    browser.select(browser.items![1].id)
+    for _ in 0..<100 {
+      if case .ready = browser.comparison { break }
+      try await Task.sleep(for: .milliseconds(10))
+    }
+    for dark in [false, true] {
+      let view = Color.paper.overlay {
+        SnapshotPanel(browser: browser, title: "스냅샷 · 3화 비 오는 날", onClose: {})
+      }
+      try render(view, name: "snapshot-panel", size: CGSize(width: 1100, height: 760), dark: dark, stage: "11")
+    }
+  }
+
+  private static let panelPast = """
+    비가 그친 골목에는 아직 물 냄새가 남아 있었다.
+    그는 처마 끝에서 떨어지는 마지막 빗방울을 세다가, 문득 누군가의 발소리를 들었다.
+
+    "여기서 뭐 해요?"
+
+    돌아보니 우산도 없이 젖은 소녀가 서 있었다.
+    그는 대답 대신 검집을 고쳐 쥐었다. 오래된 습관이었다.
+    낯선 목소리 앞에서는 언제나 손이 먼저 움직였다.
+    소녀는 한 걸음 물러섰다.
+    "무서운 사람은 아니에요."
+    그는 그렇게 말했지만, 손은 여전히 검집 위에 있었다.
+    골목 끝에서 개 짖는 소리가 났다.
+    둘은 동시에 그쪽을 보았다.
+    """
+
+  private static let panelCurrent = """
+    비가 그친 골목에는 아직 물 냄새가 남아 있었다.
+    그는 처마 끝에서 떨어지는 마지막 빗방울을 세다가, 문득 낯선 발소리를 들었다.
+
+    "여기서 뭐 하세요?"
+
+    돌아보니 우산도 없이 젖은 소녀가 서 있었다.
+    그는 대답 대신 검집을 고쳐 쥐었다. 오래된 습관이었다.
+    낯선 목소리 앞에서는 언제나 손이 먼저 움직였다.
+    소녀는 한 걸음 물러섰다.
+    "무서운 사람은 아니에요."
+    그는 그렇게 말했지만, 손은 여전히 검집 위에 있었다.
+    멀리서 종소리가 울렸다. 저녁 예배를 알리는 소리였다.
+    둘은 동시에 그쪽을 보았다.
+    소녀가 먼저 웃었다.
+    """
+
   /// 긴 본문: 대사와 서술이 섞인 문단을 여러 번 되풀이한다.
   private static let longText = ManuscriptEditor.Content(
     token: UUID(), episodeID: EpisodeID(rawValue: "snapshot"),
@@ -66,7 +128,7 @@ final class DesignSnapshotTests: XCTestCase {
   ]
 
   /// 실제 창에 띄운 뒤 창 전체(툴바 포함)를 이미지로 뜬다.
-  private func render(_ view: some View, name: String, size: CGSize, dark: Bool) throws {
+  private func render(_ view: some View, name: String, size: CGSize, dark: Bool, stage: String? = nil) throws {
     let window = NSWindow(
       contentRect: NSRect(origin: .zero, size: size),
       styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
@@ -85,7 +147,7 @@ final class DesignSnapshotTests: XCTestCase {
     frameView.cacheDisplay(in: frameView.bounds, to: rep)
     let png = try XCTUnwrap(rep.representation(using: .png, properties: [:]))
 
-    let file = "\(stage)-\(name)-\(dark ? "dark" : "light").png"
+    let file = "\(stage ?? self.stage)-\(name)-\(dark ? "dark" : "light").png"
     try png.write(to: snapshotsFolder.appendingPathComponent(file))
   }
 
