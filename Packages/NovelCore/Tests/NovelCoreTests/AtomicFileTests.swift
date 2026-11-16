@@ -55,4 +55,24 @@ struct AtomicFileTests {
     }
     #expect(try folder.fileNames(in: folder.url).isEmpty)
   }
+  /// 하드 링크를 못 만드는 디스크(exFAT 외장 디스크 등)에서 쓰는 길: 새 이름이면 넣고, 있는 이름이면 덮지 않는다.
+  @Test func placeWithoutLinkNeverOverwrites() throws {
+    let folder = try TestFolder()
+    defer { folder.remove() }
+    let target = folder.url.appending(path: "s.md")
+    func temp(_ text: String) throws -> String {
+      let url = folder.url.appending(path: ".t-\(UUID().uuidString).tmp")
+      try Data(text.utf8).write(to: url)
+      return url.path(percentEncoded: false)
+    }
+
+    try AtomicFile.placeWithoutLink(temp: try temp("처음"), destination: target.path(percentEncoded: false), url: target)
+    #expect(throws: AtomicFile.AlreadyExists.self) {
+      try AtomicFile.placeWithoutLink(temp: try temp("나중"), destination: target.path(percentEncoded: false), url: target)
+    }
+
+    #expect(try String(contentsOf: target, encoding: .utf8) == "처음")
+    #expect(try folder.fileNames(in: folder.url) == ["s.md"], "임시 파일이 남지 않는다")
+  }
 }
+

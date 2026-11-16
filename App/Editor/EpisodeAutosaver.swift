@@ -150,8 +150,9 @@ final class EpisodeAutosaver {
       pendingSave = nil
       episodeID = nil
     }
-    changes[id] = nil
-    savedChanges[id] = nil
+    // 변경 번호는 0으로 되돌리지 않는다. 저장 줄(SaveQueue)이 이 회차에 쓴 마지막 번호를 기억하고 있어서,
+    // ⌘Z로 휴지통에서 꺼낸 뒤 1부터 다시 세면 새 저장이 "옛 저장"으로 보여 조용히 건너뛰어진다.
+    if let change = changes[id] { savedChanges[id] = change }
     unsaved[id] = nil
     inFlight[id] = nil
     conflicts[id] = nil

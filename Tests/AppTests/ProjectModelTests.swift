@@ -217,6 +217,41 @@ final class ProjectModelTests: XCTestCase {
     XCTAssertFalse(FileManager.default.fileExists(atPath: store.layout.episodeFile(b).path(percentEncoded: false)))
   }
 
+  /// 휴지통에서 ⌘Z로 꺼낸 회차를 다시 고치면 그 내용이 디스크에 저장된다.
+  /// (지울 때 회차의 변경 번호를 0으로 되돌리면, 저장 줄이 기억하는 옛 번호보다 작아 새 저장을 "옛 저장"으로 보고 건너뛰었다.)
+  func testEditsAfterRestoringFromTrashAreSaved() async throws {
+    let model = try makeModel()
+    let id = try await model.addEpisode()
+    let textView = ManuscriptTextView.make()
+    textView.replaceAllText(with: "")
+    model.autosaver.attach(textView)
+    model.autosaver.begin(episode: id, version: try store.readEpisodeVersion(id))
+    for word in ["하나", " 둘", " 셋"] {
+      textView.insertText(word, replacementRange: NSRange(location: textView.string.utf16.count, length: 0))
+      model.autosaver.textDidChange()
+    }
+    await model.autosaver.flush()
+    XCTAssertEqual(try store.readEpisode(id), "하나 둘 셋")
+
+    let undo = UndoManager()
+    undo.groupsByEvent = false
+    try await grouped(undo) { try await model.trashEpisode(id, undoManager: undo) }
+    undo.undo()
+    try await Task.sleep(for: .milliseconds(150))
+    XCTAssertEqual(model.episodes.map(\.id), [id])
+
+    // 회차 전환처럼 디스크에서 다시 읽어 연 뒤 한 글자 고친다.
+    let version = try store.readEpisodeVersion(id)
+    textView.replaceAllText(with: version.text)
+    model.autosaver.begin(episode: id, version: version)
+    textView.insertText(" 넷", replacementRange: NSRange(location: textView.string.utf16.count, length: 0))
+    model.autosaver.textDidChange()
+    await model.autosaver.flush()
+
+    XCTAssertEqual(try store.readEpisode(id), "하나 둘 셋 넷")
+    XCTAssertFalse(model.autosaver.hasUnsavedChanges)
+  }
+
   /// "새 회차에도 쓰기": 작품 기본 목표가 project.json에 저장되고 그 뒤 만드는 회차가 그 목표로 시작한다.
   /// 회차 목표와 함께 바꾸면 ⌘Z 한 번에 둘 다 되돌아간다.
   func testDefaultEpisodeGoalAppliesToNewEpisodesAndUndoesWithGoal() async throws {

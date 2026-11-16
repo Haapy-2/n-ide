@@ -19,7 +19,7 @@ fi
 
 # 앱 쪽: 편집기 키 입력과 회차 전환 (릴리스 빌드, 테스트에서 앱 내부를 쓰려고 testability만 켠다)
 TEST_RUNNER_NOVEL_PERF_PROJECT="$DUMMY" xb perf-app "앱 성능 측정(릴리스)" -scheme NovelEditor -configuration Release \
-  -destination "platform=macOS" ENABLE_TESTABILITY=YES test -only-testing:AppTests/EditorPerformanceTests >/dev/null \
+  -destination "platform=macOS" ENABLE_TESTABILITY=YES test -only-testing:AppTests/EditorPerformanceTests -only-testing:AppTests/MemoryGrowthTests >/dev/null \
   || { echo "✗ 앱 성능 측정 실패 · build/logs/perf-app.log"; exit 1; }
 
 # 앱 실행 시간: 6번 실행하고 첫 번째는 참고값으로만 쓴다(SPEC 8장: 한 번 실행한 적 있는 상태 기준).
@@ -42,7 +42,8 @@ rm -f "$LOGS/perf-launch-run.log"
 
 # 대기 메모리: 5,000자 회차를 연 채로 30초 둔 뒤 실제 사용량(phys_footprint).
 # 창 크기는 앱이 1100×760으로 고정한다(LaunchProbe.windowContentSize). 그래픽 버퍼가 창 넓이에 비례하기 때문.
-NOVEL_PERF_OPEN="$DUMMY" "$APP" >/dev/null 2>&1 &
+# macOS 창 복원을 끈다: 지난번에 열려 있던 창이 함께 뜨면 값이 77 ↔ 89MB로 흔들렸다.
+NOVEL_PERF_OPEN="$DUMMY" "$APP" -ApplePersistenceIgnoreState YES >/dev/null 2>&1 &
 pid=$!
 sleep 30
 footprint -p "$pid" >"$LOGS/perf-memory.log" 2>&1 || true
@@ -102,4 +103,7 @@ print("|---|---|---|---|---|---|")
 print("\n".join(rows))
 if runs: print(f"\n참고: 첫 실행 {runs[0]:.1f}ms")
 if hung: print(f"주의: 실행 6번 중 {hung}번이 10초 안에 입력 가능 상태가 되지 않아 껐음")
+# 회차 전환 메모리(MemoryGrowthTests): footprint/malloc 사용량(MB). 쌓이는지는 malloc 쪽으로 본다(목표 없음, 참고값).
+m = re.search(r"NOVEL_PERF memory_switch (.+)", app)
+if m: print(f"회차 전환 메모리 (footprint/malloc MB, 500회차 3바퀴 → 10만 자 회차 3번 열고 닫기): {m.group(1).strip()}")
 PY
