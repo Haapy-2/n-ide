@@ -101,4 +101,22 @@ final class StabilityTests: XCTestCase {
   private func fontSize(of textView: NSTextView, at index: Int) -> CGFloat? {
     (textView.textStorage?.attribute(.font, at: index, effectiveRange: nil) as? NSFont)?.pointSize
   }
+
+  /// 바로가기(심볼릭 링크) 경로로 열어도 같은 작품이면 같은 창 값.
+  func testSymlinkedPathGetsSameWindowValue() throws {
+    let real = folder.appending(path: "작품.novel")
+    let link = folder.appending(path: "바로가기.novel")
+    try FileManager.default.createSymbolicLink(at: link, withDestinationURL: real)
+    XCTAssertEqual(ProjectLauncher.windowValue(for: link), ProjectLauncher.windowValue(for: real))
+  }
+
+  /// 떠날 때 본문을 못 받으면 "찍을 것이 남음"을 지우지 않는다(종료 때 기다릴 일로 남는다).
+  func testLeaveWithoutTextKeepsPendingFlag() throws {
+    let snapshotter = EpisodeSnapshotter(store: store)
+    snapshotter.settings.autoEnabled = false
+    let id = EpisodeID.make()
+    snapshotter.noteEdit(id)
+    snapshotter.leave(id) { nil }
+    XCTAssertTrue(snapshotter.hasPendingWork)
+  }
 }

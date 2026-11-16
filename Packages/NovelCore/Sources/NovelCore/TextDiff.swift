@@ -129,6 +129,11 @@ public struct TextDiff: Sendable, Equatable {
         j += 1
       }
       if removedRun.isEmpty, insertedRun.isEmpty {
+        // 한쪽만 끝났다면 계산이 어긋난 것이다. 앱이 죽지 않게 남은 줄을 지운 줄·넣은 줄로 내보낸다.
+        guard i < old.count, j < new.count else {
+          rows += (i..<old.count).map { Row.removed(old: $0) } + (j..<new.count).map { Row.added(new: $0) }
+          break
+        }
         rows.append(.same(old: i, new: j))
         i += 1
         j += 1
@@ -176,6 +181,7 @@ public struct TextDiff: Sendable, Equatable {
         j += 1
       }
       if removedRun.isEmpty, insertedRun.isEmpty {
+        guard i < oldTokens.count, j < newTokens.count else { return .wholeLine }
         i += 1
         j += 1
         continue

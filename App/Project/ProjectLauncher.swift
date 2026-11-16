@@ -32,9 +32,10 @@ struct ProjectLauncher {
   }
 
   /// 창의 값으로 쓸 URL. 같은 작품 폴더는 어디서 열든(최근 목록, 열기 창, Finder) 같은 값이 되게 맞춘다.
-  /// 끝의 `/` 하나만 달라도 다른 값이라 같은 작품이 창 두 개로 열리고, 두 창이 같은 파일을 따로 저장하게 된다.
+  /// 끝의 `/` 하나, 바로가기 경로만 달라도 다른 값이라 같은 작품이 창 두 개로 열리고, 두 창이 같은 파일을 따로 저장하게 된다.
   static func windowValue(for url: URL) -> URL {
-    var path = url.standardizedFileURL.path(percentEncoded: false)
+    // 바로가기(심볼릭 링크)를 거친 경로도 실제 폴더로 맞춘다. 없는 경로면 그대로 둔다.
+    var path = url.standardizedFileURL.resolvingSymlinksInPath().path(percentEncoded: false)
     while path.count > 1, path.hasSuffix("/") { path.removeLast() }
     return URL(filePath: path, directoryHint: .isDirectory)
   }

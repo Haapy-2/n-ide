@@ -110,13 +110,19 @@ extension ProjectStore {
     let folder = layout.snapshotFolder(id)
     try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
     let base = "\(Snapshot.stamp(for: date))-\(kind.rawValue)"
+    let data = Data(text.utf8)
     var url = folder.appending(path: "\(base).md", directoryHint: .notDirectory)
     var number = 2
-    while FileManager.default.fileExists(atPath: url.path(percentEncoded: false)) {
-      url = folder.appending(path: "\(base)-\(number).md", directoryHint: .notDirectory)
-      number += 1
+    // 이름이 있으면 다음 번호로. 같은 순간에 다른 곳(충돌 스냅샷 등)이 같은 이름을 써도 서로 덮지 않는다.
+    while true {
+      do {
+        try AtomicFile.write(data, to: url, replacing: false)
+        break
+      } catch is AtomicFile.AlreadyExists {
+        url = folder.appending(path: "\(base)-\(number).md", directoryHint: .notDirectory)
+        number += 1
+      }
     }
-    try AtomicFile.write(Data(text.utf8), to: url)
     guard let snapshot = Snapshot(url: url, episodeID: id) else {
       throw ProjectError.writeFailed(url, reason: "스냅샷 이름을 읽을 수 없음")
     }
@@ -130,7 +136,10 @@ extension ProjectStore {
     guard FileManager.default.fileExists(atPath: folder.path(percentEncoded: false)) else { return [] }
     let urls = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
     let calendar = Snapshot.calendar
-    return urls.compactMap { Snapshot(url: $0, episodeID: id, calendar: calendar) }.sorted {
+    // 이름만 스냅샷처럼 생긴 폴더·바로가기는 목록에 넣지 않는다(읽을 수도 없고, 정리가 지우면 안 된다).
+    return urls.compactMap { url in
+      Snapshot(url: url, episodeID: id, calendar: calendar).flatMap { Self.isRegularFile(url) ? $0 : nil }
+    }.sorted {
       ($0.stamp, $0.sequence, $0.kind.rawValue) < ($1.stamp, $1.sequence, $1.kind.rawValue)
     }
   }
@@ -141,6 +150,12 @@ extension ProjectStore {
     }
     guard let text = String(data: data, encoding: .utf8) else { throw ProjectError.notUTF8(snapshot.url) }
     return text
+  }
+
+  /// 바로가기(심볼릭 링크)를 따라가지 않고 그 자리의 것이 보통 파일인지 본다.
+  private static func isRegularFile(_ url: URL) -> Bool {
+    var info = stat()
+    return lstat(url.path(percentEncoded: false), &info) == 0 && (info.st_mode & S_IFMT) == S_IFREG
   }
 
   /// 메모가 없으면 nil.
@@ -171,11 +186,14 @@ extension ProjectStore {
     let excess = prunable.count - max(limit, 1)
     guard excess > 0 else { return [] }
     let removed = Array(prunable.prefix(excess))
+    var done: [Snapshot] = []
     for snapshot in removed {
+      // 목록에서 이미 걸렀지만, 그 사이에 바뀌었을 수 있어 지우기 직전에 한 번 더 본다(폴더를 지우면 안의 것이 통째로 사라진다).
+      guard Self.isRegularFile(snapshot.url) else { continue }
       try FileManager.default.removeItem(at: snapshot.url)
-      let memo = snapshot.memoURL.path(percentEncoded: false)
-      if FileManager.default.fileExists(atPath: memo) { try? FileManager.default.removeItem(atPath: memo) }
+      if Self.isRegularFile(snapshot.memoURL) { try? FileManager.default.removeItem(at: snapshot.memoURL) }
+      done.append(snapshot)
     }
-    return removed
+    return done
   }
 }

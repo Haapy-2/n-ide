@@ -220,4 +220,57 @@ struct SnapshotTests {
     let date = Calendar(identifier: .gregorian).date(from: parts)!
     #expect(Snapshot.stamp(for: date) == "20270102-030405", "한 자리 수도 0을 채워 이름순이 시간순이 되게")
   }
+
+  // MARK: - 덮지 않기, 지우면 안 되는 것
+
+  @Test func neverOverwritesExistingName() throws {
+    let folder = try TestFolder()
+    defer { folder.remove() }
+    let (store, id) = try makeStore(folder)
+    let snapshotFolder = store.layout.snapshotFolder(id)
+    try FileManager.default.createDirectory(at: snapshotFolder, withIntermediateDirectories: true)
+    // 다른 곳이 먼저 같은 이름(과 그다음 번호)을 써 둔 경우
+    try Data("먼저 1".utf8).write(to: snapshotFolder.appending(path: "20261111-090000-auto.md"))
+    try Data("먼저 2".utf8).write(to: snapshotFolder.appending(path: "20261111-090000-auto-2.md"))
+
+    let snapshot = try #require(try store.writeSnapshot("새것", episode: id, kind: .auto, at: time(0)))
+
+    #expect(snapshot.id == "20261111-090000-auto-3.md")
+    #expect(try String(contentsOf: snapshotFolder.appending(path: "20261111-090000-auto.md"), encoding: .utf8) == "먼저 1")
+    #expect(try String(contentsOf: snapshotFolder.appending(path: "20261111-090000-auto-2.md"), encoding: .utf8) == "먼저 2")
+    #expect(try !folder.fileNames(in: snapshotFolder).contains { $0.hasSuffix(".tmp") }, "임시 파일이 남지 않는다")
+  }
+
+  @Test func atomicWriteWithoutReplacingLeavesExistingFile() throws {
+    let folder = try TestFolder()
+    defer { folder.remove() }
+    let url = folder.url.appending(path: "있는 파일.md")
+    try Data("원래".utf8).write(to: url)
+
+    #expect(throws: AtomicFile.AlreadyExists.self) { try AtomicFile.write(Data("새것".utf8), to: url, replacing: false) }
+    #expect(try String(contentsOf: url, encoding: .utf8) == "원래")
+    #expect(try folder.fileNames(in: folder.url) == ["있는 파일.md"])
+  }
+
+  @Test func pruneNeverTouchesFoldersOrLinks() throws {
+    let folder = try TestFolder()
+    defer { folder.remove() }
+    let (store, id) = try makeStore(folder)
+    let snapshotFolder = store.layout.snapshotFolder(id)
+    try FileManager.default.createDirectory(at: snapshotFolder, withIntermediateDirectories: true)
+    // 이름만 스냅샷처럼 생긴 폴더(안에 파일)와, 본문 파일을 가리키는 바로가기
+    let fakeFolder = snapshotFolder.appending(path: "20261111-085900-auto.md")
+    try FileManager.default.createDirectory(at: fakeFolder, withIntermediateDirectories: true)
+    try Data("안의 파일".utf8).write(to: fakeFolder.appending(path: "중요.txt"))
+    try FileManager.default.createSymbolicLink(
+      at: snapshotFolder.appending(path: "20261111-085901-auto.md"), withDestinationURL: store.layout.episodeFile(id))
+    for index in 0..<3 { try store.writeSnapshot("\(index)", episode: id, kind: .auto, at: time(index)) }
+
+    #expect(try store.snapshots(of: id).count == 3, "폴더와 바로가기는 목록에 없다")
+    try store.pruneSnapshots(of: id, keeping: 1)
+
+    #expect(FileManager.default.fileExists(atPath: fakeFolder.appending(path: "중요.txt").path(percentEncoded: false)))
+    #expect(try store.readEpisode(id) == "본문", "바로가기가 가리키는 본문은 그대로")
+    #expect(try store.snapshots(of: id).map(\.id) == ["20261111-090002-auto.md"])
+  }
 }

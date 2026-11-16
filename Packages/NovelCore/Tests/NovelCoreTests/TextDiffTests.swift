@@ -129,4 +129,28 @@ struct TextDiffTests {
     #expect(olds == Array(0..<200), "과거 줄이 빠짐없이 순서대로")
     #expect(news == Array(0..<200), "현재 줄이 빠짐없이 순서대로")
   }
+
+  /// 어떤 모양의 글이 와도 멈추거나 죽지 않고, 줄이 빠짐없이 한 번씩 나온다.
+  @Test func oddInputsNeverCrash() throws {
+    let samples = [
+      "", "\n", "\n\n\n", "가", " ", "  가  나  ", "\r\n가\r\n", "😀\n👨‍👩‍👧\n",
+      String(repeating: "같은 줄\n", count: 50), String(repeating: "가 ", count: 300),
+      "한글".decomposedStringWithCanonicalMapping, "\u{200B}보이지 않는 글자",
+    ]
+    for old in samples {
+      for new in samples {
+        let result = try TextDiff(old: old, new: new)
+        var olds = 0
+        var news = 0
+        for row in result.rows {
+          switch row {
+          case .same, .changed: olds += 1; news += 1
+          case .removed: olds += 1
+          case .added: news += 1
+          }
+        }
+        #expect(olds == result.oldLines.count && news == result.newLines.count, "\(old.debugDescription) → \(new.debugDescription)")
+      }
+    }
+  }
 }

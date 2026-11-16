@@ -60,7 +60,9 @@ final class EpisodeSnapshotter {
 
   /// 회차를 떠날 때. 이번에 고쳤으면 본문을 받아 `leave`로 남긴다.
   func leave(_ id: EpisodeID, text: () -> String?) {
-    guard edited.remove(id) != nil, let text = text() else { return }
+    // 본문을 못 받으면(편집기가 이미 없음) 표시를 남겨 둔다. 앱 종료 때 "찍을 것이 남음"으로 보이게.
+    guard edited.contains(id), let text = text() else { return }
+    edited.remove(id)
     enqueue(text, id, .leave)
   }
 
