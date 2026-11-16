@@ -78,6 +78,9 @@ row("설정 바꿔 모양 다시 입히기 (10만 자)", perf("style_100k_ms", a
 # 글자 수 전체 계산(메인 스레드 밖). SPEC에 목표가 없어 입력 멈춤 뒤 한 프레임(16ms)을 기준으로 둔다.
 row("글자 수 전체 계산 (5,000자)", perf("count_5k_ms", core), 16)
 row("글자 수 전체 계산 (10만 자, 편집기 문자열)", perf("count_100k_bridged_ms", core), 16)
+# 스냅샷 찍기(메인 스레드 밖): 50개 찬 회차에 비교 → 쓰기 → 정리. SPEC에 목표가 없어 회차 전환 목표(50ms)를 기준으로 둔다.
+row("스냅샷 찍기 (5,000자, 50개 찬 회차)", perf("snapshot_5k_ms", core), 50)
+row("스냅샷 찍기 (10만 자, 50개 찬 회차)", perf("snapshot_100k_ms", core), 50)
 runs = [float(v) for v in re.findall(r"launch_ms ([0-9.]+)", launch)]
 hung = launch.count("launch_hung")
 row("앱 실행 → 입력 가능 (첫 실행 제외 5회)", runs[1:], 500)

@@ -8,7 +8,7 @@ import Foundation
 ///   project.json.bak
 ///   episodes/<회차ID>.md
 ///   notes/<노트ID>.md
-///   snapshots/<회차ID>/<시각>.md
+///   snapshots/<회차ID>/<시각>-<종류>.md (+ 메모는 .memo)
 /// ```
 public struct ProjectLayout: Sendable {
   public let root: URL

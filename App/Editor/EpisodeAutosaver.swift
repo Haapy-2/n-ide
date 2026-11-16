@@ -179,7 +179,7 @@ final class EpisodeAutosaver {
     conflicts[id] = Conflict(episodeID: id, disk: diskVersion)
     let store = store
     Task {
-      let snapshot = try? await Task.detached { try store.writeConflictSnapshot(text, episode: id) }.value
+      let snapshot = try? await Task.detached { try store.writeSnapshot(text, episode: id, kind: .conflict)?.url }.value
       conflicts[id]?.snapshot = snapshot
       conflicts[id]?.isReady = true
     }
@@ -191,7 +191,7 @@ final class EpisodeAutosaver {
     let store = store
     // 남기지 못하는 경우는 디스크에 쓸 수 없는 경우라 아래 저장도 실패하고 앱 쪽 본문은 메모리에 남는다.
     _ = try? await Task.detached {
-      try store.writeConflictSnapshot(conflict.disk.text, episode: id, label: "external")
+      try store.writeSnapshot(conflict.disk.text, episode: id, kind: .external)
     }.value
     guard conflicts.removeValue(forKey: id) != nil else { return }
     // 디스크의 지금 상태를 알고 덮어쓴다는 뜻으로 기준을 바꾼다. 그 뒤 또 바뀌었으면 저장 직전 확인이 다시 묻는다.

@@ -168,8 +168,8 @@ struct ExternalChangeTests {
     (parts.year, parts.month, parts.day, parts.hour, parts.minute, parts.second) = (2026, 11, 11, 9, 45, 12)
     let date = Calendar(identifier: .gregorian).date(from: parts)!
 
-    let first = try store.writeConflictSnapshot("앱 쪽 본문", episode: id, at: date)
-    let second = try store.writeConflictSnapshot("앱 쪽 본문 2", episode: id, at: date)
+    let first = try #require(try store.writeSnapshot("앱 쪽 본문", episode: id, kind: .conflict, at: date)).url
+    let second = try #require(try store.writeSnapshot("앱 쪽 본문 2", episode: id, kind: .conflict, at: date)).url
 
     #expect(first.lastPathComponent == "20261111-094512-conflict.md")
     #expect(second.lastPathComponent == "20261111-094512-conflict-2.md", "같은 초에 또 찍어도 앞 것을 덮어쓰지 않는다")
