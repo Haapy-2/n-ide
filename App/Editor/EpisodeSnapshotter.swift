@@ -72,6 +72,11 @@ final class EpisodeSnapshotter {
     return try await enqueue(text, id, .manual).value
   }
 
+  /// 되돌리기 직전 지금 본문을 `restore`로 남긴다(11e). 같은 내용이어도 늘 찍는다: 메모로 "언제 무엇으로 되돌렸나"를 남기려고.
+  func takeRestore(_ id: EpisodeID, text: String, memo: String) async throws -> Snapshot? {
+    try await enqueue(text, id, .restore, memo: memo).value
+  }
+
   /// 휴지통으로 보낸 회차는 더 찍지 않는다.
   func forget(_ id: EpisodeID) {
     edited.remove(id)
@@ -108,17 +113,19 @@ final class EpisodeSnapshotter {
   }
 
   @discardableResult
-  private func enqueue(_ text: String, _ id: EpisodeID, _ kind: SnapshotKind) -> Task<Snapshot?, any Error> {
+  private func enqueue(
+    _ text: String, _ id: EpisodeID, _ kind: SnapshotKind, memo: String? = nil
+  ) -> Task<Snapshot?, any Error> {
     let previous = tail
     let retention = settings.retention
     let task = Task<Snapshot?, any Error> {
       await previous?.value
       defer { pending -= 1 }
       do {
-        return try await write(text, id, kind, retention: retention)
+        return try await write(text, id, kind, memo: memo, retention: retention)
       } catch {
         // 못 찍었으면(디스크가 꽉 찼을 때 등) "고친 회차"로 되돌린다. 아직 그 회차를 보고 있으면 다음 간격이나 떠날 때 다시 찍는다.
-        if kind != .manual { edited.insert(id) }
+        if kind.isPrunable { edited.insert(id) }
         throw error
       }
     }
@@ -127,10 +134,14 @@ final class EpisodeSnapshotter {
     return task
   }
 
-  private func write(_ text: String, _ id: EpisodeID, _ kind: SnapshotKind, retention: Int) async throws -> Snapshot? {
+  private func write(
+    _ text: String, _ id: EpisodeID, _ kind: SnapshotKind, memo: String?, retention: Int
+  ) async throws -> Snapshot? {
     let store = store
     return try await Task.detached {
-      let snapshot = try store.writeSnapshot(text, episode: id, kind: kind, skipIfSameAsLatest: kind != .manual)
+      // 자동·떠날 때만 마지막과 같으면 건너뛴다. 직접·복원 전은 사용자가 그 순간을 남기려는 것이라 늘 찍는다.
+      let snapshot = try store.writeSnapshot(
+        text, episode: id, kind: kind, memo: memo, skipIfSameAsLatest: kind.isPrunable)
       // 정리가 실패해도 방금 찍은 것은 남았으니 실패로 치지 않는다. 다음에 찍을 때 다시 정리한다.
       if kind.isPrunable { _ = try? store.pruneSnapshots(of: id, keeping: retention) }
       return snapshot

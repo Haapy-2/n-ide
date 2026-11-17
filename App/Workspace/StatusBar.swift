@@ -48,7 +48,7 @@ struct StatusBar: View {
   private var isCovering: Bool {
     switch autosaver.status {
     case .failed, .retrying: true
-    default: !fade.isHidden
+    default: autosaver.restoreNotice != nil || !fade.isHidden
     }
   }
 
@@ -74,7 +74,16 @@ struct StatusBar: View {
       Text("저장 중…")
         .opacity(fade.isHidden ? 0 : 1)
     default:
-      EmptyView()
+      if let notice = autosaver.restoreNotice {
+        HStack(spacing: 4) {
+          Text(notice)
+          Text("·")
+          Button("취소") { autosaver.undoRestore() }
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.ink)
+            .help("되돌리기 전으로 (⌘Z)")
+        }
+      }
     }
   }
 }

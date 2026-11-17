@@ -79,7 +79,10 @@ struct WorkspaceView: View {
     }
     .overlay {
       if let snapshotBrowser {
-        SnapshotPanel(browser: snapshotBrowser, title: snapshotPanelTitle, onClose: closeSnapshots)
+        SnapshotPanel(
+          browser: snapshotBrowser, title: snapshotPanelTitle,
+          hasConflict: model?.autosaver.conflicts[snapshotBrowser.episodeID] != nil,
+          onClose: closeSnapshots, onRestore: restoreSnapshot)
       }
     }
     .frame(minWidth: 720, minHeight: 480)
@@ -228,6 +231,17 @@ struct WorkspaceView: View {
     browser.cancel()
     snapshotBrowser = nil
     model?.autosaver.endPanel(hadFocus: editorHadFocus)
+  }
+
+  /// 고른 스냅샷으로 되돌리고 판을 닫는다. 커서는 편집기로 돌아가고 상태 줄에 "취소"가 뜬다.
+  private func restoreSnapshot() {
+    guard let model, let browser = snapshotBrowser else { return }
+    Task {
+      guard await browser.restoreSelected(with: model.autosaver), snapshotBrowser === browser else { return }
+      browser.cancel()
+      snapshotBrowser = nil
+      model.autosaver.endPanel(hadFocus: true)
+    }
   }
 
   private var snapshotPanelTitle: String {

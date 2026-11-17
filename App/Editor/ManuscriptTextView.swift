@@ -79,6 +79,26 @@ final class ManuscriptTextView: NSTextView {
     scroll(.zero)
   }
 
+  /// 스냅샷으로 되돌리기(11e): 본문 전체를 실행 취소 한 단위로 바꾼다. 회차 전환과 달리 기록을 비우지 않아 ⌘Z 한 번으로 돌아간다.
+  /// 바꿨으면 true. 커서는 같은 자리(본문이 짧아졌으면 끝)에 둔다.
+  func replaceAllUndoably(with text: String, actionName: String) -> Bool {
+    finishComposition()
+    let full = NSRange(location: 0, length: (string as NSString).length)
+    guard string != text else { return false }
+    let cursor = selectedRange().location
+    let undo = episodeUndoManager
+    undo.beginUndoGrouping()
+    defer { undo.endUndoGrouping() }
+    // shouldChangeText가 실행 취소 기록을 남기고, didChangeText가 바뀜 알림(자동 저장·글자 수)을 보낸다.
+    guard shouldChangeText(in: full, replacementString: text) else { return false }
+    textStorage?.replaceCharacters(in: full, with: NSAttributedString(string: text, attributes: style.textAttributes))
+    didChangeText()
+    undo.setActionName(actionName)
+    setSelectedRange(NSRange(location: min(cursor, (text as NSString).length), length: 0))
+    scrollRangeToVisible(selectedRange())
+    return true
+  }
+
   /// 앱 밖에서 바뀐 본문으로 갈아 끼운다(8단계). 회차 전환과 달리 커서와 스크롤 위치를 되도록 그대로 둔다.
   /// 실행 취소 기록은 비운다: 옛 본문 기준의 기록을 새 본문에 적용하면 엉뚱한 곳이 바뀐다.
   func reloadText(with text: String) {

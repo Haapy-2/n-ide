@@ -7,7 +7,10 @@ import SwiftUI
 struct SnapshotPanel: View {
   let browser: SnapshotBrowser
   let title: String
+  /// 외부 변경 충돌을 아직 고르지 않았으면 되돌리기를 막는다(PLAN 10장 6번).
+  var hasConflict = false
   let onClose: () -> Void
+  var onRestore: () -> Void = {}
   @State private var editingMemoID: String?
 
   var body: some View {
@@ -56,14 +59,21 @@ struct SnapshotPanel: View {
         detail
           .frame(maxWidth: .infinity, maxHeight: .infinity)
       }
-      if let message = browser.errorMessage {
-        Text(message)
-          .font(.system(size: 12))
-          .foregroundStyle(Color.error)
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .padding(.horizontal, 16)
-          .padding(.vertical, 6)
+      Rectangle().fill(Color.rule).frame(height: 1)
+      HStack(spacing: 12) {
+        if let message = browser.errorMessage {
+          Text(message)
+            .font(.system(size: 12))
+            .foregroundStyle(Color.error)
+            .lineLimit(2)
+        }
+        Spacer(minLength: 0)
+        Button("이 버전으로 되돌리기", action: onRestore)
+          .disabled(hasConflict || !browser.canRestore)
+          .help(restoreHelp)
       }
+      .padding(.horizontal, 16)
+      .padding(.vertical, 10)
     }
     .background(Color.paper)
     .clipShape(RoundedRectangle(cornerRadius: 12))
@@ -86,6 +96,12 @@ struct SnapshotPanel: View {
     case .idle:
       Color.clear
     }
+  }
+
+  private var restoreHelp: String {
+    if hasConflict { return "바깥에서 바뀐 내용을 먼저 골라 주세요" }
+    if case .ready(let diff) = browser.comparison, !diff.hasChanges { return "지금 글과 같아요" }
+    return "지금 글은 ‘복원 전’ 스냅샷으로 남아요"
   }
 
   private var pastTitle: String {

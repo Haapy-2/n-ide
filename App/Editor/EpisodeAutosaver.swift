@@ -36,6 +36,8 @@ final class EpisodeAutosaver {
   private(set) var conflicts: [EpisodeID: Conflict] = [:]
   /// 저장이 0.5초 넘게 걸릴 때만 켜진다. 평소 저장은 화면에 아무것도 띄우지 않는다(DESIGN.md 4장).
   private(set) var showsSavingIndicator = false
+  /// 되돌린 직후 상태 줄에 띄우는 알림(`14:23:05 버전으로 되돌렸어요`). 다음 입력이나 회차 전환에 사라진다.
+  private(set) var restoreNotice: String?
 
   let store: ProjectStore
   let snapshots: EpisodeSnapshotter
@@ -101,6 +103,7 @@ final class EpisodeAutosaver {
   /// 회차를 떠날 때. 지금 본문을 바로 복사해 저장을 시작하되 기다리지 않는다.
   /// 저장이 끝나길 기다렸다 다음 회차를 보여주면 전환이 끊겨 보이기 때문이다.
   func leaveEpisode() {
+    restoreNotice = nil
     snapshotLeaving()
     let left = episodeID
     episodeID = nil
@@ -175,10 +178,55 @@ final class EpisodeAutosaver {
 
   /// 편집기에서 사용자가 글을 고칠 때마다.
   func textDidChange() {
+    restoreNotice = nil
     guard let episodeID else { return }
-    changes[episodeID, default: 0] += 1
-    snapshots.noteEdit(episodeID)
+    noteChange(episodeID)
+  }
+
+  private func noteChange(_ id: EpisodeID) {
+    changes[id, default: 0] += 1
+    snapshots.noteEdit(id)
     scheduleSave()
+  }
+
+  // MARK: - 스냅샷으로 되돌리기 (11e, PLAN 10장 6번)
+
+  enum RestoreError: Error {
+    /// 그 회차가 편집기에 열려 있지 않다.
+    case notOpen
+    /// 외부 변경 충돌을 아직 고르지 않았다.
+    case conflict
+    /// 복원 전 스냅샷을 남기는 사이 회차나 본문이 바뀌었다.
+    case changedMeanwhile
+  }
+
+  /// 지금 본문을 `restore` 스냅샷(메모 포함)으로 먼저 남기고, 남긴 뒤에만 편집기 본문을 바꾼다.
+  /// 남기지 못하면 오류를 던지고 본문은 그대로다. 바꾼 뒤의 저장은 평소 자동 저장에 맡긴다(본문 파일을 직접 덮지 않음).
+  /// 지금과 같아서 바꿀 것이 없으면 false.
+  func restore(_ id: EpisodeID, to text: String, memo: String, notice: String) async throws -> Bool {
+    guard id == episodeID, let textView else { throw RestoreError.notOpen }
+    guard conflicts[id] == nil else { throw RestoreError.conflict }
+    let current = textView.string
+    guard current != text else { return false }
+    _ = try await snapshots.takeRestore(id, text: current, memo: memo)
+    // 기다리는 사이 바뀌었으면 손대지 않는다. 남긴 스냅샷은 그대로 둔다(지워서 좋을 것이 없다).
+    guard id == episodeID, conflicts[id] == nil, self.textView === textView, !textView.hasMarkedText(),
+      textView.string == current
+    else { throw RestoreError.changedMeanwhile }
+    guard textView.replaceAllUndoably(with: text, actionName: "스냅샷으로 되돌리기") else { return false }
+    // 편집기 알림으로도 들어오지만(두 번 세어도 해롭지 않다), 알림이 없는 경우에도 저장되게 직접 센다.
+    noteChange(id)
+    restoreNotice = notice
+    return true
+  }
+
+  /// 상태 줄의 "취소": 되돌리기 직전으로. 알림이 떠 있으면 그 뒤로 고친 것이 없으므로 실행 취소 맨 위가 되돌리기다.
+  func undoRestore() {
+    guard restoreNotice != nil, let textView, let id = episodeID else { return }
+    restoreNotice = nil
+    textView.undo(nil)
+    noteChange(id)
+    textView.regainFocusAfterPanel()
   }
 
   /// 지금 저장하고, 이미 시작된 저장까지 모두 끝날 때까지 기다린다(창 비활성, 창 닫기, 종료).

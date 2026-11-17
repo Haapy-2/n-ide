@@ -31,6 +31,8 @@ final class SnapshotBrowser {
   private(set) var selectedID: String?
   private(set) var comparison: Comparison = .idle
   private(set) var errorMessage: String?
+  /// 되돌리는 중(버튼을 두 번 누르지 않게)
+  private(set) var isRestoring = false
 
   @ObservationIgnored private let store: ProjectStore
   @ObservationIgnored private var job: Task<TextDiff, any Error>?
@@ -83,6 +85,32 @@ final class SnapshotBrowser {
       case .failure: comparison = .failed("이 스냅샷을 읽지 못했어요.")
       }
     }
+  }
+
+  /// 고른 스냅샷이 지금과 달라 되돌릴 수 있는지. 비교가 끝나야 안다.
+  var canRestore: Bool {
+    guard !isRestoring, case .ready(let diff) = comparison else { return false }
+    return diff.hasChanges
+  }
+
+  /// 고른 스냅샷으로 회차 전체를 되돌린다(11e). 되돌렸으면 true(판을 닫는다). 실패하면 판에 이유를 띄운다.
+  func restoreSelected(with autosaver: EpisodeAutosaver) async -> Bool {
+    guard canRestore, let item = selected else { return false }
+    isRestoring = true
+    defer { isRestoring = false }
+    let store = store
+    let date = item.snapshot.date
+    let time = SnapshotListView.time(date)
+    let memo = "\(date.formatted(.dateTime.month().day())) \(time) 버전으로 되돌림"
+    do {
+      let text = try await Task.detached(priority: .userInitiated) { try store.readSnapshot(item.snapshot) }.value
+      return try await autosaver.restore(episodeID, to: text, memo: memo, notice: "\(time) 버전으로 되돌렸어요")
+    } catch EpisodeAutosaver.RestoreError.conflict {
+      errorMessage = "바깥에서 바뀐 내용을 먼저 골라 주세요."
+    } catch {
+      errorMessage = "되돌리지 못했어요. 지금 글은 그대로예요."
+    }
+    return false
   }
 
   /// 판을 닫을 때 하던 비교를 멈춘다.
