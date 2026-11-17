@@ -4,9 +4,15 @@ import XCTest
 /// 단축키 표와 사용자가 바꾼 단축키(PLAN.md 12장).
 @MainActor
 final class ShortcutSettingsTests: XCTestCase {
+  /// 지금 저장과 저장하면서 스냅샷 찍기는 같은 ⌘S지만 동시에 쓰이지 않으므로(isActive) 쓰이는 명령끼리만 본다.
   func testDefaultsHaveNoClashes() {
-    let combos = ShortcutCommand.allCases.compactMap(\.defaultCombo)
-    XCTAssertEqual(Set(combos).count, combos.count, "기본 단축키끼리 겹친다")
+    for savesWithSnapshot in [false, true] {
+      var settings = ShortcutSettings()
+      settings.setSavesWithSnapshot(savesWithSnapshot)
+      let combos = ShortcutCommand.allCases.filter(settings.isActive).compactMap(\.defaultCombo)
+      XCTAssertEqual(Set(combos).count, combos.count, "기본 단축키끼리 겹친다")
+      XCTAssertEqual(settings.combo(for: .saveWithSnapshot), KeyCombo("s", [.command]), "켜고 끌 때 기본 키가 비지 않는다")
+    }
     for command in ShortcutCommand.allCases {
       guard let combo = command.defaultCombo else { continue }
       XCTAssertNil(ShortcutSettings().problem(with: combo, for: command), command.title)
@@ -66,5 +72,59 @@ final class ShortcutSettingsTests: XCTestCase {
     XCTAssertEqual(KeyCombo.key(forKeyCode: 126), .upArrow)
     XCTAssertEqual(KeyCombo.key(forKeyCode: 51), .delete)
     XCTAssertNil(KeyCombo.key(forKeyCode: 122), "F1 같은 기능 키는 받지 않는다")
+  }
+
+  // MARK: - 저장하면서 스냅샷 찍기
+
+  func testLockedCellsFollowToggle() {
+    var settings = ShortcutSettings()
+    XCTAssertFalse(settings.savesWithSnapshot, "기본은 끔")
+    XCTAssertTrue(settings.isLocked(.saveWithSnapshot))
+    XCTAssertFalse(settings.isLocked(.saveNow))
+    XCTAssertFalse(settings.isLocked(.takeSnapshot))
+    settings.setSavesWithSnapshot(true)
+    XCTAssertFalse(settings.isLocked(.saveWithSnapshot))
+    XCTAssertTrue(settings.isLocked(.saveNow))
+    XCTAssertTrue(settings.isLocked(.takeSnapshot))
+    XCTAssertFalse(settings.isLocked(.showSnapshots), "다른 칸은 그대로")
+    XCTAssertEqual(settings.saveMenuShortcut, settings.shortcut(.saveWithSnapshot))
+  }
+
+  func testToggleSurvivesStorageAndResetAll() {
+    var settings = ShortcutSettings()
+    settings.setSavesWithSnapshot(true)
+    settings.set(KeyCombo("k", [.command, .control]), for: .saveWithSnapshot)
+    let restored = ShortcutSettings(storageText: settings.storageText)
+    XCTAssertEqual(restored, settings)
+    XCTAssertTrue(restored.savesWithSnapshot)
+    XCTAssertTrue(restored.hasCustomizations)
+    var reset = restored
+    reset.resetAll()
+    XCTAssertEqual(reset, ShortcutSettings())
+  }
+
+  func testSaveWithSnapshotProblems() {
+    var settings = ShortcutSettings()
+    settings.setSavesWithSnapshot(true)
+    // 지금 저장은 쓰이지 않아 ⌘S를 그대로 써도 된다
+    XCTAssertNil(settings.problem(with: KeyCombo("s", [.command]), for: .saveWithSnapshot))
+    // 잠긴 스냅샷 찍기의 키는 가져올 수 없다
+    XCTAssertEqual(settings.problem(with: KeyCombo("s", [.command, .control]), for: .saveWithSnapshot), .usedByLocked(.takeSnapshot))
+    XCTAssertEqual(settings.problem(with: KeyCombo("n", [.command]), for: .saveWithSnapshot), .usedBy(.newEpisode))
+    // 꺼져 있으면 전용 키는 다른 명령과 부딪치지 않는다
+    settings.setSavesWithSnapshot(false)
+    XCTAssertNil(settings.problem(with: KeyCombo("s", [.command]), for: .saveNow))
+  }
+
+  /// 켜 있는 동안 ⌘S를 다른 명령이 가져갔다면, 끌 때 지금 저장의 키를 비워 같은 키 두 개가 듣지 않게 한다.
+  func testToggleClearsClashingKey() {
+    var settings = ShortcutSettings()
+    settings.setSavesWithSnapshot(true)
+    settings.set(KeyCombo("k", [.command, .control]), for: .saveWithSnapshot)
+    XCTAssertNil(settings.problem(with: KeyCombo("s", [.command]), for: .showSnapshots))
+    settings.set(KeyCombo("s", [.command]), for: .showSnapshots)
+    settings.setSavesWithSnapshot(false)
+    XCTAssertNil(settings.combo(for: .saveNow))
+    XCTAssertEqual(settings.combo(for: .showSnapshots), KeyCombo("s", [.command]))
   }
 }

@@ -138,11 +138,12 @@ final class EpisodeAutosaver {
   }
 
   /// 직접 찍기(⌃⌘S): 저장을 먼저 끝낸 뒤 지금 본문을 찍는다. 열린 회차가 없으면 nil.
-  func takeManualSnapshot() async throws -> Snapshot? {
+  /// `skipIfUnchanged`면 마지막 스냅샷과 같을 때도 nil(저장하면서 스냅샷 찍기).
+  func takeManualSnapshot(skipIfUnchanged: Bool = false) async throws -> Snapshot? {
     guard let id = episodeID else { return nil }
     await flush()
     guard id == episodeID, let text = textView?.string else { return nil }
-    return try await snapshots.takeManual(id, text: text)
+    return try await snapshots.takeManual(id, text: text, skipIfUnchanged: skipIfUnchanged)
   }
 
   /// 떠 있는 판(⇧⌘S)을 열 때: 편집기의 조합을 끝내고 초점을 내려놓은 뒤 지금 본문을 한 번 복사해 준다.

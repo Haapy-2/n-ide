@@ -45,11 +45,20 @@ struct ShortcutsSettingsPane: View {
   }
 
   private func row(_ command: ShortcutCommand) -> some View {
-    VStack(alignment: .trailing, spacing: 4) {
+    let isLocked = settings.isLocked(command)
+    return VStack(alignment: .trailing, spacing: 4) {
       HStack {
+        if command == .saveWithSnapshot {
+          // 켜면 이 칸의 키가 풀리고 지금 저장·스냅샷 찍기 칸이 잠긴다(2026-11-18 사용자 요청).
+          Toggle(command.title, isOn: savesWithSnapshot)
+            .labelsHidden()
+            .toggleStyle(.switch)
+            .controlSize(.small)
+        }
         Text(command.title)
+          .foregroundStyle(isLocked ? .secondary : .primary)
         Spacer()
-        if settings.isCustomized(command) {
+        if settings.isCustomized(command), !isLocked {
           Button("기본값") { update { $0.reset(command) } }
             .buttonStyle(.borderless)
             .foregroundStyle(.secondary)
@@ -59,10 +68,22 @@ struct ShortcutsSettingsPane: View {
           combo: settings.combo(for: command),
           isRecording: recording == command,
           onStart: {
+            guard !settings.isLocked(command) else { return }
             notice = nil
             recording = command
           },
           onFinish: { finish($0, for: command) })
+        .disabled(isLocked)
+        // 칸 글자가 .primary로 칠해져 있어 흐림이 잘 안 보여서 따로 흐리게 한다.
+        .opacity(isLocked ? 0.45 : 1)
+        .help(isLocked ? lockedHelp(command) : "")
+      }
+      if command == .saveWithSnapshot {
+        Text("켜면 이 키 한 번으로 저장하고 스냅샷도 찍어요. 글이 마지막 스냅샷과 같으면 스냅샷은 건너뛰어요. 켜 있는 동안 지금 저장·스냅샷 찍기 키는 잠겨요.")
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .fixedSize(horizontal: false, vertical: true)
       }
       if let notice, notice.command == command {
         Text(notice.text)
@@ -73,8 +94,21 @@ struct ShortcutsSettingsPane: View {
     }
   }
 
+  private func lockedHelp(_ command: ShortcutCommand) -> String {
+    command == .saveWithSnapshot ? "왼쪽 스위치를 켜면 바꿀 수 있어요" : "‘저장하면서 스냅샷 찍기’가 켜져 있어 잠겼어요"
+  }
+
+  /// 켜고 끌 때 녹화 중이던 칸과 안내는 그만둔다(잠기는 칸이 녹화 중일 수 있어서).
+  private var savesWithSnapshot: Binding<Bool> {
+    Binding(get: { settings.savesWithSnapshot }, set: { on in
+      recording = nil
+      notice = nil
+      update { $0.setSavesWithSnapshot(on) }
+    })
+  }
+
   private func finish(_ outcome: ShortcutRecorder.Outcome, for command: ShortcutCommand) {
-    guard recording == command else { return }
+    guard recording == command, !settings.isLocked(command) else { return }
     recording = nil
     switch outcome {
     case .cancelled:
@@ -91,6 +125,8 @@ struct ShortcutsSettingsPane: View {
         notice = (command, "\(combo.displayText)는 \(owner)에 쓰여서 고를 수 없어요.")
       case .usedBy(let owner):
         pendingTake = PendingTake(combo: combo, command: command, owner: owner)
+      case .usedByLocked(let owner):
+        notice = (command, "\(combo.displayText)는 잠긴 ‘\(owner.title)’이(가) 쓰고 있어서 고를 수 없어요.")
       }
     }
   }

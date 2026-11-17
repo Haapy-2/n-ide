@@ -184,6 +184,7 @@ struct WorkspaceView: View {
       selectPrevious: neighbor(of: index, offset: -1),
       selectNext: neighbor(of: index, offset: 1),
       saveNow: model.map { model in { saveNow(model) } },
+      saveWithSnapshot: model.map { model in { saveWithSnapshot(model) } },
       takeSnapshot: selection == nil || snapshotBrowser != nil ? nil : { takeSnapshot() },
       showSnapshots: selection == nil || snapshotBrowser != nil ? nil : { showSnapshots() })
   }
@@ -214,6 +215,25 @@ struct WorkspaceView: View {
       let hasConflict = selection.map { model.autosaver.conflicts[$0] != nil } ?? false
       if model.autosaver.status == .idle, !hasConflict {
         toasts.show("저장했어요")
+      }
+    }
+  }
+
+  /// 저장하면서 스냅샷 찍기(설정에서 켰을 때 ⌘S). 저장이 실패하면 찍지 않는다(실패는 상태 줄이 알림).
+  /// 글이 마지막 스냅샷과 같으면 찍지 않고 "저장했어요"만.
+  private func saveWithSnapshot(_ model: ProjectModel) {
+    Task {
+      await model.autosaver.flush()
+      let hasConflict = selection.map { model.autosaver.conflicts[$0] != nil } ?? false
+      guard model.autosaver.status == .idle, !hasConflict else { return }
+      do {
+        if let snapshot = try await model.autosaver.takeManualSnapshot(skipIfUnchanged: true) {
+          toasts.show("스냅샷 저장됨", action: memoAction(for: snapshot))
+        } else {
+          toasts.show("저장했어요")
+        }
+      } catch {
+        alertMessage = "저장은 했지만 스냅샷을 찍지 못했어요. \((error as? ProjectError)?.userMessage ?? error.localizedDescription)"
       }
     }
   }

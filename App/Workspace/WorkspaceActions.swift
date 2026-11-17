@@ -10,6 +10,8 @@ struct WorkspaceActions {
   var selectNext: (() -> Void)?
   /// 기다리지 않고 지금 저장(⌘S). 자동 저장이 이미 하는 일을 앞당길 뿐이다.
   var saveNow: (() -> Void)?
+  /// 저장하고 이어서 스냅샷(설정 → 단축키에서 켰을 때 지금 저장 대신). 글이 마지막 스냅샷과 같으면 스냅샷은 건너뛴다.
+  var saveWithSnapshot: (() -> Void)?
   /// 지금 회차 스냅샷 찍기(⌃⌘S)
   var takeSnapshot: (() -> Void)?
   /// 지금 회차 스냅샷 판 열기(⇧⌘S)

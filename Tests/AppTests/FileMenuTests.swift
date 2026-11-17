@@ -59,4 +59,29 @@ final class FileMenuTests: XCTestCase {
     let show = try XCTUnwrap(menuItem("스냅샷 보기…", in: NSApp.mainMenu))
     XCTAssertEqual(show.keyEquivalent, "")
   }
+
+  /// 저장하면서 스냅샷 찍기를 켜면 "지금 저장" 항목이 그 전용 키를 갖는다. 끄면 원래 키로 돌아온다.
+  func testSaveWithSnapshotKeyReachesMenu() throws {
+    let store = ShortcutStore.shared
+    let previous = store.settings
+    defer {
+      store.update { $0 = previous }
+      refreshMenus()
+    }
+    store.update {
+      $0.resetAll()
+      $0.setSavesWithSnapshot(true)
+      $0.set(KeyCombo("k", [.command, .control]), for: .saveWithSnapshot)
+    }
+    refreshMenus()
+    let save = try XCTUnwrap(menuItem("지금 저장", in: NSApp.mainMenu))
+    XCTAssertEqual(save.keyEquivalent, "k")
+    XCTAssertEqual(save.keyEquivalentModifierMask.intersection(.deviceIndependentFlagsMask), [.command, .control])
+
+    store.update { $0.setSavesWithSnapshot(false) }
+    refreshMenus()
+    let restored = try XCTUnwrap(menuItem("지금 저장", in: NSApp.mainMenu))
+    XCTAssertEqual(restored.keyEquivalent, "s")
+    XCTAssertEqual(restored.keyEquivalentModifierMask.intersection(.deviceIndependentFlagsMask), [.command])
+  }
 }

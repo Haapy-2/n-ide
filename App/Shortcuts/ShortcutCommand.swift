@@ -4,6 +4,8 @@ import Foundation
 /// 새 메뉴 명령을 만들면 여기에 한 줄 더하고 메뉴에서 `ShortcutSettings.shortcut(_:)`로 읽는다.
 enum ShortcutCommand: String, CaseIterable, Identifiable {
   case newProject, openOther, switchProject, saveNow
+  /// 저장하면서 스냅샷 찍기(2026-11-18 사용자 요청). 설정에서 켰을 때만 쓰이고, 그동안 지금 저장·스냅샷 찍기 칸은 잠긴다.
+  case saveWithSnapshot
   case takeSnapshot, showSnapshots
   case newEpisode, previousEpisode, nextEpisode, renameEpisode, trashEpisode, episodeGoal
 
@@ -16,6 +18,7 @@ enum ShortcutCommand: String, CaseIterable, Identifiable {
     case .openOther: "다른 위치에서 열기…"
     case .switchProject: "작품 전환…"
     case .saveNow: "지금 저장"
+    case .saveWithSnapshot: "저장하면서 스냅샷 찍기"
     case .takeSnapshot: "스냅샷 찍기"
     case .showSnapshots: "스냅샷 보기…"
     case .newEpisode: "새 회차"
@@ -29,7 +32,7 @@ enum ShortcutCommand: String, CaseIterable, Identifiable {
 
   var category: Category {
     switch self {
-    case .newProject, .openOther, .switchProject, .saveNow: .file
+    case .newProject, .openOther, .switchProject, .saveNow, .saveWithSnapshot: .file
     case .takeSnapshot, .showSnapshots: .snapshot
     case .newEpisode, .previousEpisode, .nextEpisode, .renameEpisode, .trashEpisode, .episodeGoal: .episode
     }
@@ -41,6 +44,8 @@ enum ShortcutCommand: String, CaseIterable, Identifiable {
     case .openOther: KeyCombo("o", [.command])
     case .switchProject: KeyCombo("o", [.command, .shift])
     case .saveNow: KeyCombo("s", [.command])
+    // 지금 저장과 같은 ⌘S. 둘은 동시에 쓰이지 않아서 겹치지 않는다(ShortcutSettings.isActive).
+    case .saveWithSnapshot: KeyCombo("s", [.command])
     // ⌥⌘S는 시스템 "사이드바 보기"와 겹쳐 ⌃⌘S로(2026-11-17 사용자 결정)
     case .takeSnapshot: KeyCombo("s", [.command, .control])
     case .showSnapshots: KeyCombo("s", [.command, .shift])
