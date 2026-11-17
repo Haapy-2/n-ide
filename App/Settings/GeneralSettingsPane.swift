@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 설정 창 "일반": 테마, 목표, 되돌리기 확인 창.
+/// 설정 창 "일반": 테마, 목표, 스냅샷, 되돌리기 확인 창, 알림.
 struct GeneralSettingsPane: View {
   @AppStorage(AppSettingKey.appTheme) private var theme: AppTheme = .system
   @AppStorage(AppSettingKey.undoConfirmPause) private var undoPause: UndoConfirmPause = .week
@@ -8,6 +8,7 @@ struct GeneralSettingsPane: View {
   @AppStorage(AppSettingKey.autoSnapshotEnabled) private var autoSnapshot = true
   @AppStorage(AppSettingKey.autoSnapshotMinutes) private var snapshotMinutes = 30
   @AppStorage(AppSettingKey.snapshotRetention) private var snapshotRetention = 50
+  @AppStorage(AppSettingKey.toastDuration) private var toastDuration = EditorSetting.toastDuration.defaultValue
 
   var body: some View {
     Form {
@@ -52,6 +53,15 @@ struct GeneralSettingsPane: View {
         Text("되돌리기")
       } footer: {
         Text("사이드바에서 ⌘Z로 회차 작업을 되돌릴 때 묻는 창이에요. 그 창에서 \"다시 묻지 않기\"를 고르면 위 기간 동안 묻지 않아요.")
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+      }
+      Section {
+        NumberSlider(title: "유지 시간", value: $toastDuration, setting: .toastDuration) { String(format: "%.1f초", $0) }
+      } header: {
+        Text("알림")
+      } footer: {
+        Text("저장·스냅샷 알림이 화면에 머무는 시간이에요. 마우스를 올려 두면 기다려요.")
           .font(.footnote)
           .foregroundStyle(.secondary)
       }

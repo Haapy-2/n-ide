@@ -24,6 +24,8 @@ enum AppSettingKey {
   static let undoConfirmPause = "undoConfirmPause"
   /// 사이드바 되돌리기 확인 창이 쉬는 끝 시각(1970 기준 초). 없으면 매번 묻는다.
   static let undoConfirmPausedUntil = "undoConfirmPausedUntil"
+  /// 토스트(편집 영역 오른쪽 위 알림)가 머무는 초. 0.5~5, 0.5 단위 (기본: 2)
+  static let toastDuration = "toastDuration"
   /// 자동 스냅샷 켜기 (기본: 켬). 꺼도 회차를 떠날 때와 직접 찍기는 그대로
   static let autoSnapshotEnabled = "autoSnapshotEnabled"
   /// 자동 스냅샷 간격, 분. 5·10·15·30·60 중 하나 (기본: 30)

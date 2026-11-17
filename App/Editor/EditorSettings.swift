@@ -35,6 +35,8 @@ struct EditorSetting {
   static let lineWidthInCharacters = EditorSetting(defaultValue: 40, range: 30...55, step: 1)
   /// 글자 수 갱신 주기(초). 0 = 실시간
   static let characterCountInterval = EditorSetting(defaultValue: 0.2, range: 0...0.3, step: 0.1)
+  /// 토스트가 머무는 시간(초). 편집기 설정은 아니지만 같은 슬라이더·맞추기 규칙을 쓰려고 여기에 둔다.
+  static let toastDuration = EditorSetting(defaultValue: 2, range: 0.5...5, step: 0.5)
 
   /// 저장된 값을 쓸 수 있는 값으로 맞춘다. UserDefaults는 사용자가 터미널(`defaults write`)로도 바꿀 수 있어서
   /// 범위 밖이나 단위에 안 맞는 값이 들어올 수 있다.

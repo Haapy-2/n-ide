@@ -16,8 +16,10 @@ struct WorkspaceView: View {
   @State private var settingGoal: EpisodeID?
   @State private var goalText = ""
   @State private var alertMessage: String?
-  /// 방금 직접 찍은 스냅샷. nil이 아니면 메모 칸이 뜬다.
+  /// 메모를 달 스냅샷. 토스트의 "메모 달기"를 누르면 채워지고, nil이 아니면 메모 칸이 뜬다.
   @State private var memoTarget: Snapshot?
+  /// 편집 영역 오른쪽 위 토스트(⌘S 저장, 스냅샷 찍기).
+  @State private var toasts = ToastCenter()
   @State private var memoText = ""
   /// 열려 있는 스냅샷 판(⇧⌘S). nil이면 닫힘.
   @State private var snapshotBrowser: SnapshotBrowser?
@@ -64,6 +66,7 @@ struct WorkspaceView: View {
       detail
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.paper)
+        .overlay { ToastOverlay(center: toasts) }
         // 제목과 버튼을 편집 영역 쪽 툴바에 붙인다. 사이드바 쪽에 두면 사이드바 폭만큼만 보여서 긴 제목이 잘린다.
         .navigationTitle(project.title)
         .toolbar {
@@ -107,7 +110,7 @@ struct WorkspaceView: View {
       Text("\(goalBasis.title) 기준으로 셉니다. 지금 새 회차는 \(project.settings.defaultEpisodeGoal.formatted())자로 시작해요.")
     }
     .modifier(undoConfirmationDialog)
-    .alert("스냅샷을 찍었어요", isPresented: isWritingMemo) {
+    .alert("스냅샷 메모", isPresented: isWritingMemo) {
       TextField("메모 (선택)", text: $memoText)
       Button("확인") { commitMemo() }
       Button("메모 없이", role: .cancel) { memoTarget = nil }
@@ -180,7 +183,7 @@ struct WorkspaceView: View {
       setGoalSelected: selection.map { id in { beginSetGoal(id) } },
       selectPrevious: neighbor(of: index, offset: -1),
       selectNext: neighbor(of: index, offset: 1),
-      saveNow: model.map { model in { Task { await model.autosaver.flush() } } },
+      saveNow: model.map { model in { saveNow(model) } },
       takeSnapshot: selection == nil || snapshotBrowser != nil ? nil : { takeSnapshot() },
       showSnapshots: selection == nil || snapshotBrowser != nil ? nil : { showSnapshots() })
   }
@@ -203,14 +206,32 @@ struct WorkspaceView: View {
     }
   }
 
-  /// 저장을 먼저 끝내고 찍은 뒤 메모 칸을 띄운다. 비워 두고 엔터를 눌러도 된다.
+  /// ⌘S. 자동 저장에는 토스트를 띄우지 않고(SPEC 5장), 직접 눌러 성공했을 때만 "저장했어요".
+  /// 실패나 외부 변경 충돌은 지금처럼 상태 줄·확인 창이 알려 주므로 토스트를 띄우지 않는다.
+  private func saveNow(_ model: ProjectModel) {
+    Task {
+      await model.autosaver.flush()
+      let hasConflict = selection.map { model.autosaver.conflicts[$0] != nil } ?? false
+      if model.autosaver.status == .idle, !hasConflict {
+        toasts.show("저장했어요")
+      }
+    }
+  }
+
+  private func memoAction(for snapshot: Snapshot) -> Toast.Action {
+    Toast.Action(title: "메모 달기") {
+      memoText = ""
+      memoTarget = snapshot
+    }
+  }
+
+  /// 저장을 먼저 끝내고 찍은 뒤 토스트를 띄운다. 메모 칸은 "메모 달기"를 누를 때만 뜬다(글 흐름을 덜 끊으려고).
   private func takeSnapshot() {
     guard let model else { return }
     Task {
       do {
         guard let snapshot = try await model.autosaver.takeManualSnapshot() else { return }
-        memoText = ""
-        memoTarget = snapshot
+        toasts.show("스냅샷을 찍었어요", action: memoAction(for: snapshot))
       } catch {
         alertMessage = "스냅샷을 찍지 못했어요. \((error as? ProjectError)?.userMessage ?? error.localizedDescription)"
       }

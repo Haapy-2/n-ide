@@ -27,6 +27,23 @@ final class DesignSnapshotTests: XCTestCase {
     }
   }
 
+  /// 토스트 두 가지(문구만, 글자 버튼 있음). 유리 바탕은 화면 밖 그리기에서 하얗게 찍히므로 실제 앱에서도 본다.
+  func testRenderToasts() throws {
+    guard ProcessInfo.processInfo.environment["NOVEL_SNAPSHOTS"] == "1" else {
+      throw XCTSkip("Scripts/snapshots.sh로 실행할 때만 스냅샷을 만든다")
+    }
+    let view = VStack(alignment: .trailing, spacing: 12) {
+      ToastView(toast: Toast(message: "저장했어요"))
+      ToastView(toast: Toast(message: "스냅샷을 찍었어요", action: .init(title: "메모 달기") {}))
+    }
+    .padding(24)
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+    .background(Color.paper)
+    for dark in [false, true] {
+      try render(view, name: "toast", size: CGSize(width: 420, height: 140), dark: dark, stage: "12")
+    }
+  }
+
   /// 11d 스냅샷 판: 과거 원고와 고친 지금 원고를 실제처럼 비교해 띄운다.
   func testRenderSnapshotPanel() async throws {
     guard ProcessInfo.processInfo.environment["NOVEL_SNAPSHOTS"] == "1" else {
