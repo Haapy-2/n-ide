@@ -38,7 +38,8 @@ struct EpisodeEditorPane: View {
               autosaver.textDidChange()
               fade.noteInput()
             },
-            onFocusLost: { Task { await autosaver.flush() } },
+            // 본문 복사는 그 자리에서 한다(창이 닫히며 편집기가 먼저 사라질 수 있다). 끝나기는 기다리지 않는다.
+            onFocusLost: { autosaver.startSave() },
             onFocusGained: { Task { await autosaver.checkExternalChange() } },
             onReady: {
               autosaver.attach($0)

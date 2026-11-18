@@ -140,4 +140,43 @@ final class EpisodeAutosaverTests: XCTestCase {
     XCTAssertTrue(autosaver.holdsBaseline(for: episode))
     XCTAssertEqual(autosaver.pendingText(for: episode), "첫 문장 못 쓴 문장")
   }
+
+  /// 저장이 실패한 뒤 더 새 본문을 쓰는 중에 돌아오면, 옛 실패 본문이 아니라 더 새 본문을 보여 준다.
+  /// 옛 본문을 보여 주면 이어 쓴 글이 그사이 쓴 글("둘")을 덮어 조용히 사라졌다(2026-11-19 점검 ①).
+  func testQuickReturnAfterFailedSaveShowsNewestText() async throws {
+    let episodes = store.layout.episodesFolder.path(percentEncoded: false)
+    try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: episodes)
+    type(" 하나")
+    await autosaver.flush()
+    XCTAssertEqual(autosaver.pendingText(for: episode), "첫 문장 하나", "실패한 본문은 메모리에")
+
+    // 디스크가 돌아온 뒤 더 쓰고 떠난다. 새 저장은 시작만 했고 아직 안 끝났다.
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: episodes)
+    type(" 둘")
+    autosaver.leaveEpisode()
+
+    // 바로 돌아와 이어 쓴다(회차 전환과 같은 순서).
+    let back = try XCTUnwrap(autosaver.pendingText(for: episode))
+    XCTAssertEqual(back, "첫 문장 하나 둘")
+    textView.replaceAllText(with: back)
+    autosaver.begin(episode: episode)
+    type(" 셋")
+    await autosaver.flush()
+
+    XCTAssertEqual(try store.readEpisode(episode), "첫 문장 하나 둘 셋")
+    XCTAssertFalse(autosaver.hasUnsavedChanges)
+    XCTAssertEqual(autosaver.status, .idle)
+  }
+
+  /// 창이 비활성화되거나 닫힐 때는 본문을 그 자리에서 복사해 저장을 시작한다.
+  /// `Task` 안으로 미루면 창 닫기 처리가 끝난 뒤에 돌아, 그사이 편집기가 사라지면 마지막 입력을 못 읽는다(2026-11-19 점검 ②).
+  func testStartSaveCopiesTextRightAway() async throws {
+    type(" 닫기 직전")
+
+    autosaver.startSave()
+
+    XCTAssertEqual(autosaver.pendingText(for: episode), "첫 문장 닫기 직전", "기다리기 전에 이미 복사돼 있다")
+    await autosaver.flush()
+    XCTAssertEqual(try store.readEpisode(episode), "첫 문장 닫기 직전")
+  }
 }

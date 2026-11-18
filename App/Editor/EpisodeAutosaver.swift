@@ -3,7 +3,7 @@ import NovelCore
 import Observation
 
 /// 회차 자동 저장 (SPEC 6장, 7장 4번).
-/// - 입력이 멈추고 1초 뒤 저장한다. 회차 전환·창 비활성·앱 종료 때는 바로 저장한다(`flush`).
+/// - 입력이 멈추고 1초 뒤 저장한다. 회차 전환·창 비활성·앱 종료 때는 바로 저장한다(`startSave`·`flush`).
 /// - 실제 쓰기는 `SaveQueue`가 순서대로 처리하고 실패하면 재시도한다.
 /// - 끝내 실패하면 그 회차 본문을 메모리(`unsaved`)에 들고 있다가, 그 회차를 다시 열 때 디스크 대신 이것을 보여준다.
 /// - 텍스트 저장소는 읽기만 한다. 그래서 한글 조합 중에 저장해도 조합이 끊기지 않는다.
@@ -48,10 +48,10 @@ final class EpisodeAutosaver {
   /// 회차별 변경 번호. 입력할 때마다 1씩 오른다.
   @ObservationIgnored private var changes: [EpisodeID: Int] = [:]
   @ObservationIgnored private var savedChanges: [EpisodeID: Int] = [:]
-  /// 저장에 실패한 회차의 본문.
-  @ObservationIgnored private var unsaved: [EpisodeID: String] = [:]
+  /// 저장에 실패한 회차의 본문. 변경 번호를 함께 들어, 쓰는 중인 본문과 어느 쪽이 더 새것인지 가린다.
+  @ObservationIgnored private var unsaved: [EpisodeID: SaveJob] = [:]
   /// 파일에 쓰는 중인 회차의 본문.
-  @ObservationIgnored private var inFlight: [EpisodeID: String] = [:]
+  @ObservationIgnored private var inFlight: [EpisodeID: SaveJob] = [:]
   @ObservationIgnored private var running: [UUID: Task<Void, Never>] = [:]
   @ObservationIgnored private var pendingSave: Task<Void, Never>?
   /// 회차마다 앱이 마지막으로 읽거나 쓴 디스크 상태. 외부 변경 판단의 기준.
@@ -87,8 +87,12 @@ final class EpisodeAutosaver {
 
   /// 회차를 열 때 디스크 대신 보여줄 본문: 저장에 실패해 메모리에 남은 것, 또는 아직 쓰는 중인 것. 없으면 nil.
   /// (빠르게 A→B→A로 돌아왔을 때 A 저장이 끝나기 전 디스크의 옛 본문을 읽지 않기 위해서다.)
+  /// 둘 다 있으면(실패한 뒤 더 쓰고 떠나 새 저장이 아직 쓰는 중) 변경 번호가 큰 쪽이 더 새 본문이다.
+  /// 옛 실패 본문을 보여 주면 이어 쓴 글이 그사이 쓴 글을 덮는다(2026-11-19 점검).
   func pendingText(for id: EpisodeID) -> String? {
-    unsaved[id] ?? inFlight[id]
+    guard let failed = unsaved[id] else { return inFlight[id]?.text }
+    guard let writing = inFlight[id], writing.change > failed.change else { return failed.text }
+    return writing.text
   }
 
   /// 편집기에 새 회차가 올라간 뒤 부른다. 디스크에서 읽었으면 그때의 상태(`version`)를 함께 준다.
@@ -119,6 +123,12 @@ final class EpisodeAutosaver {
 
   /// 디스크 기준을 들고 있는 회차인지(테스트용).
   func holdsBaseline(for id: EpisodeID) -> Bool { disk[id] != nil }
+
+  /// 창을 닫을 때 그 자리에서 부른다: `finish`의 앞부분(떠날 때 스냅샷·저장 시작)만 기다리지 않고 한다.
+  /// 창 닫기 처리가 끝나면 편집기(약한 참조)가 먼저 사라질 수 있어서, 본문은 그 전에 복사해 둔다.
+  func startFinishing() {
+    snapshotLeaving()
+  }
 
   /// 창을 닫거나 앱을 끌 때: 떠날 때 스냅샷을 남기고, 저장과 스냅샷 쓰기가 다 끝날 때까지 기다린다.
   func finish() async {
@@ -230,11 +240,17 @@ final class EpisodeAutosaver {
     textView.regainFocusAfterPanel()
   }
 
-  /// 지금 저장하고, 이미 시작된 저장까지 모두 끝날 때까지 기다린다(창 비활성, 창 닫기, 종료).
-  func flush() async {
+  /// 지금 본문을 그 자리에서 복사해 저장을 시작만 한다(창 비활성). 끝나기는 기다리지 않는다.
+  /// `Task` 안에서 부르면 창 닫기 처리가 끝난 뒤에야 돌아, 그사이 편집기(약한 참조)가 사라지면 본문을 못 읽는다.
+  func startSave() {
     pendingSave?.cancel()
     pendingSave = nil
     if let job = makeSaveJob() { start(job) }
+  }
+
+  /// 지금 저장하고, 이미 시작된 저장까지 모두 끝날 때까지 기다린다(⌘S, 창 닫기, 종료).
+  func flush() async {
+    startSave()
     while let task = running.values.first {
       await task.value
     }
@@ -287,7 +303,7 @@ final class EpisodeAutosaver {
     guard conflicts[id] == nil else { return }
     // 지금 보고 있는 회차면 저장 작업에 복사해 둔 것보다 화면의 본문이 더 새것이다.
     let text = (id == episodeID ? textView?.string : nil) ?? appText
-    unsaved[id] = text
+    unsaved[id] = SaveJob(id: id, change: changes[id, default: 0], text: text)
     conflicts[id] = Conflict(episodeID: id, disk: diskVersion)
     let store = store
     Task {
@@ -309,7 +325,7 @@ final class EpisodeAutosaver {
     // 디스크의 지금 상태를 알고 덮어쓴다는 뜻으로 기준을 바꾼다. 그 뒤 또 바뀌었으면 저장 직전 확인이 다시 묻는다.
     disk[id] = conflict.disk
     changes[id, default: 0] += 1
-    let text = id == episodeID ? textView?.string : unsaved[id]
+    let text = id == episodeID ? textView?.string : unsaved[id]?.text
     if let text {
       pendingSave?.cancel()
       pendingSave = nil
@@ -358,7 +374,7 @@ final class EpisodeAutosaver {
 
   private func start(_ job: SaveJob) {
     let key = UUID()
-    inFlight[job.id] = job.text
+    inFlight[job.id] = job
     running[key] = Task {
       await write(job)
       running[key] = nil
@@ -389,21 +405,27 @@ final class EpisodeAutosaver {
         }
       })
       if case .conflict(let diskVersion) = result {
-        if inFlight[job.id] == job.text { inFlight[job.id] = nil }
+        if inFlight[job.id]?.text == job.text { inFlight[job.id] = nil }
         raiseConflict(job.id, disk: diskVersion, appText: job.text)
         if status == .saving || status == .retrying { status = .idle }
         return
       }
       savedChanges[job.id] = max(savedChanges[job.id, default: 0], job.change)
-      // 방금 저장한 본문에는 메모리에 남아 있던 내용도 들어 있으므로 지운다.
-      if savedChanges[job.id, default: 0] >= changes[job.id, default: 0] { unsaved[job.id] = nil }
+      // 메모리에 남아 있던 본문이 방금 저장한 것보다 옛것이면 그 내용은 이미 디스크에 있으므로 지운다.
+      // (그 뒤에 더 친 글이 있어도 지운다. 그 글은 편집기에 있고 다음 저장이 맡는다.)
+      if let failed = unsaved[job.id], failed.change <= job.change { unsaved[job.id] = nil }
       if unsaved.isEmpty { status = .idle }
     } catch {
-      unsaved[job.id] = job.text
-      let message = (error as? ProjectError)?.userMessage ?? error.localizedDescription
-      status = .failed(message)
+      // 더 새 본문이 이미 저장됐거나 메모리에 남아 있으면 이 실패는 지난 일이다. 옛 본문으로 덮지 않는다.
+      if savedChanges[job.id, default: 0] < job.change, (unsaved[job.id]?.change ?? 0) <= job.change {
+        unsaved[job.id] = job
+        let message = (error as? ProjectError)?.userMessage ?? error.localizedDescription
+        status = .failed(message)
+      } else if unsaved.isEmpty {
+        status = .idle
+      }
     }
-    if inFlight[job.id] == job.text { inFlight[job.id] = nil }
+    if inFlight[job.id]?.text == job.text { inFlight[job.id] = nil }
     releaseBaselineIfIdle(job.id)
   }
 }

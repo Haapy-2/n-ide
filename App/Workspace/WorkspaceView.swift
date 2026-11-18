@@ -149,6 +149,8 @@ struct WorkspaceView: View {
     .onDisappear {
       if let model { ActiveWorkspace.shared.deactivate(model) }
       if let model {
+        // 떠날 때 스냅샷과 저장은 편집기가 아직 있는 지금 시작하고, 끝나기를 기다리는 것만 Task로 한다.
+        model.autosaver.startFinishing()
         Task {
           await model.autosaver.finish()
           await model.saveCountsNow()
