@@ -61,6 +61,30 @@ final class InsertionCaretTests: XCTestCase {
     XCTAssertTrue(textView.widenedForCaret(.zero).isEmpty)
   }
 
+  /// 커서를 그린 자리를 기억했다가, 다른 자리로 옮기거나 끄거나 창이 비활성화되면 잊는다(그때 직접 지운다).
+  func testRemembersAndForgetsDrawnCaret() {
+    let textView = makeEditor()
+    let first = secondLineRect(textView)
+    var second = first
+    second.origin.x += 40
+    let image = NSImage(size: textView.bounds.size)
+    image.lockFocusFlipped(true)
+    textView.drawInsertionPoint(in: first, color: .red, turnedOn: true)
+    XCTAssertEqual(textView.lastCaretRect, textView.caretRect(in: first))
+    textView.drawInsertionPoint(in: second, color: .red, turnedOn: true)
+    XCTAssertEqual(textView.lastCaretRect, textView.caretRect(in: second))
+    textView.drawInsertionPoint(in: second, color: .red, turnedOn: false)
+    XCTAssertNil(textView.lastCaretRect)
+    textView.drawInsertionPoint(in: first, color: .red, turnedOn: true)
+    image.unlockFocus()
+    XCTAssertNotNil(textView.lastCaretRect)
+    // 다른 창의 알림은 무시, 앱이 뒤로 가면 지운다.
+    NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: NSWindow())
+    XCTAssertNotNil(textView.lastCaretRect)
+    NotificationCenter.default.post(name: NSApplication.didResignActiveNotification, object: NSApp)
+    XCTAssertNil(textView.lastCaretRect)
+  }
+
   /// 줄 간격을 가장 좁게(1.4) 해도 커서가 줄 칸 밖으로 나가지 않는다.
   func testStaysInsideTightLine() {
     var style = EditorStyle()

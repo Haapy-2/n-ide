@@ -21,6 +21,10 @@ final class ManuscriptTextView: NSTextView {
   /// 전체 줄 수. 본문 글자가 바뀌면 다시 센다(`storageEditedForLineNumbers`).
   private var lineCountCache: Int?
 
+  /// 마지막으로 그린 커서 칸. macOS는 원래 굵기(1pt) 칸만 지우거나, 창이 비활성화될 때 지우는 요청을 따로 보내지 않을 수 있어서
+  /// 2pt 커서가 남았다(2026-11-18 사용자 보고: 다른 창으로 가도 커서가 그 자리에 남음). 이 칸은 앱이 직접 지운다.
+  private(set) var lastCaretRect: NSRect?
+
   var currentLineCount: Int {
     if let lineCountCache { return lineCountCache }
     let count = ParagraphLines.lineCount(in: textStorage?.mutableString ?? "")
@@ -72,6 +76,10 @@ final class ManuscriptTextView: NSTextView {
     selectedTextAttributes = [.backgroundColor: NSColor.selectionToken]
     applyStyle()
     NotificationCenter.default.addObserver(
+      self, selector: #selector(eraseCaretOnDeactivate(_:)), name: NSWindow.didResignKeyNotification, object: nil)
+    NotificationCenter.default.addObserver(
+      self, selector: #selector(eraseCaretOnDeactivate(_:)), name: NSApplication.didResignActiveNotification, object: nil)
+    NotificationCenter.default.addObserver(
       self, selector: #selector(storageEditedForLineNumbers(_:)),
       name: NSTextStorage.didProcessEditingNotification, object: textStorage)
   }
@@ -96,7 +104,30 @@ final class ManuscriptTextView: NSTextView {
 
   // 커서를 글자 크기의 1.2배로(`InsertionCaret.swift`). 끌 때(깜빡임)는 원래 칸 전체를 지워 흔적이 남지 않게 한다.
   override func drawInsertionPoint(in rect: NSRect, color: NSColor, turnedOn flag: Bool) {
-    super.drawInsertionPoint(in: flag ? caretRect(in: rect) : widenedForCaret(rect), color: color, turnedOn: flag)
+    if flag {
+      let caret = caretRect(in: rect)
+      // 다른 자리로 옮겨 그리면 옛 자리는 직접 지운다.
+      if let last = lastCaretRect, last != caret { eraseCaret(last) }
+      lastCaretRect = caret
+      super.drawInsertionPoint(in: caret, color: color, turnedOn: true)
+    } else {
+      super.drawInsertionPoint(in: widenedForCaret(rect), color: color, turnedOn: false)
+      if let last = lastCaretRect { eraseCaret(last) }
+      lastCaretRect = nil
+    }
+  }
+
+  /// 창이 비활성화되거나 앱이 뒤로 가면 커서는 그려지지 않아야 한다. 남아 있는 칸을 지운다.
+  @objc private func eraseCaretOnDeactivate(_ notification: Notification) {
+    if let window = notification.object as? NSWindow, window !== self.window { return }
+    guard let last = lastCaretRect else { return }
+    eraseCaret(last)
+    lastCaretRect = nil
+  }
+
+  private func eraseCaret(_ rect: NSRect) {
+    // 반올림·안티에일리어싱으로 가장자리가 반 픽셀 남지 않게 1pt씩 넓혀 다시 그린다.
+    setNeedsDisplay(rect.insetBy(dx: -1, dy: -1))
   }
 
   // 글자를 고치면 NSTextView는 본문 칸 안만 다시 그리게 한다. 번호 칸은 그 왼쪽 여백이라, 줄이 밀려 내려가도
