@@ -170,6 +170,14 @@ final class ManuscriptTextView: NSTextView {
 
   // MARK: - 폭과 여백
 
+  /// NSTextView는 텍스트 칸 오른쪽 끝보다 오른쪽 점을 자기 것으로 보지 않아, 오른쪽 여백 클릭이 뒤의 clip view로 가서
+  /// 커서가 움직이지 않았다(2026-11-18 실제 클릭 기록으로 확인). 본문 폭을 고정해 오른쪽 여백이 넓으므로 편집기 안이면 직접 받는다.
+  override func hitTest(_ point: NSPoint) -> NSView? {
+    if let hit = super.hitTest(point) { return hit }
+    guard !isHidden else { return nil }
+    return frame.contains(point) ? self : nil
+  }
+
   override func setFrameSize(_ newSize: NSSize) {
     var size = newSize
     // 마지막 줄을 화면 가운데까지 끌어올릴 수 있도록 보이는 높이의 절반만큼 아래에 여유를 둔다.
