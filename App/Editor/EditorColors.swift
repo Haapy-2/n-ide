@@ -4,6 +4,7 @@ import AppKit
 extension NSColor {
   static let paper = NSColor(named: "paper")!
   static let ink = NSColor(named: "ink")!
+  static let inkMuted = NSColor(named: "inkMuted")!
   static let accentToken = NSColor(named: "accent")!
 
   /// 선택 영역: accent를 라이트 18%, 다크 28%로 (DESIGN.md 1장).

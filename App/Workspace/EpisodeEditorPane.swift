@@ -21,6 +21,7 @@ struct EpisodeEditorPane: View {
   @AppStorage(AppSettingKey.autoSnapshotEnabled) private var autoSnapshot = true
   @AppStorage(AppSettingKey.autoSnapshotMinutes) private var snapshotMinutes = 30
   @AppStorage(AppSettingKey.snapshotRetention) private var snapshotRetention = 50
+  @AppStorage(AppSettingKey.showsLineNumbers) private var showsLineNumbers = false
 
   var body: some View {
     let style = editorSettings.style
@@ -32,6 +33,7 @@ struct EpisodeEditorPane: View {
           ManuscriptEditor(
             content: content,
             style: style,
+            showsLineNumbers: showsLineNumbers,
             onTextChange: {
               autosaver.textDidChange()
               fade.noteInput()

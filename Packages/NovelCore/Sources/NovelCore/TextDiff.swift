@@ -1,7 +1,7 @@
 import Foundation
 
 /// 두 글의 차이 (11c, PLAN 10장 4번). 과거(old) ↔ 현재(new) 비교 화면이 그대로 그릴 수 있는 모양으로 만든다.
-/// - 줄 = 문단(줄바꿈 하나로 나눔). 같은 줄은 두 칸에 나란히, 지운 줄은 왼쪽만, 넣은 줄은 오른쪽만.
+/// - 줄 = 문단(`ParagraphLines` 규칙, 편집기 줄 번호와 같음). 같은 줄은 두 칸에 나란히, 지운 줄은 왼쪽만, 넣은 줄은 오른쪽만.
 /// - 붙어 있는 "지운 줄"과 "넣은 줄"은 순서대로 짝지어 "고친 줄"로 만든다(두 칸에서 같은 높이).
 /// - 고친 줄 안은 바뀐 크기에 맞춰 칠할 곳을 정한다: 많이 바뀌면 줄 전체, 아니면 어절, 어절 안에서 몇 글자면 그 글자만.
 /// 결과는 화면과 따로 둔다. 나중에 다른 출처(고친 기록)도 같은 모양으로 넘길 수 있게.
@@ -62,9 +62,9 @@ public struct TextDiff: Sendable, Equatable {
   }
 
   /// 빈 글은 줄이 없는 것으로 본다(빈 글 → 새 글이면 모두 "넣은 줄").
+  /// 편집기 줄 번호와 같은 규칙(`ParagraphLines`). 예전에는 `"\n"`으로만 나눠서 `\r\n` 파일이 한 줄로 보였다.
   static func lines(_ text: String) -> [String] {
-    if text.isEmpty { return [] }
-    return text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+    ParagraphLines.split(text)
   }
 
   // MARK: - 줄 단위

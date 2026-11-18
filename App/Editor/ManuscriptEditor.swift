@@ -18,6 +18,7 @@ struct ManuscriptEditor: NSViewRepresentable {
 
   let content: Content
   var style = EditorStyle()
+  var showsLineNumbers = false
   /// 사용자가 글을 고칠 때마다 (자동 저장용).
   var onTextChange: () -> Void = {}
   /// 창이 비활성화될 때 (바로 저장용).
@@ -35,6 +36,7 @@ struct ManuscriptEditor: NSViewRepresentable {
     scrollView.backgroundColor = .paper
     let textView = ManuscriptTextView.make()
     textView.style = style
+    textView.showsLineNumbers = showsLineNumbers
     scrollView.documentView = textView
     textView.delegate = context.coordinator
     context.coordinator.textView = textView
@@ -52,6 +54,8 @@ struct ManuscriptEditor: NSViewRepresentable {
     guard let textView = context.coordinator.textView else { return }
     // 조합 중이면 편집기가 본문에 입히는 것을 조합이 끝날 때까지 미룬다(ManuscriptTextView.applyStyle).
     if textView.style != style { textView.style = style }
+    // 그림만 바뀌어 조합 중에도 바로 넣어도 된다.
+    textView.showsLineNumbers = showsLineNumbers
     if context.coordinator.appliedToken != content.token {
       apply(content, to: textView, coordinator: context.coordinator)
     }

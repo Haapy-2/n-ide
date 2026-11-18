@@ -79,6 +79,40 @@ final class EditorPerformanceTests: XCTestCase {
     report("keystroke_realtime_100k_ms", samples)
   }
 
+  /// 줄 번호를 켠 키 입력(11f): 10만 자 회차 거의 끝(보이는 첫 문단 번호를 구하려고 앞을 가장 많이 셈)에서 300번.
+  /// 조합 두 번 + 확정 한 번을 한 글자로, 30번에 한 번은 엔터(줄 수가 바뀌어 보이는 번호를 모두 다시 그리는 가장 무거운 경우).
+  func testKeystrokeLineNumbers100k() throws {
+    let (window, textView) = makeEditorWindow()
+    defer { window.close() }
+    textView.showsLineNumbers = true
+    let text = String(repeating: try store.readEpisode(project.episodes[0].id), count: 20)
+    textView.replaceAllText(with: text)
+    let end = (text as NSString).length - 200
+    textView.setSelectedRange(NSRange(location: end, length: 0))
+    textView.scrollRangeToVisible(textView.selectedRange())
+    settle()
+
+    var samples: [Double] = []
+    let clock = ContinuousClock()
+    for index in 0..<300 {
+      let elapsed = clock.measure {
+        if index % 30 == 29 {
+          textView.insertText("\n", replacementRange: NSRange(location: NSNotFound, length: 0))
+        } else {
+          switch index % 3 {
+          case 0: textView.setMarkedText("ㄱ", selectedRange: NSRange(location: 1, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
+          case 1: textView.setMarkedText("가", selectedRange: NSRange(location: 1, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
+          default: textView.insertText("가", replacementRange: NSRange(location: NSNotFound, length: 0))
+          }
+        }
+        textView.layoutManager?.ensureLayout(for: textView.textContainer!)
+        textView.displayIfNeeded()
+      }
+      samples.append(milliseconds(elapsed))
+    }
+    report("keystroke_line_numbers_100k_ms", samples)
+  }
+
   /// 회차 전환: 이번 실행에서 처음 여는 5,000자 회차를 읽어 편집기에 올리고 레이아웃·그리기를 마칠 때까지.
   func testEpisodeSwitch() throws {
     let (window, textView) = makeEditorWindow()

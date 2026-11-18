@@ -1,4 +1,5 @@
 import AppKit
+import NovelCore
 
 /// 원고 편집용 NSTextView. TextKit 1을 명시적으로 쓴다(SPEC 3장).
 /// 본문 폭을 고정하고 창이 넓으면 가운데 두며, 마지막 줄을 화면 가운데까지 올려 쓸 수 있게 아래 여백을 둔다.
@@ -8,6 +9,24 @@ final class ManuscriptTextView: NSTextView {
   }
   /// 조합 중에 모양이 바뀌어 본문 전체에는 아직 못 입혔다. 조합이 끝나면 입힌다.
   private var needsRestyle = false
+
+  /// 왼쪽 여백에 줄 번호(11f, `LineNumberGutter.swift`). 그림만 바뀌고 본문·선택은 건드리지 않아 조합 중에 바뀌어도 안전하다.
+  var showsLineNumbers = false {
+    didSet {
+      guard showsLineNumbers != oldValue else { return }
+      lineCountCache = nil
+      needsDisplay = true
+    }
+  }
+  /// 전체 줄 수. 본문 글자가 바뀌면 다시 센다(`storageEditedForLineNumbers`).
+  private var lineCountCache: Int?
+
+  var currentLineCount: Int {
+    if let lineCountCache { return lineCountCache }
+    let count = ParagraphLines.lineCount(in: textStorage?.mutableString ?? "")
+    lineCountCache = count
+    return count
+  }
 
   /// 회차마다 따로 쓰는 실행 취소 기록. 회차를 바꾸면 비운다(PLAN.md 세부 기준).
   let episodeUndoManager = UndoManager()
@@ -52,6 +71,42 @@ final class ManuscriptTextView: NSTextView {
     insertionPointColor = .accentToken
     selectedTextAttributes = [.backgroundColor: NSColor.selectionToken]
     applyStyle()
+    NotificationCenter.default.addObserver(
+      self, selector: #selector(storageEditedForLineNumbers(_:)),
+      name: NSTextStorage.didProcessEditingNotification, object: textStorage)
+  }
+
+  // MARK: - 줄 번호 다시 그리기
+
+  /// 줄 수가 바뀌면(엔터·줄 지우기·붙여 넣기·회차 전환) 보이는 번호를 모두 다시 그린다.
+  /// 줄 수가 같으면 아무것도 안 한다. 글자만 친 줄은 아래 `setNeedsDisplay`가 번호 칸까지 넓혀 다시 그린다.
+  /// 읽기만 하므로 조합 중에도 안전하다.
+  @objc private func storageEditedForLineNumbers(_ notification: Notification) {
+    guard showsLineNumbers, let storage = textStorage, storage.editedMask.contains(.editedCharacters) else { return }
+    let old = lineCountCache
+    let count = ParagraphLines.lineCount(in: storage.mutableString)
+    lineCountCache = count
+    if old != count { setNeedsDisplay(visibleRect) }
+  }
+
+  override func drawBackground(in rect: NSRect) {
+    super.drawBackground(in: rect)
+    if showsLineNumbers { drawLineNumbers(in: rect) }
+  }
+
+  // 글자를 고치면 NSTextView는 본문 칸 안만 다시 그리게 한다. 번호 칸은 그 왼쪽 여백이라, 줄이 밀려 내려가도
+  // 옛 번호가 남는다. 줄 번호를 켰을 때만 다시 그릴 곳을 왼쪽 끝까지 넓힌다(본문 칸은 그대로라 비용은 여백 조금).
+  override func setNeedsDisplay(_ invalidRect: NSRect) {
+    super.setNeedsDisplay(showsLineNumbers ? widenedToGutter(invalidRect) : invalidRect)
+  }
+
+  override func setNeedsDisplay(_ rect: NSRect, avoidAdditionalLayout flag: Bool) {
+    super.setNeedsDisplay(showsLineNumbers ? widenedToGutter(rect) : rect, avoidAdditionalLayout: flag)
+  }
+
+  private func widenedToGutter(_ rect: NSRect) -> NSRect {
+    guard !rect.isEmpty, rect.minX > 0 else { return rect }
+    return NSRect(x: 0, y: rect.minY, width: rect.maxX, height: rect.height)
   }
 
   private func applyStyle() {

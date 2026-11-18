@@ -8,6 +8,7 @@ struct EditorSettingsPane: View {
   @AppStorage(AppSettingKey.characterCountInterval) private var countInterval = EditorSetting.characterCountInterval.defaultValue
   @AppStorage(AppSettingKey.statusBarHidesWhileTyping) private var hidesWhileTyping = false
   @AppStorage(AppSettingKey.statusBarHidesWhenIdle) private var hidesWhenIdle = true
+  @AppStorage(AppSettingKey.showsLineNumbers) private var showsLineNumbers = false
 
   var body: some View {
     Form {
@@ -21,6 +22,7 @@ struct EditorSettingsPane: View {
         NumberSlider(title: "줄 간격", value: editor.$lineSpacing, setting: .lineSpacing) { String(format: "%.2f배", $0) }
         NumberSlider(title: "문단 간격", value: editor.$paragraphSpacing, setting: .paragraphSpacing) { String(format: "%.1f줄", $0) }
         NumberSlider(title: "본문 폭", value: editor.$lineWidthInCharacters, setting: .lineWidthInCharacters) { "\(Int($0))자" }
+        Toggle("줄 번호 보이기", isOn: $showsLineNumbers)
       }
       Section("상태 줄") {
         Picker("글자 수", selection: $display) {

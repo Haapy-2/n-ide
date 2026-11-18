@@ -27,6 +27,18 @@ final class DesignSnapshotTests: XCTestCase {
     }
   }
 
+  /// 11f 편집기 줄 번호(A안: 왼쪽 여백 끝에서 20pt). 긴 문단은 첫 줄에만 번호가 붙는다.
+  func testRenderLineNumbers() throws {
+    guard ProcessInfo.processInfo.environment["NOVEL_SNAPSHOTS"] == "1" else {
+      throw XCTSkip("Scripts/snapshots.sh로 실행할 때만 스냅샷을 만든다")
+    }
+    for dark in [false, true] {
+      try render(
+        ManuscriptEditor(content: Self.longText, showsLineNumbers: true), name: "editor-line-numbers",
+        size: CGSize(width: 1100, height: 760), dark: dark, stage: "11")
+    }
+  }
+
   /// 토스트 두 가지(문구만, 글자 버튼 있음). 유리 바탕은 화면 밖 그리기에서 하얗게 찍히므로 실제 앱에서도 본다.
   func testRenderToasts() throws {
     guard ProcessInfo.processInfo.environment["NOVEL_SNAPSHOTS"] == "1" else {
