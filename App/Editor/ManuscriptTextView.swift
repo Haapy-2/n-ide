@@ -94,13 +94,21 @@ final class ManuscriptTextView: NSTextView {
     if showsLineNumbers { drawLineNumbers(in: rect) }
   }
 
+  // 커서를 글자 크기의 1.2배로(`InsertionCaret.swift`). 끌 때(깜빡임)는 원래 칸 전체를 지워 흔적이 남지 않게 한다.
+  override func drawInsertionPoint(in rect: NSRect, color: NSColor, turnedOn flag: Bool) {
+    super.drawInsertionPoint(in: flag ? caretRect(in: rect) : widenedForCaret(rect), color: color, turnedOn: flag)
+  }
+
   // 글자를 고치면 NSTextView는 본문 칸 안만 다시 그리게 한다. 번호 칸은 그 왼쪽 여백이라, 줄이 밀려 내려가도
   // 옛 번호가 남는다. 줄 번호를 켰을 때만 다시 그릴 곳을 왼쪽 끝까지 넓힌다(본문 칸은 그대로라 비용은 여백 조금).
+  // 커서 자국을 막으려고 가는 칸은 커서 두께만큼 넓힌다(`InsertionCaret.swift`).
   override func setNeedsDisplay(_ invalidRect: NSRect) {
-    super.setNeedsDisplay(showsLineNumbers ? widenedToGutter(invalidRect) : invalidRect)
+    let rect = widenedForCaret(invalidRect)
+    super.setNeedsDisplay(showsLineNumbers ? widenedToGutter(rect) : rect)
   }
 
   override func setNeedsDisplay(_ rect: NSRect, avoidAdditionalLayout flag: Bool) {
+    let rect = widenedForCaret(rect)
     super.setNeedsDisplay(showsLineNumbers ? widenedToGutter(rect) : rect, avoidAdditionalLayout: flag)
   }
 

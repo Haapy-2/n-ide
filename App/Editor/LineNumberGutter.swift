@@ -78,7 +78,7 @@ extension ManuscriptTextView {
 
   /// 빈 줄(글리프가 없는 줄)의 기준선이 줄 위에서 얼마나 내려오는지. 줄 높이를 고정해서 모든 줄이 같다.
   /// 글자가 있으면 첫 글자의 실제 값을 쓰고, 빈 회차일 때만 식으로 구한다(테스트로 실제 줄과 비교).
-  private var emptyLineBaselineFromTop: CGFloat {
+  var emptyLineBaselineFromTop: CGFloat {
     if let layoutManager, let storage = textStorage, storage.length > 0 {
       return layoutManager.location(forGlyphAt: layoutManager.glyphIndexForCharacter(at: 0)).y
     }
