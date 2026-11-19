@@ -179,4 +179,69 @@ final class EpisodeAutosaverTests: XCTestCase {
     await autosaver.flush()
     XCTAssertEqual(try store.readEpisode(episode), "첫 문장 닫기 직전")
   }
+
+  // MARK: - 다른 회차의 저장 실패 (2026-11-20 점검)
+
+  /// 이 회차 파일 자리에 비어 있지 않은 폴더를 둬서, 이 회차 저장만 실패하게 한다(폴더 권한을 막으면 모든 회차가 실패한다).
+  private func blockSaves(of id: EpisodeID) throws -> URL {
+    let file = store.layout.episodeFile(id)
+    try FileManager.default.removeItem(at: file)
+    try FileManager.default.createDirectory(at: file, withIntermediateDirectories: false)
+    try Data().write(to: file.appending(path: "막음"))
+    return file
+  }
+
+  /// 첫 회차 저장을 실패시킨 채 둘째 회차로 옮긴다. 첫 회차 본문은 메모리에만 있다.
+  private func failFirstThenOpenSecond() async throws -> (blocked: URL, second: EpisodeID) {
+    let second = EpisodeID.make()
+    try store.writeEpisode("둘째 회차", id: second)
+    let blocked = try blockSaves(of: episode)
+    type(" 못 쓴 문장")
+    await autosaver.flush()
+    guard case .failed = autosaver.status else { throw XCTSkip("저장 실패를 만들지 못했다: \(autosaver.status)") }
+    autosaver.leaveEpisode()
+    // 떠날 때 시작한 저장(역시 실패)이 다 끝나길 기다린다. 안 기다리면 그 재시도가 막힘이 풀린 뒤 성공해 버려 이 상황이 재현되지 않는다.
+    await autosaver.flush()
+    textView.replaceAllText(with: "둘째 회차")
+    autosaver.begin(episode: second)
+    return (blocked, second)
+  }
+
+  /// 창 닫기·휴지통·⌘S의 `flush`는 열린 회차만이 아니라 저장에 실패해 메모리에 남은 다른 회차도 다시 저장한다.
+  /// 전에는 열린 회차만 저장해서, 다른 회차 본문은 창을 닫으면 조용히 사라졌다.
+  func testFlushRetriesFailedSaveOfAnotherEpisode() async throws {
+    let (blocked, _) = try await failFirstThenOpenSecond()
+    try FileManager.default.removeItem(at: blocked)
+
+    await autosaver.flush()
+
+    XCTAssertEqual(try store.readEpisode(episode), "첫 문장 못 쓴 문장")
+    XCTAssertFalse(autosaver.hasUnsavedChanges)
+    XCTAssertEqual(autosaver.status, .idle)
+  }
+
+  /// 다른 회차가 저장되어도 앞 회차의 실패 표시는 남는다. 전에는 "저장 중"에 멈춰 실패가 화면에서 사라졌다.
+  func testFailureStaysVisibleWhileAnotherEpisodeSaves() async throws {
+    let (_, second) = try await failFirstThenOpenSecond()
+    type(" 둘째에 쓴 문장")
+
+    await autosaver.flush()
+
+    XCTAssertEqual(try store.readEpisode(second), "둘째 회차 둘째에 쓴 문장")
+    guard case .failed = autosaver.status else { return XCTFail("첫 회차 실패가 보여야 한다: \(autosaver.status)") }
+    XCTAssertTrue(autosaver.hasUnsavedChanges)
+  }
+
+  /// 끝내 저장하지 못한 원고를 다른 곳으로 내보낼 수 있게 제목과 본문을 내준다. 내보낸 뒤에는 남은 일이 없다.
+  func testUnsavedManuscriptsCanBeRescued() async throws {
+    _ = try await failFirstThenOpenSecond()
+    autosaver.episodeTitle = { [episode] id in id == episode ? "1화" : "?" }
+
+    let rescued = autosaver.unsavedManuscripts()
+
+    XCTAssertEqual(rescued.map(\.title), ["1화"])
+    XCTAssertEqual(rescued.map(\.text), ["첫 문장 못 쓴 문장"])
+    autosaver.markRescued()
+    XCTAssertFalse(autosaver.hasUnsavedChanges)
+  }
 }

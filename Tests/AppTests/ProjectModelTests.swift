@@ -122,6 +122,36 @@ final class ProjectModelTests: XCTestCase {
     XCTAssertFalse(model.autosaver.hasUnsavedChanges)
   }
 
+  /// 마지막 원고를 저장하지 못한 회차는 휴지통으로 보내지 않는다. 보내면 휴지통에는 옛 본문만 남고 마지막 원고는 사라진다(2026-11-20 점검).
+  func testTrashRefusesEpisodeWhoseLastTextIsUnsaved() async throws {
+    let model = try makeModel()
+    let first = try await model.addEpisode()
+    let second = try await model.addEpisode()
+    let textView = ManuscriptTextView.make()
+    model.autosaver.attach(textView)
+    model.autosaver.begin(episode: first)
+    // 첫 회차 파일 자리에 폴더를 둬서 이 회차 저장만 실패하게 한다.
+    let file = store.layout.episodeFile(first)
+    try FileManager.default.removeItem(at: file)
+    try FileManager.default.createDirectory(at: file, withIntermediateDirectories: false)
+    try Data().write(to: file.appending(path: "막음"))
+    textView.insertText("지킬 문장", replacementRange: NSRange(location: 0, length: 0))
+    model.autosaver.textDidChange()
+    await model.autosaver.flush()
+    model.autosaver.leaveEpisode()
+    await model.autosaver.flush()
+    textView.replaceAllText(with: "")
+    model.autosaver.begin(episode: second)
+
+    do {
+      try await model.trashEpisode(first)
+      XCTFail("저장하지 못한 원고가 있으면 휴지통으로 보내지 않아야 한다")
+    } catch {}
+
+    XCTAssertTrue(model.episodes.contains { $0.id == first })
+    XCTAssertEqual(model.autosaver.pendingText(for: first), "지킬 문장")
+  }
+
   /// 드래그로 바꾼 순서를 ⌘Z로 직전 순서로 되돌리고, ⇧⌘Z로 다시 바꾼다. 저장된 목록도 따라간다.
   func testUndoAndRedoReorder() async throws {
     let model = try makeModel()

@@ -154,6 +154,7 @@ struct WorkspaceView: View {
         Task {
           await model.autosaver.finish()
           await model.saveCountsNow()
+          Self.rescueUnsaved(model)
         }
       }
     }
@@ -377,6 +378,21 @@ struct WorkspaceView: View {
     Task {
       if alsoForNewEpisodes { model.setDefaultEpisodeGoal(goal, undoManager: undoManager) }
       await model.setGoal(id, to: goal, undoManager: undoManager)
+    }
+  }
+
+  /// 창을 닫았는데도 저장하지 못한 원고가 남았으면 다른 곳에 내보낼지 묻는다.
+  /// 안 내보내면 앱을 끌 때 다시 물을 수 있게 저장기를 붙잡아 둔다(창과 함께 사라지면 원고도 사라진다).
+  private static func rescueUnsaved(_ model: ProjectModel) {
+    let autosaver = model.autosaver
+    guard autosaver.hasUnsavedChanges else { return }
+    // 작품 모델은 창과 함께 사라지므로 제목을 지금 붙잡아 둔다.
+    let titles = Dictionary(model.episodes.map { ($0.id, $0.title) }, uniquingKeysWith: { first, _ in first })
+    autosaver.episodeTitle = { titles[$0] ?? "" }
+    if SystemDialogs.offerRescueOnClose(autosaver.unsavedManuscripts()) {
+      autosaver.markRescued()
+    } else {
+      AutosaverRegistry.shared.keepAlive(autosaver)
     }
   }
 

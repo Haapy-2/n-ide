@@ -48,6 +48,7 @@ final class ProjectModel {
     counter.onCount = { [weak self] id, count in self?.recordCount(count, for: id) }
     autosaver.hasProjectWork = { [weak self] in self.map { $0.countSave != nil || $0.projectSaves > 0 } ?? false }
     autosaver.finishProjectWork = { [weak self] in await self?.finishProjectSaves() }
+    autosaver.episodeTitle = { [weak self] id in self?.project.episodes.first { $0.id == id }?.title ?? "" }
   }
 
   var episodes: [EpisodeMeta] { project.episodes }
@@ -190,6 +191,8 @@ final class ProjectModel {
     let id = record.episode.id
     // 지우기 전에 고친 내용을 저장해 둔다. 휴지통에서 꺼냈을 때 마지막 내용이 들어 있도록.
     await autosaver.flush()
+    // 그래도 저장하지 못했으면 옮기지 않는다. 옮기면 휴지통에는 옛 본문만 가고 메모리의 마지막 원고는 버려진다.
+    guard autosaver.pendingText(for: id) == nil else { throw UnsavedEpisodeError() }
     let file = store.layout.episodeFile(id)
     let moveToTrash = moveToTrash
     record.trashedURL = try await Task.detached {
@@ -317,6 +320,11 @@ final class ProjectModel {
       errorMessage = "회차 목록(project.json)을 저장하지 못했어요. \(reason)"
     }
   }
+}
+
+/// 휴지통으로 보내려는 회차의 마지막 원고를 아직 저장하지 못했다(디스크 꽉 참, 권한 없음 등).
+struct UnsavedEpisodeError: LocalizedError {
+  var errorDescription: String? { "이 회차의 마지막 원고를 아직 저장하지 못했어요. 저장된 뒤에 다시 시도해 주세요." }
 }
 
 /// 회차 하나의 글자 수를 담는 칸. 값이 바뀌면 이 칸을 읽는 뷰(사이드바의 그 줄)만 다시 그려진다.

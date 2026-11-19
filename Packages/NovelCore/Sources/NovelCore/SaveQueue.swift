@@ -41,8 +41,10 @@ public actor SaveQueue {
   /// `save`와 같지만 쓰기 함수가 돌려준 값을 그대로 돌려준다. 옛 저장이라 건너뛰었으면 nil.
   /// (회차 저장이 "썼다"와 "외부 변경과 충돌해 쓰지 않았다"를 알려 주려고 쓴다.)
   /// `onRetry`는 실패한 뒤 다시 시도하기 전마다 불린다(상태 줄의 "다시 시도 중" 표시용).
+  /// `didWrite`는 돌려준 값을 보고 실제로 썼는지 알려 준다. 쓰지 않은 번호는 저장된 것으로 세지 않는다.
   public func save<Value: Sendable>(
     _ target: SaveTarget, change: Int, writeReturning write: @Sendable () throws -> Value,
+    didWrite: @Sendable (Value) -> Bool = { _ in true },
     onRetry: (@Sendable () -> Void)? = nil
   ) async throws -> Value? {
     var attempt = 0
@@ -54,7 +56,7 @@ public actor SaveQueue {
       do {
         // 이 사이에는 await가 없어서, actor 안에서 쓰기 하나가 끝날 때까지 다른 저장이 끼어들지 못한다.
         let value = try write()
-        writtenChange[target] = change
+        if didWrite(value) { writtenChange[target] = change }
         return value
       } catch {
         guard attempt < retryDelays.count else { throw error }

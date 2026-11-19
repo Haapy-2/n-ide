@@ -54,6 +54,8 @@ final class EpisodeAutosaver {
   @ObservationIgnored private var inFlight: [EpisodeID: SaveJob] = [:]
   @ObservationIgnored private var running: [UUID: Task<Void, Never>] = [:]
   @ObservationIgnored private var pendingSave: Task<Void, Never>?
+  /// 마지막 저장 실패의 설명. 실패한 원고가 남아 있는 동안 상태 줄에 보인다.
+  @ObservationIgnored private var lastFailure = ""
   /// 회차마다 앱이 마지막으로 읽거나 쓴 디스크 상태. 외부 변경 판단의 기준.
   @ObservationIgnored let disk = DiskVersions()
 
@@ -79,6 +81,21 @@ final class EpisodeAutosaver {
   var hasUnsavedChanges: Bool {
     if let episodeID, isDirty(episodeID) { return true }
     return !unsaved.isEmpty || !running.isEmpty
+  }
+
+  /// 회차 제목. 저장하지 못한 원고를 다른 곳으로 내보낼 때 파일 이름으로 쓴다. `ProjectModel`이 건다.
+  @ObservationIgnored var episodeTitle: (EpisodeID) -> String = { _ in "" }
+
+  /// 끝내 저장하지 못해 메모리에만 있는 원고(창 닫기·앱 종료 때 다른 곳으로 내보내려고).
+  func unsavedManuscripts() -> [(title: String, text: String)] {
+    unsaved.values.sorted { $0.id.rawValue < $1.id.rawValue }.map { (episodeTitle($0.id), $0.text) }
+  }
+
+  /// 사용자가 다른 곳으로 내보냈다. 메모리의 원고를 놓아 더는 "저장 안 됨"으로 세지 않는다.
+  func markRescued() {
+    for id in unsaved.keys { savedChanges[id] = max(savedChanges[id, default: 0], changes[id, default: 0]) }
+    unsaved.removeAll()
+    if case .failed = status { settleStatus() }
   }
 
   func attach(_ textView: ManuscriptTextView) {
@@ -184,7 +201,7 @@ final class EpisodeAutosaver {
     conflicts[id] = nil
     disk[id] = nil
     snapshots.forget(id)
-    if unsaved.isEmpty, case .failed = status { status = .idle }
+    if case .failed = status { settleStatus() }
   }
 
   /// 편집기에서 사용자가 글을 고칠 때마다.
@@ -249,8 +266,12 @@ final class EpisodeAutosaver {
   }
 
   /// 지금 저장하고, 이미 시작된 저장까지 모두 끝날 때까지 기다린다(⌘S, 창 닫기, 종료).
+  /// 저장에 실패해 메모리에 남은 다른 회차도 다시 저장한다. 열린 회차만 저장하면 창을 닫을 때 그 원고가 사라진다.
   func flush() async {
     startSave()
+    for job in unsaved.values where job.id != episodeID && inFlight[job.id] == nil && conflicts[job.id] == nil {
+      start(job)
+    }
     while let task = running.values.first {
       await task.value
     }
@@ -344,7 +365,13 @@ final class EpisodeAutosaver {
     inFlight[id] = nil
     savedChanges[id] = changes[id, default: 0]
     if id == episodeID { textView?.reloadText(with: version.text) }
-    if unsaved.isEmpty, case .failed = status { status = .idle }
+    if case .failed = status { settleStatus() }
+  }
+
+  /// 저장 하나가 끝나면 상태 줄을 실제 상태에 맞춘다. 마지막 저장의 결과로 덮으면, 다른 회차가 저장된 뒤
+  /// 앞 회차의 실패 표시가 사라지고 "저장 중"에 멈춘다. 충돌(사용자 선택을 기다림)은 실패로 보이지 않는다.
+  private func settleStatus() {
+    status = unsaved.keys.contains { conflicts[$0] == nil } ? .failed(lastFailure) : .idle
   }
 
   private func scheduleSave() {
@@ -399,7 +426,7 @@ final class EpisodeAutosaver {
         let result = try store.writeEpisode(job.text, id: job.id, ifUnchangedSince: disk[job.id])
         if case .written(let version) = result { disk[job.id] = version }
         return result
-      }, onRetry: { [weak self] in
+      }, didWrite: { if case .written = $0 { true } else { false } }, onRetry: { [weak self] in
         Task { @MainActor in
           if self?.status == .saving { self?.status = .retrying }
         }
@@ -407,23 +434,21 @@ final class EpisodeAutosaver {
       if case .conflict(let diskVersion) = result {
         if inFlight[job.id]?.text == job.text { inFlight[job.id] = nil }
         raiseConflict(job.id, disk: diskVersion, appText: job.text)
-        if status == .saving || status == .retrying { status = .idle }
+        settleStatus()
         return
       }
       savedChanges[job.id] = max(savedChanges[job.id, default: 0], job.change)
       // 메모리에 남아 있던 본문이 방금 저장한 것보다 옛것이면 그 내용은 이미 디스크에 있으므로 지운다.
       // (그 뒤에 더 친 글이 있어도 지운다. 그 글은 편집기에 있고 다음 저장이 맡는다.)
       if let failed = unsaved[job.id], failed.change <= job.change { unsaved[job.id] = nil }
-      if unsaved.isEmpty { status = .idle }
+      settleStatus()
     } catch {
       // 더 새 본문이 이미 저장됐거나 메모리에 남아 있으면 이 실패는 지난 일이다. 옛 본문으로 덮지 않는다.
       if savedChanges[job.id, default: 0] < job.change, (unsaved[job.id]?.change ?? 0) <= job.change {
         unsaved[job.id] = job
-        let message = (error as? ProjectError)?.userMessage ?? error.localizedDescription
-        status = .failed(message)
-      } else if unsaved.isEmpty {
-        status = .idle
+        lastFailure = (error as? ProjectError)?.userMessage ?? error.localizedDescription
       }
+      settleStatus()
     }
     if inFlight[job.id]?.text == job.text { inFlight[job.id] = nil }
     releaseBaselineIfIdle(job.id)
@@ -440,9 +465,20 @@ final class AutosaverRegistry {
     weak var value: EpisodeAutosaver?
   }
 
+  /// 창은 닫혔지만 저장하지 못한 원고를 든 저장기. 앱을 끌 때 다시 묻도록 놓지 않는다.
+  private var orphans: [EpisodeAutosaver] = []
+
   func register(_ autosaver: EpisodeAutosaver) {
     items.removeAll { $0.value == nil }
     items.append(WeakAutosaver(value: autosaver))
+  }
+
+  func keepAlive(_ autosaver: EpisodeAutosaver) {
+    if !orphans.contains(where: { $0 === autosaver }) { orphans.append(autosaver) }
+  }
+
+  func release(_ autosaver: EpisodeAutosaver) {
+    orphans.removeAll { $0 === autosaver }
   }
 
   var all: [EpisodeAutosaver] { items.compactMap(\.value) }

@@ -54,10 +54,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let alert = NSAlert()
         alert.alertStyle = .critical
         alert.messageText = "저장하지 못한 원고가 있어요"
-        alert.informativeText = "지금 끄면 마지막으로 고친 내용이 사라져요. 디스크 공간과 작품 폴더 권한을 확인한 뒤 다시 시도해 주세요."
+        alert.informativeText = "지금 끄면 마지막으로 고친 내용이 사라져요. 다른 폴더에 .md 파일로 내보내거나, 디스크 공간과 작품 폴더 권한을 확인한 뒤 다시 시도해 주세요."
+        alert.addButton(withTitle: "다른 곳에 저장…")
         alert.addButton(withTitle: "취소")
         alert.addButton(withTitle: "그래도 종료")
-        sender.reply(toApplicationShouldTerminate: alert.runModal() == .alertSecondButtonReturn)
+        switch alert.runModal() {
+        case .alertFirstButtonReturn:
+          let unsaved = autosavers.filter(\.hasUnsavedChanges)
+          let exported = SystemDialogs.exportUnsaved(unsaved.flatMap { $0.unsavedManuscripts() })
+          if exported { unsaved.forEach { $0.markRescued() } }
+          sender.reply(toApplicationShouldTerminate: exported)
+        case .alertThirdButtonReturn:
+          sender.reply(toApplicationShouldTerminate: true)
+        default:
+          sender.reply(toApplicationShouldTerminate: false)
+        }
       } else {
         sender.reply(toApplicationShouldTerminate: true)
       }

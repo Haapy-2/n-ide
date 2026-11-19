@@ -23,6 +23,18 @@ struct SaveQueueTests {
     #expect(try store.readEpisode(id) == "새 원고")
   }
 
+  /// 쓰기 함수가 "쓰지 않았다"(외부 변경과 충돌)고 알리면 그 번호를 저장된 것으로 세지 않는다.
+  /// 전에는 셌기 때문에, 같은 번호의 다음 저장이 "옛 저장"으로 건너뛰어지고 메모리에 붙잡은 원고까지 지워졌다(2026-11-20 점검).
+  @Test func writeThatDidNotHappenIsNotCounted() async throws {
+    let queue = SaveQueue(retryDelays: fast)
+    let id = EpisodeID.make()
+    let skipped = try await queue.save(.episode(id), change: 3, writeReturning: { false }, didWrite: { $0 })
+    #expect(skipped == false)
+    #expect(await queue.lastWrittenChange(for: .episode(id)) == nil)
+    let again = try await queue.save(.episode(id), change: 3, writeReturning: { true }, didWrite: { $0 })
+    #expect(again == true, "같은 번호라도 앞에서 실제로 쓰지 않았으면 쓴다")
+  }
+
   @Test func sameChangeNumberIsNotWrittenTwice() async throws {
     let queue = SaveQueue(retryDelays: fast)
     let id = EpisodeID.make()
