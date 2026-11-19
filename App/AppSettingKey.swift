@@ -46,4 +46,12 @@ enum AppSettingKey {
   static let lineWidthInCharacters = "lineWidthInCharacters"
   /// 편집기 왼쪽 여백에 줄 번호 (기본: 끔, 11f)
   static let showsLineNumbers = "showsLineNumbers"
+  /// 커서 두께 pt. 1~4, 0.5 단위 (기본: 2)
+  static let caretWidth = "caretWidth"
+  /// 커서 높이, 글자 크기의 배수. 1.0~1.75 (기본: 1.2)
+  static let caretHeightRatio = "caretHeightRatio"
+  /// 라이트 모드 커서 색 `CaretColor.storageText` (기본: 빈 문자열 = accent)
+  static let caretColorLight = "caretColorLight"
+  /// 다크 모드 커서 색 `CaretColor.storageText` (기본: 빈 문자열 = accent)
+  static let caretColorDark = "caretColorDark"
 }

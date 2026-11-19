@@ -7,6 +7,17 @@ final class ManuscriptTextView: NSTextView {
   var style = EditorStyle() {
     didSet { if style != oldValue { applyStyle() } }
   }
+  /// 커서 두께·높이·색(설정 › 커서, `CaretSettings.swift`). 그림만 바뀌어 조합 중에 바뀌어도 안전하다.
+  var caret = CaretStyle() {
+    didSet {
+      guard caret != oldValue else { return }
+      insertionPointColor = caret.dynamicColor
+      // 옛 두께·높이로 그린 커서를 지우고 새 모양으로 바로 다시 그린다.
+      if let last = lastCaretRect { eraseCaret(last) }
+      lastCaretRect = nil
+      updateInsertionPointStateAndRestartTimer(true)
+    }
+  }
   /// 조합 중에 모양이 바뀌어 본문 전체에는 아직 못 입혔다. 조합이 끝나면 입힌다.
   private var needsRestyle = false
 
@@ -72,7 +83,7 @@ final class ManuscriptTextView: NSTextView {
     autoresizingMask = [.width]
     drawsBackground = true
     backgroundColor = .paper
-    insertionPointColor = .accentToken
+    insertionPointColor = caret.dynamicColor
     selectedTextAttributes = [.backgroundColor: NSColor.selectionToken]
     applyStyle()
     NotificationCenter.default.addObserver(

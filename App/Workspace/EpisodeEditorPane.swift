@@ -15,6 +15,7 @@ struct EpisodeEditorPane: View {
   @State private var fade = StatusBarFade()
   /// 설정 창에서 바꾼 글꼴·크기·간격·폭. 바뀌면 열려 있는 편집 영역에 바로 반영된다.
   private var editorSettings = EditorStyleSettings()
+  private var caretSettings = CaretStyleSettings()
   @AppStorage(AppSettingKey.characterCountInterval) private var countInterval = EditorSetting.characterCountInterval.defaultValue
   @AppStorage(AppSettingKey.statusBarHidesWhileTyping) private var hidesWhileTyping = false
   @AppStorage(AppSettingKey.statusBarHidesWhenIdle) private var hidesWhenIdle = true
@@ -34,6 +35,7 @@ struct EpisodeEditorPane: View {
             content: content,
             style: style,
             showsLineNumbers: showsLineNumbers,
+            caret: caretSettings.style,
             onTextChange: {
               autosaver.textDidChange()
               fade.noteInput()

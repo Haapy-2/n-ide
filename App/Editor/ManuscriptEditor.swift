@@ -19,6 +19,7 @@ struct ManuscriptEditor: NSViewRepresentable {
   let content: Content
   var style = EditorStyle()
   var showsLineNumbers = false
+  var caret = CaretStyle()
   /// 사용자가 글을 고칠 때마다 (자동 저장용).
   var onTextChange: () -> Void = {}
   /// 창이 비활성화될 때 (바로 저장용).
@@ -37,6 +38,7 @@ struct ManuscriptEditor: NSViewRepresentable {
     let textView = ManuscriptTextView.make()
     textView.style = style
     textView.showsLineNumbers = showsLineNumbers
+    textView.caret = caret
     scrollView.documentView = textView
     textView.delegate = context.coordinator
     context.coordinator.textView = textView
@@ -56,6 +58,7 @@ struct ManuscriptEditor: NSViewRepresentable {
     if textView.style != style { textView.style = style }
     // 그림만 바뀌어 조합 중에도 바로 넣어도 된다.
     textView.showsLineNumbers = showsLineNumbers
+    if textView.caret != caret { textView.caret = caret }
     if context.coordinator.appliedToken != content.token {
       apply(content, to: textView, coordinator: context.coordinator)
     }

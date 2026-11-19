@@ -19,4 +19,8 @@ extension Color {
   static let diffRemovedStrong = Color("diffRemovedStrong")
   /// 떠 있는 판 뒤를 어둡게 덮는 막
   static let scrim = Color("scrim")
+  /// 커서 팔레트(설정 › 커서). 기본 파랑(accent)·먹색(ink) 말고 더 고를 수 있는 세 가지
+  static let caretRed = Color("caretRed")
+  static let caretGreen = Color("caretGreen")
+  static let caretOrange = Color("caretOrange")
 }
