@@ -16,6 +16,8 @@ struct WorkspaceActions {
   var takeSnapshot: (() -> Void)?
   /// 지금 회차 스냅샷 판 열기(⇧⌘S)
   var showSnapshots: (() -> Void)?
+  /// 사이드바 자리에 작품 전체 검색 패널을 연다(⇧⌘F). 이미 열려 있으면 입력 칸에 초점을 준다.
+  var showSearch: (() -> Void)?
 }
 
 extension FocusedValues {

@@ -7,6 +7,8 @@ enum ShortcutCommand: String, CaseIterable, Identifiable {
   /// 저장하면서 스냅샷 찍기(2026-11-18 사용자 요청). 설정에서 켰을 때만 쓰이고, 그동안 지금 저장·스냅샷 찍기 칸은 잠긴다.
   case saveWithSnapshot
   case takeSnapshot, showSnapshots
+  /// 작품 전체 검색(12단계)
+  case searchProject
   case newEpisode, previousEpisode, nextEpisode, renameEpisode, trashEpisode, episodeGoal
 
   var id: Self { self }
@@ -21,6 +23,7 @@ enum ShortcutCommand: String, CaseIterable, Identifiable {
     case .saveWithSnapshot: "저장하면서 스냅샷 찍기"
     case .takeSnapshot: "스냅샷 찍기"
     case .showSnapshots: "스냅샷 보기…"
+    case .searchProject: "작품 전체 검색"
     case .newEpisode: "새 회차"
     case .previousEpisode: "이전 회차"
     case .nextEpisode: "다음 회차"
@@ -34,6 +37,7 @@ enum ShortcutCommand: String, CaseIterable, Identifiable {
     switch self {
     case .newProject, .openOther, .switchProject, .saveNow, .saveWithSnapshot: .file
     case .takeSnapshot, .showSnapshots: .snapshot
+    case .searchProject: .edit
     case .newEpisode, .previousEpisode, .nextEpisode, .renameEpisode, .trashEpisode, .episodeGoal: .episode
     }
   }
@@ -49,6 +53,7 @@ enum ShortcutCommand: String, CaseIterable, Identifiable {
     // ⌥⌘S는 시스템 "사이드바 보기"와 겹쳐 ⌃⌘S로(2026-11-17 사용자 결정)
     case .takeSnapshot: KeyCombo("s", [.command, .control])
     case .showSnapshots: KeyCombo("s", [.command, .shift])
+    case .searchProject: KeyCombo("f", [.command, .shift])
     case .newEpisode: KeyCombo("n", [.command])
     case .previousEpisode: KeyCombo(.upArrow, [.command, .option])
     case .nextEpisode: KeyCombo(.downArrow, [.command, .option])
@@ -59,11 +64,12 @@ enum ShortcutCommand: String, CaseIterable, Identifiable {
   }
 
   enum Category: CaseIterable {
-    case file, snapshot, episode
+    case file, edit, snapshot, episode
 
     var title: String {
       switch self {
       case .file: "파일"
+      case .edit: "편집"
       case .snapshot: "스냅샷"
       case .episode: "회차"
       }

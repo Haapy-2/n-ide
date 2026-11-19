@@ -79,6 +79,9 @@ final class ManuscriptTextView: NSTextView {
     isContinuousSpellCheckingEnabled = false
     isGrammarCheckingEnabled = false
     isVerticallyResizable = true
+    // 높이 한도를 두지 않는다. 기본값이면 처음 잡힌 높이가 한도가 되어, 더 긴 회차로 바꾼 직후
+    // 아직 배치가 안 된 아래쪽으로는 프로그램이 스크롤하지 못했다(검색 결과로 가기, 2026-11-20).
+    maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
     isHorizontallyResizable = false
     autoresizingMask = [.width]
     drawsBackground = true
@@ -260,6 +263,49 @@ final class ManuscriptTextView: NSTextView {
   }
 
   /// 판을 닫은 뒤: 커서가 있던 자리로 초점을 돌려준다.
+  /// 검색 결과로 가기(12단계): 찾은 곳을 선택해 화면 가운데로 올리고 초점을 받는다.
+  /// 검색 뒤 글이 바뀌어 그 자리에 문구가 없으면 가장 가까운 같은 문구로 간다. 문구가 아예 없으면 움직이지 않는다.
+  func reveal(_ target: TextReveal) {
+    finishComposition()
+    let text = string as NSString
+    var range = NSRange(location: target.location, length: target.length)
+    let options: NSString.CompareOptions = target.caseSensitive ? [] : [.caseInsensitive]
+    let stillThere = NSMaxRange(range) <= text.length
+      && text.substring(with: range).compare(target.query, options: options) == .orderedSame
+    if !stillThere {
+      let nearest = TextSearch.matches(of: target.query, in: string, caseSensitive: target.caseSensitive)
+        .min { abs($0.location - target.location) < abs($1.location - target.location) }
+      guard let nearest else { return }
+      range = NSRange(location: nearest.location, length: nearest.length)
+    }
+    setSelectedRange(range)
+    window?.makeFirstResponder(self)
+    scrollRangeToVisible(range)
+    // 회차를 막 바꿨으면 아직 본문 높이가 다 잡히지 않았다. 한 차례 뒤에 가운데로 옮기고 노란 표시를 띄운다.
+    DispatchQueue.main.async { [weak self] in
+      guard let self, self.selectedRange() == range else { return }
+      self.centerVertically(on: range)
+      self.showFindIndicator(for: range)
+    }
+  }
+
+  private func centerVertically(on range: NSRange) {
+    guard let layoutManager, let textContainer, let clip = enclosingScrollView?.contentView else {
+      scrollRangeToVisible(range)
+      return
+    }
+    // 회차를 막 바꾸면 글자 배치가 앞부분까지만 되어 있어 본문 높이가 실제보다 작다. 그대로 두면 스크롤이 그 높이에서 막힌다.
+    // 찾은 곳까지 배치를 끝내면 편집기 높이도 함께 늘어난다.
+    layoutManager.ensureLayout(forCharacterRange: NSRange(location: 0, length: NSMaxRange(range)))
+    sizeToFit()
+    let glyphs = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+    let rect = layoutManager.boundingRect(forGlyphRange: glyphs, in: textContainer)
+    let midY = rect.midY + textContainerOrigin.y
+    let maxY = max(0, frame.height - clip.bounds.height)
+    clip.scroll(to: NSPoint(x: clip.bounds.origin.x, y: min(max(0, midY - clip.bounds.height / 2), maxY)))
+    enclosingScrollView?.reflectScrolledClipView(clip)
+  }
+
   func regainFocusAfterPanel() {
     window?.makeFirstResponder(self)
   }

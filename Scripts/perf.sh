@@ -89,6 +89,10 @@ row("스냅샷 찍기 (10만 자, 50개 찬 회차)", perf("snapshot_100k_ms", c
 row("비교 (5,000자, 문단 30% 고침)", perf("diff_5k_ms", core), 100)
 row("비교 (10만 자, 문단 30% 고침)", perf("diff_100k_ms", core), 100)
 row("비교 (10만 자, 겹치는 문단 없음)", perf("diff_100k_unrelated_ms", core), 100)
+# 작품 전체 검색(12단계, 메인 스레드 밖): 없는 문구로 500회차를 모두 읽고 찾기. SPEC 8장 목표 0.5초.
+row("작품 전체 검색 500회차 (처음)", perf("search_500_first_ms", core), 500)
+row("작품 전체 검색 500회차 (두 번째부터)", perf("search_500_ms", core), 500)
+row("찾기만 500회차 × 5,000자 (파일 읽기 빼고)", perf("search_500x5k_ms", core), 500)
 # 스냅샷 판 열기(11g): 목록·메모 50개 읽기 + 가장 최근 것과 비교까지. 비교와 같은 100ms 기준.
 row("스냅샷 판 열기 → 비교 보임 (5,000자, 50개)", perf("panel_open_5k_ms", app), 100)
 row("스냅샷 판 열기 → 비교 보임 (10만 자, 50개)", perf("panel_open_100k_ms", app), 100)

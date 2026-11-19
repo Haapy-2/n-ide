@@ -112,6 +112,15 @@ final class EpisodeAutosaver {
     return writing.text
   }
 
+  /// 작품 전체 검색이 파일 대신 찾을 글: 저장하지 못했거나 아직 쓰는 중인 글, 그리고 열린 회차는 편집기의 지금 글.
+  /// 디스크 파일은 1초 전 글일 수 있어서, 방금 친 글도 찾히게 한다.
+  func searchTexts() -> [EpisodeID: String] {
+    var texts: [EpisodeID: String] = [:]
+    for id in Set(unsaved.keys).union(inFlight.keys) { texts[id] = pendingText(for: id) }
+    if let episodeID, let textView { texts[episodeID] = textView.string }
+    return texts
+  }
+
   /// 편집기에 새 회차가 올라간 뒤 부른다. 디스크에서 읽었으면 그때의 상태(`version`)를 함께 준다.
   /// (메모리에 남은 본문으로 열었으면 nil: 기준은 전에 기억한 것을 그대로 쓴다.)
   func begin(episode id: EpisodeID, version: DiskVersion? = nil) {

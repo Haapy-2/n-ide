@@ -28,6 +28,13 @@ struct WorkspaceView: View {
   /// 확인을 기다리는 사이드바 되돌리기. nil이 아니면 확인 창이 뜬다.
   @State private var pendingUndo: PendingUndo?
   @State private var stopAskingUndo = false
+  /// 작품 전체 검색(12단계). 처음 열 때 만들고, 패널을 닫아도 문구와 결과는 남긴다(다시 열면 이어서).
+  @State private var search: ProjectSearch?
+  @State private var showingSearch = false
+  /// ⇧⌘F를 누를 때마다 늘려 입력 칸에 초점을 준다.
+  @State private var searchFocusRequest = 0
+  /// 검색 결과로 가기. 편집기가 그 회차의 본문을 올린 뒤 처리한다.
+  @State private var reveal: TextReveal?
   /// 창의 실행 취소 기록. 편집기는 회차별로 따로 갖고 있어서, 사이드바에 초점이 있을 때 ⌘Z가 이것을 쓴다.
   @Environment(\.undoManager) private var undoManager
   /// 이 창이 앞(키 창)에 오면 설정 창이 이 작품의 목표를 보여 준다.
@@ -49,18 +56,7 @@ struct WorkspaceView: View {
 
   var body: some View {
     NavigationSplitView {
-      EpisodeList(
-        episodes: project.episodes,
-        selection: $selection,
-        onRename: model == nil ? nil : { beginRename($0) },
-        onTrash: model == nil ? nil : { trashing = $0 },
-        onSetGoal: model == nil ? nil : { beginSetGoal($0) },
-        onAddAfter: model == nil ? nil : { id in addEpisode(after: id) },
-        onMove: model == nil ? nil : { source, destination in
-          Task { await model?.moveEpisodes(fromOffsets: source, toOffset: destination, undoManager: undoManager) }
-        },
-        onUndoCommand: model == nil ? nil : { requestUndo(isRedo: $0) },
-        countBox: model.map { model in { model.countBox(for: $0) } })
+      sidebar
         .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 340)
     } detail: {
       detail
@@ -72,6 +68,10 @@ struct WorkspaceView: View {
         .toolbar {
           ToolbarItem {
             Button("새 회차", systemImage: "square.and.pencil") { addEpisode(after: selection) }
+              .disabled(model == nil)
+          }
+          ToolbarItem {
+            Button("작품 전체 검색", systemImage: "magnifyingglass") { openSearch() }
               .disabled(model == nil)
           }
           ToolbarItem {
@@ -160,6 +160,44 @@ struct WorkspaceView: View {
     }
   }
 
+  /// 사이드바 자리: 회차 목록, 또는 검색 패널(⇧⌘F).
+  @ViewBuilder
+  private var sidebar: some View {
+    if showingSearch, let search {
+      SearchPanel(
+        search: search, episodes: project.episodes, focusRequest: searchFocusRequest,
+        onReveal: { target in
+          selection = target.episodeID
+          reveal = target
+        },
+        onClose: { showingSearch = false })
+    } else {
+      EpisodeList(
+        episodes: project.episodes,
+        selection: $selection,
+        onRename: model == nil ? nil : { beginRename($0) },
+        onTrash: model == nil ? nil : { trashing = $0 },
+        onSetGoal: model == nil ? nil : { beginSetGoal($0) },
+        onAddAfter: model == nil ? nil : { id in addEpisode(after: id) },
+        onMove: model == nil ? nil : { source, destination in
+          Task { await model?.moveEpisodes(fromOffsets: source, toOffset: destination, undoManager: undoManager) }
+        },
+        onUndoCommand: model == nil ? nil : { requestUndo(isRedo: $0) },
+        countBox: model.map { model in { model.countBox(for: $0) } })
+    }
+  }
+
+  private func openSearch() {
+    guard let model else { return }
+    if search == nil {
+      let autosaver = model.autosaver
+      search = ProjectSearch(
+        store: model.store, episodeIDs: { model.episodes.map(\.id) }, texts: { autosaver.searchTexts() })
+    }
+    showingSearch = true
+    searchFocusRequest += 1
+  }
+
   @ViewBuilder
   private var detail: some View {
     if project.episodes.isEmpty {
@@ -169,7 +207,8 @@ struct WorkspaceView: View {
         autosaver: model.autosaver, counter: model.counter, episodeID: selection,
         goal: project.episodes.first { $0.id == selection }?.goal ?? 0,
         // 글자 수는 body에서 읽지 않는다(읽으면 글자 수가 바뀔 때마다 작업 공간 전체가 다시 계산된다).
-        knownCount: { model.countBox(for: selection).value })
+        knownCount: { model.countBox(for: selection).value },
+        reveal: reveal)
     } else {
       Color.clear
     }
@@ -189,7 +228,8 @@ struct WorkspaceView: View {
       saveNow: model.map { model in { saveNow(model) } },
       saveWithSnapshot: model.map { model in { saveWithSnapshot(model) } },
       takeSnapshot: selection == nil || snapshotBrowser != nil ? nil : { takeSnapshot() },
-      showSnapshots: selection == nil || snapshotBrowser != nil ? nil : { showSnapshots() })
+      showSnapshots: selection == nil || snapshotBrowser != nil ? nil : { showSnapshots() },
+      showSearch: { openSearch() })
   }
 
   /// 선택한 회차의 앞(-1)·뒤(+1) 회차로 옮기는 명령. 없으면 nil.

@@ -20,6 +20,8 @@ struct ManuscriptEditor: NSViewRepresentable {
   var style = EditorStyle()
   var showsLineNumbers = false
   var caret = CaretStyle()
+  /// 검색 결과로 가기. 같은 회차의 본문이 올라간 뒤 token마다 한 번만 한다.
+  var reveal: TextReveal?
   /// 사용자가 글을 고칠 때마다 (자동 저장용).
   var onTextChange: () -> Void = {}
   /// 창이 비활성화될 때 (바로 저장용).
@@ -48,6 +50,7 @@ struct ManuscriptEditor: NSViewRepresentable {
     }
     onReady(textView)
     apply(content, to: textView, coordinator: context.coordinator)
+    applyReveal(to: textView, coordinator: context.coordinator)
     return scrollView
   }
 
@@ -62,6 +65,13 @@ struct ManuscriptEditor: NSViewRepresentable {
     if context.coordinator.appliedToken != content.token {
       apply(content, to: textView, coordinator: context.coordinator)
     }
+    applyReveal(to: textView, coordinator: context.coordinator)
+  }
+
+  private func applyReveal(to textView: ManuscriptTextView, coordinator: Coordinator) {
+    guard let reveal, reveal.token != coordinator.appliedRevealToken, reveal.episodeID == content.episodeID else { return }
+    coordinator.appliedRevealToken = reveal.token
+    textView.reveal(reveal)
   }
 
   private func apply(_ content: Content, to textView: ManuscriptTextView, coordinator: Coordinator) {
@@ -77,6 +87,7 @@ struct ManuscriptEditor: NSViewRepresentable {
     weak var textView: ManuscriptTextView?
     var parent: ManuscriptEditor?
     var appliedToken: UUID?
+    var appliedRevealToken: UUID?
     private var resignObserver: NSObjectProtocol?
     private var becomeKeyObserver: NSObjectProtocol?
 
