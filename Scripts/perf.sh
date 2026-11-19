@@ -89,6 +89,11 @@ row("스냅샷 찍기 (10만 자, 50개 찬 회차)", perf("snapshot_100k_ms", c
 row("비교 (5,000자, 문단 30% 고침)", perf("diff_5k_ms", core), 100)
 row("비교 (10만 자, 문단 30% 고침)", perf("diff_100k_ms", core), 100)
 row("비교 (10만 자, 겹치는 문단 없음)", perf("diff_100k_unrelated_ms", core), 100)
+# 스냅샷 판 열기(11g): 목록·메모 50개 읽기 + 가장 최근 것과 비교까지. 비교와 같은 100ms 기준.
+row("스냅샷 판 열기 → 비교 보임 (5,000자, 50개)", perf("panel_open_5k_ms", app), 100)
+row("스냅샷 판 열기 → 비교 보임 (10만 자, 50개)", perf("panel_open_100k_ms", app), 100)
+# 스냅샷으로 되돌리기: 본문 통째 바꾸기(메인 스레드). 회차 전환과 같은 50ms 기준.
+row("되돌리기 본문 바꾸기 (10만 자)", perf("restore_100k_ms", app), 50)
 runs = [float(v) for v in re.findall(r"launch_ms ([0-9.]+)", launch)]
 hung = launch.count("launch_hung")
 row("앱 실행 → 입력 가능 (첫 실행 제외 5회)", runs[1:], 500)

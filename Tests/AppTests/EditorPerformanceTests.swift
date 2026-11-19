@@ -185,6 +185,59 @@ final class EditorPerformanceTests: XCTestCase {
 
   // MARK: - 도구
 
+  /// 스냅샷 판 열기(11g): 스냅샷 50개 찬 회차에서 판을 열어 목록·메모를 읽고, 가장 최근 것과 비교가 끝날 때까지.
+  /// 읽기와 비교는 메인 스레드 밖이라, 메인 스레드가 막히는지는 키 입력 측정이 따로 본다. 여기서는 사용자가 기다리는 시간.
+  /// 5,000자(보통 회차)와 10만 자(아주 긴 회차). 측정용 작품은 build/tmp에 따로 만든다(더미 작품에 스냅샷을 쌓지 않게).
+  func testSnapshotPanelOpen() async throws {
+    let text = try store.readEpisode(project.episodes[0].id)
+    let folder = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+      .appending(path: "build/tmp/perf-snapshots-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let scratch = try ProjectStore.create(at: folder.appending(path: "작품.novel"), title: "측정")
+    for (name, body) in [("panel_open_5k_ms", text), ("panel_open_100k_ms", String(repeating: text, count: 20))] {
+      let id = EpisodeID.make()
+      let start = Date(timeIntervalSince1970: 1_800_000_000)
+      for index in 0..<50 {
+        _ = try scratch.writeSnapshot(body + "\(index)", episode: id, kind: .auto, memo: "메모 \(index)", at: start.addingTimeInterval(Double(index)))
+      }
+      // 지금 글: 문단 몇 개를 고친 것(판을 여는 보통 경우).
+      let current = body.replacingOccurrences(of: "\n\n", with: "\n\n고친 문장. ", options: [], range: body.startIndex..<body.index(body.startIndex, offsetBy: body.count / 3))
+      var samples: [Double] = []
+      let clock = ContinuousClock()
+      for _ in 0..<10 {
+        let elapsed = try await clock.measure {
+          let browser = SnapshotBrowser(store: scratch, episodeID: id, currentText: current)
+          await browser.load()
+          while case .comparing = browser.comparison { try await Task.sleep(for: .microseconds(200)) }
+          guard case .ready = browser.comparison else { throw XCTSkip("비교 실패") }
+        }
+        samples.append(milliseconds(elapsed))
+      }
+      report(name, samples)
+    }
+  }
+
+  /// 스냅샷으로 되돌리기(11e·11g): 10만 자 본문을 실행 취소 한 단위로 통째 바꾸고 보이는 곳을 다시 그리기까지(메인 스레드).
+  func testRestoreReplace100k() throws {
+    let (window, textView) = makeEditorWindow()
+    defer { window.close() }
+    let text = String(repeating: try store.readEpisode(project.episodes[0].id), count: 20)
+    let other = text.replacingOccurrences(of: "다.", with: "었다.")
+    textView.replaceAllText(with: text)
+    textView.displayIfNeeded()
+    settle()
+    var samples: [Double] = []
+    let clock = ContinuousClock()
+    for index in 0..<20 {
+      let elapsed = clock.measure {
+        _ = textView.replaceAllUndoably(with: index % 2 == 0 ? other : text, actionName: "측정")
+        textView.displayIfNeeded()
+      }
+      samples.append(milliseconds(elapsed))
+    }
+    report("restore_100k_ms", samples)
+  }
+
   private func makeEditorWindow() -> (NSWindow, ManuscriptTextView) {
     let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 760),
                           styleMask: [.titled, .resizable], backing: .buffered, defer: false)
