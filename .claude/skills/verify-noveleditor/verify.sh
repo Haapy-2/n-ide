@@ -37,7 +37,8 @@ launch() {
     make-dummy-novel "$PROJECT" 3 0 300 >"$RUN/dummy.log" 2>&1 \
     || { echo "✗ 검증 작품 생성 실패 · $RUN/dummy.log"; exit 1; }
   # NOVEL_PERF_OPEN: 작품 선택 창을 건너뛰고 이 작품을 바로 연다(App/Perf/LaunchProbe.swift)
-  NOVEL_PERF_OPEN="$PROJECT" nohup "$BIN" >"$RUN/app.log" 2>&1 &
+  # 창 복원을 끈다: perf.sh 등이 연 다른 작품(더미 500화) 창이 macOS 창 복원으로 대신 뜬 일이 있다(2026-11-20).
+  NOVEL_PERF_OPEN="$PROJECT" nohup "$BIN" -ApplePersistenceIgnoreState YES >"$RUN/app.log" 2>&1 &
   echo $! >"$PIDFILE"
   for _ in $(seq 1 20); do
     sleep 0.5

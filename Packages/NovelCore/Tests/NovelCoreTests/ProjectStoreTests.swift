@@ -69,7 +69,7 @@ struct ProjectStoreTests {
 
     // 다른 편집기로 열어도 읽을 수 있어야 한다: 한글이 \u 이스케이프 없이 그대로, 줄바꿈 들여쓰기.
     #expect(json.contains("\"title\" : \"한글 제목\""))
-    #expect(json.contains("\"schemaVersion\" : 1"))
+    #expect(json.contains("\"schemaVersion\" : 2"))
     #expect(json.contains("\n"))
   }
 
@@ -80,7 +80,7 @@ struct ProjectStoreTests {
     let future = #"{ "schemaVersion" : 99, "title" : "미래 앱이 만든 작품", "새필드" : true }"#
     try Data(future.utf8).write(to: store.layout.projectFile)
 
-    #expect(throws: ProjectError.newerSchemaVersion(found: 99, supported: 1)) {
+    #expect(throws: ProjectError.newerSchemaVersion(found: 99, supported: ProjectFormat.currentSchemaVersion)) {
       try store.loadProject()
     }
     #expect(try String(contentsOf: store.layout.projectFile, encoding: .utf8) == future)

@@ -153,7 +153,7 @@ struct ProjectRecoveryTests {
     let future = Data(#"{ "schemaVersion" : 7, "title" : "미래" }"#.utf8)
     try future.write(to: store.layout.projectFile)
 
-    #expect(throws: ProjectError.newerSchemaVersion(found: 7, supported: 1)) {
+    #expect(throws: ProjectError.newerSchemaVersion(found: 7, supported: ProjectFormat.currentSchemaVersion)) {
       try store.open()
     }
     #expect(try Data(contentsOf: store.layout.projectFile) == future)

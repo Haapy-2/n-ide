@@ -18,6 +18,10 @@ struct WorkspaceActions {
   var showSnapshots: (() -> Void)?
   /// 사이드바 자리에 작품 전체 검색 패널을 연다(⇧⌘F). 이미 열려 있으면 입력 칸에 초점을 준다.
   var showSearch: (() -> Void)?
+  /// 고른 회차들(없으면 지금 회차)을 묶는다. 이름을 묻는 창이 뜬다.
+  var groupMarked: (() -> Void)?
+  /// 지금 회차가 든 묶음을 푼다. 묶음 밖이면 nil.
+  var ungroupSelected: (() -> Void)?
 }
 
 extension FocusedValues {

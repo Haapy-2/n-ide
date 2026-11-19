@@ -8,18 +8,49 @@ public struct ProjectFile: Codable, Equatable, Sendable {
   public var episodes: [EpisodeMeta]
   public var notes: [NoteMeta]
   public var settings: ProjectSettings
+  /// 회차 묶음의 이름(2단계 형식). 어느 회차가 어느 묶음인지는 회차의 `group`에 있다.
+  /// 묶음은 늘 이어진 회차들이고, 회원이 없는 묶음은 남기지 않는다(`EpisodeGrouping.normalized`).
+  public var groups: [EpisodeGroup]
 
   public init(
     title: String,
     episodes: [EpisodeMeta] = [],
     notes: [NoteMeta] = [],
-    settings: ProjectSettings = ProjectSettings()
+    settings: ProjectSettings = ProjectSettings(),
+    groups: [EpisodeGroup] = []
   ) {
     self.schemaVersion = ProjectFormat.currentSchemaVersion
     self.title = title
     self.episodes = episodes
     self.notes = notes
     self.settings = settings
+    self.groups = groups
+  }
+
+  private enum CodingKeys: String, CodingKey { case schemaVersion, title, episodes, notes, settings, groups }
+
+  /// 형식 1에는 `groups`가 없다. 없으면 묶음 없음으로 읽는다(1 → 2 옮기기는 이것뿐).
+  public init(from decoder: Decoder) throws {
+    let container = try decoder.container(keyedBy: CodingKeys.self)
+    // 옛 형식도 읽은 뒤에는 지금 형식이다. 다음 저장 때 지금 버전 번호로 적힌다(더 새 버전은 읽기 전에 거부됨).
+    _ = try container.decode(Int.self, forKey: .schemaVersion)
+    schemaVersion = ProjectFormat.currentSchemaVersion
+    title = try container.decode(String.self, forKey: .title)
+    episodes = try container.decode([EpisodeMeta].self, forKey: .episodes)
+    notes = try container.decode([NoteMeta].self, forKey: .notes)
+    settings = try container.decode(ProjectSettings.self, forKey: .settings)
+    groups = try container.decodeIfPresent([EpisodeGroup].self, forKey: .groups) ?? []
+  }
+}
+
+/// 회차 묶음 하나(예: "1부 귀환"). 회차 파일은 그대로 두고 보이는 것만 묶는다(PLAN 8장 B안).
+public struct EpisodeGroup: Codable, Equatable, Sendable, Identifiable {
+  public let id: GroupID
+  public var title: String
+
+  public init(id: GroupID = .make(), title: String) {
+    self.id = id
+    self.title = title
   }
 }
 
@@ -33,12 +64,17 @@ public struct EpisodeMeta: Codable, Equatable, Sendable, Identifiable {
   /// 마지막으로 센 본문 글자 수. 사이드바가 본문을 읽지 않고 보여주려고 둔다(본문에서 다시 셀 수 있는 값).
   /// 이 값이 생기기 전에 만든 작품이나 아직 센 적 없는 회차는 nil.
   public var characterCount: CharacterCount?
+  /// 속한 묶음. 없으면 nil(파일에도 적지 않는다).
+  public var group: GroupID?
 
-  public init(id: EpisodeID = .make(), title: String = "", goal: Int, characterCount: CharacterCount? = nil) {
+  public init(
+    id: EpisodeID = .make(), title: String = "", goal: Int, characterCount: CharacterCount? = nil, group: GroupID? = nil
+  ) {
     self.id = id
     self.title = title
     self.goal = goal
     self.characterCount = characterCount
+    self.group = group
   }
 }
 

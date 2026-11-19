@@ -36,6 +36,16 @@ struct EpisodeCommands: Commands {
       Button(ShortcutCommand.episodeGoal.title) { actions?.setGoalSelected?() }
         .keyboardShortcut(shortcuts.shortcut(.episodeGoal))
         .disabled(actions?.setGoalSelected == nil)
+
+      Divider()
+
+      // 사이드바에서 ⌘클릭·⇧클릭으로 여러 회차를 고른 뒤 묶는다(PLAN 8장 B안).
+      Button(ShortcutCommand.groupEpisodes.title) { actions?.groupMarked?() }
+        .keyboardShortcut(shortcuts.shortcut(.groupEpisodes))
+        .disabled(actions?.groupMarked == nil)
+      Button(ShortcutCommand.ungroupEpisodes.title) { actions?.ungroupSelected?() }
+        .keyboardShortcut(shortcuts.shortcut(.ungroupEpisodes))
+        .disabled(actions?.ungroupSelected == nil)
     }
   }
 

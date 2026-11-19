@@ -39,6 +39,11 @@ final class ProjectModel {
     countSaveDelay: Duration = .seconds(3),
     moveToTrash: @escaping @Sendable (URL) throws -> URL = ProjectModel.systemTrash
   ) {
+    // 앱 밖에서 고쳐 흩어진 묶음은 열 때 바로잡는다(회차는 그대로, 순서만 모음). 다음 저장 때 파일에도 들어간다.
+    var project = project
+    let list = EpisodeGrouping.normalized(.init(episodes: project.episodes, groups: project.groups))
+    project.episodes = list.episodes
+    project.groups = list.groups
     self.project = project
     self.store = store
     self.queue = queue
@@ -80,7 +85,9 @@ final class ProjectModel {
   /// `undoManager`를 주면 ⌘Z로 방금 만든 회차를 휴지통으로 보낼 수 있다(⇧⌘Z로 다시 꺼냄).
   @discardableResult
   func addEpisode(after: EpisodeID? = nil, undoManager: UndoManager? = nil) async throws -> EpisodeID {
-    let episode = EpisodeMeta(title: "", goal: project.settings.defaultEpisodeGoal)
+    // 묶음 안 회차 뒤에 만들면 같은 묶음에 들어간다(다음 화를 이어 쓰는 경우).
+    let group = after.flatMap { id in project.episodes.first { $0.id == id }?.group }
+    let episode = EpisodeMeta(title: "", goal: project.settings.defaultEpisodeGoal, group: group)
     let store = store
     let id = episode.id
     // 본문 파일이 먼저 있어야 목록에만 있고 파일은 없는 회차가 생기지 않는다.
@@ -139,12 +146,49 @@ final class ProjectModel {
   }
 
   /// 드래그로 순서 바꾸기. `undoManager`를 주면 ⌘Z로 직전 순서로 되돌릴 수 있다.
+  /// 옮긴 회차의 묶음은 놓은 자리로 정한다(`EpisodeGrouping.moved`: 묶음 한가운데면 들어가고, 밖이면 빠진다).
   func moveEpisodes(fromOffsets source: IndexSet, toOffset destination: Int, undoManager: UndoManager? = nil) async {
+    let moved = Set(source.map { project.episodes[$0].id })
     var episodes = project.episodes
     episodes.move(fromOffsets: source, toOffset: destination)
-    guard episodes != project.episodes else { return }
-    await replaceEpisodes(with: episodes, actionName: "순서 변경", undoManager: undoManager).value
+    let list = EpisodeGrouping.moved(moved, in: .init(episodes: episodes, groups: project.groups))
+    guard list.episodes != project.episodes else { return }
+    await replaceList(list, actionName: "순서 변경", undoManager: undoManager).value
   }
+
+  // MARK: - 회차 묶음 (PLAN 8장 B안)
+
+  /// 고른 회차들을 새 묶음으로. 떨어져 있으면 맨 앞 회차 자리로 모은다. 만든 묶음의 ID.
+  @discardableResult
+  func groupEpisodes(_ ids: Set<EpisodeID>, title: String, undoManager: UndoManager? = nil) async -> GroupID? {
+    let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !ids.isEmpty else { return nil }
+    let group = EpisodeGroup(title: trimmed.isEmpty ? "새 묶음" : trimmed)
+    await replaceList(EpisodeGrouping.group(ids, as: group, in: list), actionName: "묶기", undoManager: undoManager).value
+    return group.id
+  }
+
+  func ungroup(_ group: GroupID, undoManager: UndoManager? = nil) async {
+    await replaceList(EpisodeGrouping.ungroup(group, in: list), actionName: "묶음 풀기", undoManager: undoManager).value
+  }
+
+  func renameGroup(_ group: GroupID, to title: String, undoManager: UndoManager? = nil) async {
+    let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty, let index = project.groups.firstIndex(where: { $0.id == group }),
+      project.groups[index].title != trimmed
+    else { return }
+    var next = list
+    next.groups[index].title = trimmed
+    await replaceList(next, actionName: "묶음 이름 변경", undoManager: undoManager).value
+  }
+
+  func addEpisodes(_ ids: Set<EpisodeID>, to group: GroupID, undoManager: UndoManager? = nil) async {
+    let next = EpisodeGrouping.add(ids, to: group, in: list)
+    guard next != list else { return }
+    await replaceList(next, actionName: "묶음에 넣기", undoManager: undoManager).value
+  }
+
+  private var list: EpisodeGrouping.List { .init(episodes: project.episodes, groups: project.groups) }
 
   /// 회차 목록(순서·제목)을 통째로 바꾸고 저장을 시작한다. 되돌리기에는 바꾸기 전 목록을 기록한다.
   /// 되돌리기 처리 안에서 다시 이 함수를 부르므로 다시 실행(⇧⌘Z)이 자동으로 쌓인다.
@@ -154,17 +198,26 @@ final class ProjectModel {
   private func replaceEpisodes(
     with episodes: [EpisodeMeta], actionName: String, undoManager: UndoManager?
   ) -> Task<Void, Never> {
-    let previous = project.episodes
+    replaceList(.init(episodes: episodes, groups: project.groups), actionName: actionName, undoManager: undoManager)
+  }
+
+  /// 회차 목록과 묶음 이름을 함께 바꾼다. 되돌리면 둘 다 바꾸기 전으로 돌아간다.
+  @discardableResult
+  private func replaceList(
+    _ list: EpisodeGrouping.List, actionName: String, undoManager: UndoManager?
+  ) -> Task<Void, Never> {
+    let previous = self.list
     undoManager?.registerUndo(withTarget: self) { model in
       MainActor.assumeIsolated {
         // 그 사이 회차가 추가·삭제됐으면 그 변화를 덮어쓰지 않도록, 같은 회차들일 때만 되돌린다.
-        guard Set(model.project.episodes.map(\.id)) == Set(previous.map(\.id)) else { return }
-        model.replaceEpisodes(with: previous, actionName: actionName, undoManager: undoManager)
+        guard Set(model.project.episodes.map(\.id)) == Set(previous.episodes.map(\.id)) else { return }
+        model.replaceList(previous, actionName: actionName, undoManager: undoManager)
       }
     }
     undoManager?.setActionName(actionName)
     // 글자 수는 되돌리기 대상이 아니다. 따로 들고 있는 지금 값(countBoxes)이 저장 때 들어간다.
-    project.episodes = episodes
+    project.episodes = list.episodes
+    project.groups = list.groups
     return startProjectSave()
   }
 
@@ -217,6 +270,10 @@ final class ProjectModel {
       record.trashedURL = nil
     }
     project.episodes.insert(record.episode, at: min(record.index, project.episodes.count))
+    // 그사이 묶음 모양이 바뀌었으면 묶음 규칙(이어진 회차)에 맞게 다시 모은다.
+    let list = EpisodeGrouping.normalized(.init(episodes: project.episodes, groups: project.groups))
+    project.episodes = list.episodes
+    project.groups = list.groups
     await saveProject()
   }
 

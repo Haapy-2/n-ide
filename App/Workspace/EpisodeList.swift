@@ -8,13 +8,22 @@ import SwiftUI
 /// 번쩍이는 것처럼 보이고, 이를 끌 방법이 없다(사용자 요청, DESIGN.md 4장).
 struct EpisodeList: View {
   let episodes: [EpisodeMeta]
+  /// 회차 묶음 이름(PLAN 8장 B안). 어느 회차가 어느 묶음인지는 회차의 `group`.
+  var groups: [EpisodeGroup] = []
   @Binding var selection: EpisodeID?
+  /// 여러 개 고른 회차(⌘클릭·⇧클릭). 묶기에 쓴다. 편집기는 `selection` 하나만 연다.
+  @Binding var marked: Set<EpisodeID>
   /// nil이면(미리보기) 메뉴와 드래그가 없다.
   var onRename: ((EpisodeID) -> Void)? = nil
   var onTrash: ((EpisodeID) -> Void)? = nil
   var onSetGoal: ((EpisodeID) -> Void)? = nil
   var onAddAfter: ((EpisodeID) -> Void)? = nil
   var onMove: ((IndexSet, Int) -> Void)? = nil
+  /// 묶기(이름을 묻는 창을 띄운다), 묶음 풀기, 묶음 이름 변경, 이미 있는 묶음에 넣기
+  var onGroup: ((Set<EpisodeID>) -> Void)? = nil
+  var onUngroup: ((GroupID) -> Void)? = nil
+  var onRenameGroup: ((GroupID) -> Void)? = nil
+  var onAddToGroup: ((Set<EpisodeID>, GroupID) -> Void)? = nil
   /// 사이드바에 초점이 있을 때 ⌘Z(false)·⇧⌘Z(true). 바로 되돌리지 않고 확인 창을 거친다.
   var onUndoCommand: ((_ isRedo: Bool) -> Void)? = nil
   /// 회차의 글자 수 칸. nil이면(미리보기) 회차 정보에 든 값을 보여준다.
@@ -23,6 +32,7 @@ struct EpisodeList: View {
   @FocusState private var isFocused: Bool
   @AppStorage(AppSettingKey.characterCountGoalBasis) private var basis: CharacterCountBasis = .withSpaces
   @AppStorage(AppSettingKey.sidebarShowsCharacterCount) private var showsCount = true
+  @AppStorage(AppSettingKey.collapsedEpisodeGroups) private var collapsedText = ""
 
   /// 줄 왼쪽 끝 → 창 닫기 버튼 왼쪽 끝 거리. 실행 중에 잰다(TrafficLightOffsetReader).
   @State private var trafficLightOffset: CGFloat?
@@ -46,33 +56,17 @@ struct EpisodeList: View {
         .listRowBackground(Color.clear)
         .accessibilityAddTraits(.isHeader)
       Section {
-        ForEach(Array(episodes.enumerated()), id: \.element.id) { index, episode in
-          EpisodeRowCell(
-            number: index + 1, title: episode.title,
-            box: countBox?(episode.id), fallbackCount: episode.characterCount,
-            basis: showsCount ? basis : nil,
-            isSelected: episode.id == selection, inset: contentInset)
-            // 두 번 클릭하면 이름 변경. 한 번 클릭 선택은 두 번 클릭 판정을 기다리지 않고 바로 한다.
-            .onTapGesture(count: 2) { onRename?(episode.id) }
-            .simultaneousGesture(TapGesture().onEnded {
-              selection = episode.id
-              isFocused = true
-            })
-            .contextMenu {
-              if let onAddAfter, let onRename, let onTrash, let onSetGoal {
-                Button("아래에 새 회차") { onAddAfter(episode.id) }
-                Button("이름 변경…") { onRename(episode.id) }
-                Button("목표 글자 수…") { onSetGoal(episode.id) }
-                Divider()
-                Button("휴지통으로 이동…") { onTrash(episode.id) }
-              }
-            }
-            .listRowInsets(Self.rowInsets)
-            .listRowBackground(Color.clear)
-            .accessibilityAddTraits(episode.id == selection ? [.isButton, .isSelected] : .isButton)
+        ForEach(rows) { row in
+          switch row {
+          case .group(let group, let count, let collapsed):
+            groupHeader(group, count: count, collapsed: collapsed)
+              .moveDisabled(true)
+          case .episode(let episode, let number, _, let inGroup):
+            episodeRow(episode, number: number, inGroup: inGroup)
+          }
         }
         // 드래그로 순서 바꾸기. 번호는 순서로 매기므로 함께 바뀐다(파일 이름은 그대로).
-        .onMove(perform: onMove)
+        .onMove(perform: onMove.map { onMove in { source, destination in moveRows(source, to: destination, onMove) } })
       }
     }
     // 시스템 기본 최소 줄 높이를 없애 줄 사이에 클릭 안 되는 틈이 생기지 않게 한다.
@@ -96,11 +90,154 @@ struct EpisodeList: View {
     .onCommand(Selector(("redo:"))) { onUndoCommand?(true) }
   }
 
+  private var list: EpisodeGrouping.List { .init(episodes: episodes, groups: groups) }
+  private var collapsed: Set<GroupID> {
+    Set(collapsedText.split(separator: ",").map { GroupID(rawValue: String($0)) })
+  }
+  private var rows: [EpisodeGrouping.Row] { EpisodeGrouping.rows(list, collapsed: collapsed) }
+
+  private func toggleCollapsed(_ group: GroupID) {
+    var set = collapsed
+    if !set.insert(group).inserted { set.remove(group) }
+    collapsedText = set.map(\.rawValue).sorted().joined(separator: ",")
+  }
+
+  /// 묶음 제목 줄: ▸/▾ + 이름 + 회차 수. 누르면 접고 편다. 두 번 누르면 이름 변경.
+  private func groupHeader(_ group: EpisodeGroup, count: Int, collapsed: Bool) -> some View {
+    HStack(spacing: 6) {
+      Image(systemName: "chevron.right")
+        .font(.system(size: 9, weight: .semibold))
+        .foregroundStyle(Color.inkMuted)
+        .rotationEffect(.degrees(collapsed ? 0 : 90))
+        .frame(width: 12)
+      Text(group.title)
+        .font(.system(size: 12, weight: .semibold))
+        .lineLimit(1)
+      Spacer(minLength: 4)
+      Text("\(count)")
+        .font(.system(size: 11).monospacedDigit())
+        .foregroundStyle(Color.inkMuted)
+    }
+    .padding(.leading, contentInset - 2)
+    .padding(.trailing, contentInset)
+    .padding(.top, 8)
+    .padding(.bottom, 4)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .contentShape(Rectangle())
+    .onTapGesture(count: 2) { onRenameGroup?(group.id) }
+    .simultaneousGesture(TapGesture().onEnded { toggleCollapsed(group.id) })
+    .contextMenu {
+      if let onRenameGroup, let onUngroup {
+        Button("묶음 이름 변경…") { onRenameGroup(group.id) }
+        Button("묶음 풀기") { onUngroup(group.id) }
+      }
+    }
+    .listRowInsets(Self.rowInsets)
+    .listRowBackground(Color.clear)
+    .accessibilityElement(children: .combine)
+    .accessibilityAddTraits(.isHeader)
+    .accessibilityValue(collapsed ? "접힘" : "펼침")
+    .accessibilityAction { toggleCollapsed(group.id) }
+  }
+
+  private func episodeRow(_ episode: EpisodeMeta, number: Int, inGroup: Bool) -> some View {
+    EpisodeRowCell(
+      number: number, title: episode.title,
+      box: countBox?(episode.id), fallbackCount: episode.characterCount,
+      basis: showsCount ? basis : nil,
+      isSelected: episode.id == selection || marked.contains(episode.id), inset: contentInset,
+      indent: inGroup ? Self.groupIndent : 0)
+      // 두 번 클릭하면 이름 변경. 한 번 클릭 선택은 두 번 클릭 판정을 기다리지 않고 바로 한다.
+      .onTapGesture(count: 2) { onRename?(episode.id) }
+      // ⌘클릭: 고른 것에 넣고 빼기. ⇧클릭: 지금 회차부터 여기까지. 그냥 클릭: 이 회차만.
+      .simultaneousGesture(
+        TapGesture().modifiers(.command).onEnded { toggleMarked(episode.id) }
+          .exclusively(before: TapGesture().modifiers(.shift).onEnded { markRange(to: episode.id) })
+          .exclusively(before: TapGesture().onEnded {
+            selection = episode.id
+            marked = [episode.id]
+            isFocused = true
+          }))
+      .contextMenu { episodeMenu(episode) }
+      .listRowInsets(Self.rowInsets)
+      .listRowBackground(Color.clear)
+      .accessibilityAddTraits(episode.id == selection ? [.isButton, .isSelected] : .isButton)
+  }
+
+  /// 우클릭 메뉴. 여러 개 고른 회차 위에서 열면 묶기·묶음에 넣기는 고른 회차 모두에 한다.
+  @ViewBuilder
+  private func episodeMenu(_ episode: EpisodeMeta) -> some View {
+    if let onAddAfter, let onRename, let onTrash, let onSetGoal {
+      let targets = marked.contains(episode.id) ? marked : [episode.id]
+      Button("아래에 새 회차") { onAddAfter(episode.id) }
+      Button("이름 변경…") { onRename(episode.id) }
+      Button("목표 글자 수…") { onSetGoal(episode.id) }
+      Divider()
+      if let onGroup {
+        Button(targets.count > 1 ? "\(targets.count)개 회차 묶기…" : "묶기…") { onGroup(targets) }
+      }
+      if let onAddToGroup, !groups.isEmpty {
+        Menu("묶음에 넣기") {
+          ForEach(groups) { group in
+            Button(group.title) { onAddToGroup(targets, group.id) }
+          }
+        }
+      }
+      if let onUngroup, let group = episode.group {
+        Button("묶음 풀기") { onUngroup(group) }
+      }
+      Divider()
+      Button("휴지통으로 이동…") { onTrash(episode.id) }
+    }
+  }
+
+  private func toggleMarked(_ id: EpisodeID) {
+    if marked.isEmpty, let selection { marked = [selection] }
+    if marked.contains(id), marked.count > 1 {
+      marked.remove(id)
+    } else {
+      marked.insert(id)
+    }
+    isFocused = true
+  }
+
+  /// 지금 회차(편집기에 열린 것)부터 누른 회차까지 목록 순서대로 모두 고른다.
+  private func markRange(to id: EpisodeID) {
+    guard let anchor = selection, let from = episodes.firstIndex(where: { $0.id == anchor }),
+      let to = episodes.firstIndex(where: { $0.id == id })
+    else { return toggleMarked(id) }
+    marked = Set(episodes[min(from, to)...max(from, to)].map(\.id))
+    isFocused = true
+  }
+
+  /// 보이는 줄(묶음 제목 포함, 접힌 회차 빠짐)의 자리를 회차 목록 자리로 바꿔 옮긴다.
+  private func moveRows(_ source: IndexSet, to destination: Int, _ onMove: (IndexSet, Int) -> Void) {
+    let rows = rows
+    let from = IndexSet(source.compactMap { row -> Int? in
+      if case .episode(_, _, let index, _) = rows[row] { return index }
+      return nil
+    })
+    guard !from.isEmpty else { return }
+    let to: Int
+    if destination >= rows.count {
+      to = episodes.count
+    } else {
+      switch rows[destination] {
+      case .episode(_, _, let index, _): to = index
+      case .group(let group, _, _): to = episodes.firstIndex { $0.group == group.id } ?? episodes.count
+      }
+    }
+    onMove(from, to)
+  }
+
+  private static let groupIndent: CGFloat = 12
+
   private func move(by offset: Int) -> KeyPress.Result {
     guard let selection, let index = episodes.firstIndex(where: { $0.id == selection }),
       episodes.indices.contains(index + offset)
     else { return .ignored }
     self.selection = episodes[index + offset].id
+    marked = [episodes[index + offset].id]
     return .handled
   }
 }
@@ -117,6 +254,8 @@ private struct EpisodeRowCell: View {
   let basis: CharacterCountBasis?
   let isSelected: Bool
   let inset: CGFloat
+  /// 묶음 안 회차는 조금 들여 쓴다(번호 칸 앞).
+  var indent: CGFloat = 0
 
   private var count: Int? {
     guard let basis else { return nil }
@@ -127,6 +266,7 @@ private struct EpisodeRowCell: View {
     // 클릭 영역 = 회색 선택 칸 전체. 줄 여백을 0으로 하고 여백을 칸 안쪽에 직접 넣어
     // 글자뿐 아니라 칸의 빈 곳을 눌러도 선택되게 한다.
     EpisodeRow(number: number, title: title, count: count)
+      .padding(.leading, indent)
       .padding(.horizontal, inset)
       .padding(.vertical, 6)
       .frame(maxWidth: .infinity, alignment: .leading)

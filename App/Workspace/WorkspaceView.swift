@@ -10,6 +10,13 @@ struct WorkspaceView: View {
   @AppStorage(AppSettingKey.sidebarSeesThroughWindow) private var sidebarSeesThroughWindow = true
   @AppStorage(AppSettingKey.characterCountGoalBasis) private var goalBasis: CharacterCountBasis = .withSpaces
   @State private var selection: EpisodeID?
+  /// 여러 개 고른 회차(⌘클릭·⇧클릭). 묶기에 쓴다.
+  @State private var marked: Set<EpisodeID> = []
+  /// 묶을 회차(이름 묻는 창이 떠 있음)
+  @State private var grouping: Set<EpisodeID>?
+  /// 이름을 바꿀 묶음
+  @State private var renamingGroup: GroupID?
+  @State private var groupTitle = ""
   @State private var renaming: EpisodeID?
   @State private var renameText = ""
   @State private var trashing: EpisodeID?
@@ -101,6 +108,16 @@ struct WorkspaceView: View {
     } message: {
       Text("비워 두면 \"제목 없음\"으로 보여요.")
     }
+    .alert(groupingTitle, isPresented: isNamingGroup) {
+      TextField("묶음 이름", text: $groupTitle)
+      Button(renamingGroup == nil ? "묶기" : "변경") { commitGroupTitle() }
+      Button("취소", role: .cancel) {
+        grouping = nil
+        renamingGroup = nil
+      }
+    } message: {
+      Text(renamingGroup == nil ? "떨어져 있는 회차는 맨 앞 회차 자리로 모여요. ⌘Z로 되돌릴 수 있어요." : "")
+    }
     .alert("목표 글자 수", isPresented: isSettingGoal) {
       TextField("글자 수", text: $goalText)
       Button("이 회차만") { commitGoal(alsoForNewEpisodes: false) }
@@ -135,7 +152,11 @@ struct WorkspaceView: View {
       Text(alertMessage ?? model?.errorMessage ?? "")
     }
     // 판이 보고 있던 회차에서 벗어나면(메뉴·단축키로 회차를 옮기거나 휴지통으로 보냄) 판을 닫는다.
-    .onChange(of: selection) { if snapshotBrowser?.episodeID != selection { closeSnapshots() } }
+    .onChange(of: selection) {
+      if snapshotBrowser?.episodeID != selection { closeSnapshots() }
+      // 메뉴·단축키·검색으로 회차를 옮기면 여러 개 고른 것을 그 회차 하나로 줄인다.
+      if let selection, !marked.contains(selection) { marked = [selection] }
+    }
     // 되돌리기 등으로 보고 있던 회차가 목록에서 사라지면 가까운 회차로 옮긴다.
     .onChange(of: project.episodes.map(\.id)) { old, new in
       guard let current = selection, !new.contains(current) else { return }
@@ -174,7 +195,9 @@ struct WorkspaceView: View {
     } else {
       EpisodeList(
         episodes: project.episodes,
+        groups: project.groups,
         selection: $selection,
+        marked: $marked,
         onRename: model == nil ? nil : { beginRename($0) },
         onTrash: model == nil ? nil : { trashing = $0 },
         onSetGoal: model == nil ? nil : { beginSetGoal($0) },
@@ -182,9 +205,50 @@ struct WorkspaceView: View {
         onMove: model == nil ? nil : { source, destination in
           Task { await model?.moveEpisodes(fromOffsets: source, toOffset: destination, undoManager: undoManager) }
         },
+        onGroup: model == nil ? nil : { beginGrouping($0) },
+        onUngroup: model == nil ? nil : { group in Task { await model?.ungroup(group, undoManager: undoManager) } },
+        onRenameGroup: model == nil ? nil : { beginRenamingGroup($0) },
+        onAddToGroup: model == nil ? nil : { ids, group in
+          Task { await model?.addEpisodes(ids, to: group, undoManager: undoManager) }
+        },
         onUndoCommand: model == nil ? nil : { requestUndo(isRedo: $0) },
         countBox: model.map { model in { model.countBox(for: $0) } })
     }
+  }
+
+  // MARK: - 회차 묶음
+
+  private func beginGrouping(_ ids: Set<EpisodeID>) {
+    guard !ids.isEmpty else { return }
+    groupTitle = ""
+    renamingGroup = nil
+    grouping = ids
+  }
+
+  private func beginRenamingGroup(_ group: GroupID) {
+    groupTitle = project.groups.first { $0.id == group }?.title ?? ""
+    grouping = nil
+    renamingGroup = group
+  }
+
+  private var groupingTitle: String {
+    if renamingGroup != nil { return "묶음 이름" }
+    return (grouping?.count ?? 0) > 1 ? "\(grouping?.count ?? 0)개 회차 묶기" : "묶기"
+  }
+
+  private var isNamingGroup: Binding<Bool> {
+    Binding(get: { grouping != nil || renamingGroup != nil }, set: { if !$0 { grouping = nil; renamingGroup = nil } })
+  }
+
+  private func commitGroupTitle() {
+    let title = groupTitle
+    if let group = renamingGroup {
+      Task { await model?.renameGroup(group, to: title, undoManager: undoManager) }
+    } else if let ids = grouping {
+      Task { await model?.groupEpisodes(ids, title: title, undoManager: undoManager) }
+    }
+    grouping = nil
+    renamingGroup = nil
   }
 
   private func openSearch() {
@@ -229,7 +293,11 @@ struct WorkspaceView: View {
       saveWithSnapshot: model.map { model in { saveWithSnapshot(model) } },
       takeSnapshot: selection == nil || snapshotBrowser != nil ? nil : { takeSnapshot() },
       showSnapshots: selection == nil || snapshotBrowser != nil ? nil : { showSnapshots() },
-      showSearch: { openSearch() })
+      showSearch: { openSearch() },
+      groupMarked: selection == nil ? nil : { beginGrouping(marked.isEmpty ? Set([selection].compactMap { $0 }) : marked) },
+      ungroupSelected: selection.flatMap { id in project.episodes.first { $0.id == id }?.group }.map { group in
+        { Task { await model?.ungroup(group, undoManager: undoManager) } }
+      })
   }
 
   /// 선택한 회차의 앞(-1)·뒤(+1) 회차로 옮기는 명령. 없으면 nil.

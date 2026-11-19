@@ -10,6 +10,8 @@ enum ShortcutCommand: String, CaseIterable, Identifiable {
   /// 작품 전체 검색(12단계)
   case searchProject
   case newEpisode, previousEpisode, nextEpisode, renameEpisode, trashEpisode, episodeGoal
+  /// 회차 묶음(2026-11-20). 기본 단축키 없음.
+  case groupEpisodes, ungroupEpisodes
 
   var id: Self { self }
 
@@ -30,6 +32,8 @@ enum ShortcutCommand: String, CaseIterable, Identifiable {
     case .renameEpisode: "이름 변경…"
     case .trashEpisode: "휴지통으로 이동…"
     case .episodeGoal: "목표 글자 수…"
+    case .groupEpisodes: "묶기…"
+    case .ungroupEpisodes: "묶음 풀기"
     }
   }
 
@@ -38,7 +42,7 @@ enum ShortcutCommand: String, CaseIterable, Identifiable {
     case .newProject, .openOther, .switchProject, .saveNow, .saveWithSnapshot: .file
     case .takeSnapshot, .showSnapshots: .snapshot
     case .searchProject: .edit
-    case .newEpisode, .previousEpisode, .nextEpisode, .renameEpisode, .trashEpisode, .episodeGoal: .episode
+    case .newEpisode, .previousEpisode, .nextEpisode, .renameEpisode, .trashEpisode, .episodeGoal, .groupEpisodes, .ungroupEpisodes: .episode
     }
   }
 
@@ -59,7 +63,7 @@ enum ShortcutCommand: String, CaseIterable, Identifiable {
     case .nextEpisode: KeyCombo(.downArrow, [.command, .option])
     case .renameEpisode: KeyCombo("r", [.command, .shift])
     case .trashEpisode: KeyCombo(.delete, [.command, .option])
-    case .episodeGoal: nil
+    case .episodeGoal, .groupEpisodes, .ungroupEpisodes: nil
     }
   }
 

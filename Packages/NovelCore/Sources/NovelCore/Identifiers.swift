@@ -32,3 +32,19 @@ public struct NoteID: Hashable, Codable, Sendable, CustomStringConvertible {
     try container.encode(rawValue)
   }
 }
+
+/// 회차 묶음의 고유 ID(2026-11-20, PLAN 8장 B안). 파일과는 상관없고 `project.json`에만 있다.
+public struct GroupID: Hashable, Codable, Sendable, CustomStringConvertible {
+  public let rawValue: String
+  public init(rawValue: String) { self.rawValue = rawValue }
+  public static func make() -> GroupID { GroupID(rawValue: UUID().uuidString.lowercased()) }
+  public var description: String { rawValue }
+
+  public init(from decoder: Decoder) throws {
+    rawValue = try decoder.singleValueContainer().decode(String.self)
+  }
+  public func encode(to encoder: Encoder) throws {
+    var container = encoder.singleValueContainer()
+    try container.encode(rawValue)
+  }
+}
