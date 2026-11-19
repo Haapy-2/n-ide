@@ -12,6 +12,7 @@ struct SnapshotPanel: View {
   let onClose: () -> Void
   var onRestore: () -> Void = {}
   @State private var editingMemoID: String?
+  @FocusState private var hasFocus: Bool
 
   var body: some View {
     GeometryReader { proxy in
@@ -25,6 +26,14 @@ struct SnapshotPanel: View {
       }
       .frame(width: proxy.size.width, height: proxy.size.height)
     }
+    // 판을 여는 동안 편집기는 초점을 내려놓아, ⌘Z가 창의 기록(사이드바 회차 작업)까지 올라가 확인 없이 되돌렸다(2026-11-20 확인).
+    // 판이 초점을 받아야 아래 명령이 판에 먼저 온다(초점이 창에만 있으면 onCommand까지 오지 않는다). 판이 떠 있는 동안엔 아무것도 하지 않는다.
+    .focusable()
+    .focusEffectDisabled()
+    .focused($hasFocus)
+    .onAppear { hasFocus = true }
+    .onCommand(Selector(("undo:"))) {}
+    .onCommand(Selector(("redo:"))) {}
   }
 
   private func panel(listWidth: CGFloat) -> some View {

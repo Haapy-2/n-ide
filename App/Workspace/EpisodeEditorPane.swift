@@ -93,9 +93,11 @@ struct EpisodeEditorPane: View {
       counter.begin(episode: id, text: text, known: knownCount())
     } catch let error as ProjectError {
       content = nil
+      counter.clear()
       errorMessage = error.userMessage
     } catch {
       content = nil
+      counter.clear()
       errorMessage = error.localizedDescription
     }
   }

@@ -32,12 +32,13 @@ public struct ProjectStore: Sendable {
   }
 
   /// 저장하기 전에 지금 파일이 정상이면 `project.json.bak`으로 남긴다. 깨진 파일로 백업을 덮어쓰지 않는다.
+  /// 백업은 덤이라 실패해도 본 저장은 한다. 백업 실패로 본 저장까지 멈추면 바뀐 회차 목록이 통째로 사라진다.
   public func saveProject(_ project: ProjectFile) throws {
     let current = layout.projectFile
     if let data = FileManager.default.contents(atPath: current.path(percentEncoded: false)),
       (try? Self.decodeProject(data: data, url: current)) != nil
     {
-      try AtomicFile.write(data, to: layout.projectBackupFile)
+      try? AtomicFile.write(data, to: layout.projectBackupFile)
     }
     let encoder = JSONEncoder()
     // 사람이 텍스트 편집기로 열어도 읽기 쉽게 들여쓰고, 키 순서를 고정해 git 비교도 깔끔하게 한다.

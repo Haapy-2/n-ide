@@ -51,6 +51,13 @@ struct ProjectGoalSection: View {
       try? await Task.sleep(for: .milliseconds(50))
       isEditing = false
     }
+    // 입력하는 사이 다른 작품 창이 앞으로 오면 그 작품의 값으로 바꾸고 입력을 끝낸다.
+    // 그대로 두면 칸을 벗어날 때 A 작품에 치던 값이 B 작품의 모든 회차 목표를 덮는다.
+    .onChange(of: active.model.map(ObjectIdentifier.init)) {
+      guard isEditing else { return }
+      draft = active.model?.project.settings.defaultEpisodeGoal ?? 0
+      isEditing = false
+    }
     .onChange(of: isEditing) { _, editing in
       if !editing, let model = active.model { commit(model) }
     }

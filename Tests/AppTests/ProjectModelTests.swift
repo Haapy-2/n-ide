@@ -247,6 +247,52 @@ final class ProjectModelTests: XCTestCase {
     XCTAssertFalse(FileManager.default.fileExists(atPath: store.layout.episodeFile(b).path(percentEncoded: false)))
   }
 
+  /// ⌘Z와 ⇧⌘Z를 바로 이어 눌러도 파일과 목록이 어긋나지 않는다. 전에는 두 파일 옮기기가 따로 돌아 서로 끼어들 수 있었다(2026-11-20 점검).
+  func testRapidUndoRedoOfTrashKeepsFileAndListInStep() async throws {
+    let model = try makeModel()
+    let a = try await model.addEpisode()
+    let b = try await model.addEpisode()
+    try store.writeEpisode("본문", id: b)
+    let undo = UndoManager()
+    undo.groupsByEvent = false
+    try await grouped(undo) { try await model.trashEpisode(b, undoManager: undo) }
+
+    undo.undo()
+    undo.redo()
+    try await Task.sleep(for: .milliseconds(300))
+
+    XCTAssertEqual(model.episodes.map(\.id), [a], "다시 실행까지 끝나면 목록에 없다")
+    XCTAssertFalse(FileManager.default.fileExists(atPath: store.layout.episodeFile(b).path(percentEncoded: false)))
+    undo.undo()
+    try await Task.sleep(for: .milliseconds(300))
+    XCTAssertEqual(model.episodes.map(\.id), [a, b], "한 번 더 되돌리면 다시 꺼내진다")
+    XCTAssertEqual(try store.readEpisode(b), "본문")
+  }
+
+  /// 회차 목록(project.json) 저장이 실패하면 끝낼 일로 남아, 앱을 끌 때 다시 시도하고 그래도 안 되면 묻는다.
+  /// 전에는 실패하면 아무 일도 없는 것으로 여겨 조용히 꺼졌다(2026-11-20 점검).
+  func testFailedProjectSaveIsRetriedBeforeQuit() async throws {
+    let model = try makeModel()
+    let id = try await model.addEpisode()
+    let projectFile = store.layout.projectFile
+    let saved = try Data(contentsOf: projectFile)
+    try FileManager.default.removeItem(at: projectFile)
+    try FileManager.default.createDirectory(at: projectFile, withIntermediateDirectories: false)
+    try Data().write(to: projectFile.appending(path: "막음"))
+
+    await model.rename(id, to: "바꾼 제목")
+
+    XCTAssertNotNil(model.errorMessage)
+    XCTAssertTrue(model.autosaver.hasProjectWork(), "실패한 저장이 끝낼 일로 남는다")
+
+    try FileManager.default.removeItem(at: projectFile)
+    try saved.write(to: projectFile)
+    await model.autosaver.finishProjectWork()
+
+    XCTAssertFalse(model.autosaver.hasProjectWork())
+    XCTAssertEqual(try store.loadProject().episodes.first?.title, "바꾼 제목")
+  }
+
   /// 휴지통에서 ⌘Z로 꺼낸 회차를 다시 고치면 그 내용이 디스크에 저장된다.
   /// (지울 때 회차의 변경 번호를 0으로 되돌리면, 저장 줄이 기억하는 옛 번호보다 작아 새 저장을 "옛 저장"으로 보고 건너뛰었다.)
   func testEditsAfterRestoringFromTrashAreSaved() async throws {

@@ -61,6 +61,19 @@ final class CharacterCountingTests: XCTestCase {
     XCTAssertEqual(model.episode(id)?.characterCount, CharacterCount(withSpaces: 10, withoutSpaces: 8))
   }
 
+  /// 다음 회차 본문을 열지 못하면 앞 회차의 글자 수를 비운다. 전에는 오류 문구 옆에 앞 회차 글자 수가 남았다(2026-11-20 점검).
+  func testClearDropsPreviousEpisodeCount() async throws {
+    let model = try makeModel()
+    let id = try await model.addEpisode()
+    try store.writeEpisode("그는 검을", id: id)
+    _ = try open(id, in: model)
+    try await waitUntil { model.counter.current != nil }
+
+    model.counter.clear()
+
+    XCTAssertNil(model.counter.current)
+  }
+
   /// 조합 중에 세어도 조합이 끊기지 않고, 조합 중인 글자도 한 글자로 센다.
   func testCountingDuringCompositionKeepsMarkedText() async throws {
     let model = try makeModel()

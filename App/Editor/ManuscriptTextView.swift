@@ -166,7 +166,9 @@ final class ManuscriptTextView: NSTextView {
 
   /// 본문 텍스트 전체를 바꾼다(회차 전환). 실행 취소 기록도 비운다.
   func replaceAllText(with text: String) {
-    if hasMarkedText() { unmarkText() }
+    // 조합을 확정하고 입력기에도 끝났다고 알린다. unmarkText만 하면 입력기는 아직 조합 중이라 여겨,
+    // 다음 키가 앞 회차의 자모와 합쳐져 새 본문에 들어갈 수 있다.
+    finishComposition()
     textStorage?.setAttributedString(NSAttributedString(string: text, attributes: style.textAttributes))
     setSelectedRange(NSRange(location: 0, length: 0))
     episodeUndoManager.removeAllActions()
@@ -196,7 +198,9 @@ final class ManuscriptTextView: NSTextView {
   /// 앱 밖에서 바뀐 본문으로 갈아 끼운다(8단계). 회차 전환과 달리 커서와 스크롤 위치를 되도록 그대로 둔다.
   /// 실행 취소 기록은 비운다: 옛 본문 기준의 기록을 새 본문에 적용하면 엉뚱한 곳이 바뀐다.
   func reloadText(with text: String) {
-    if hasMarkedText() { unmarkText() }
+    // 조합을 확정하고 입력기에도 끝났다고 알린다. unmarkText만 하면 입력기는 아직 조합 중이라 여겨,
+    // 다음 키가 앞 회차의 자모와 합쳐져 새 본문에 들어갈 수 있다.
+    finishComposition()
     let cursor = selectedRange().location
     let origin = enclosingScrollView?.contentView.bounds.origin ?? .zero
     textStorage?.setAttributedString(NSAttributedString(string: text, attributes: style.textAttributes))

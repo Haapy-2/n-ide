@@ -15,6 +15,20 @@ struct ProjectStoreTests {
     #expect(try folder.fileNames(in: root) == ["episodes", "notes", "project.json", "snapshots"])
   }
 
+  /// 백업(project.json.bak)을 못 써도 본 저장은 한다. 전에는 백업 실패가 본 저장까지 막았다(2026-11-20 점검).
+  @Test func saveProjectSucceedsWhenBackupCannotBeWritten() throws {
+    let folder = try TestFolder()
+    defer { folder.remove() }
+    let store = try ProjectStore.create(at: folder.url.appending(path: "작품.novel"), title: "처음")
+    let backup = store.layout.projectBackupFile
+    try FileManager.default.createDirectory(at: backup, withIntermediateDirectories: false)
+    try Data().write(to: backup.appending(path: "막음"))
+
+    try store.saveProject(ProjectFile(title: "바꾼 제목"))
+
+    #expect(try store.loadProject().title == "바꾼 제목")
+  }
+
   @Test func createRefusesExistingFolder() throws {
     let folder = try TestFolder()
     defer { folder.remove() }

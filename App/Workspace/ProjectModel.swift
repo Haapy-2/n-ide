@@ -28,6 +28,9 @@ final class ProjectModel {
   /// 글자 수만 바뀌었을 때 project.json 저장을 미뤄 묶는 시간(docs/PERFORMANCE.md 2장).
   @ObservationIgnored private let countSaveDelay: Duration
   @ObservationIgnored private var countSave: Task<Void, Never>?
+  @ObservationIgnored private var fileUndoTail: Task<Void, Never>?
+  /// 마지막 `project.json` 저장이 실패했다. 앱을 끌 때 다시 시도하고, 그래도 안 되면 묻는다.
+  @ObservationIgnored private var projectSaveFailed = false
 
   init(
     project: ProjectFile, store: ProjectStore, queue: SaveQueue = SaveQueue(),
@@ -46,7 +49,9 @@ final class ProjectModel {
     autosaver = EpisodeAutosaver(store: store, queue: queue, delay: autosaveDelay)
     counter = CharacterCounter(interval: countDelay)
     counter.onCount = { [weak self] id, count in self?.recordCount(count, for: id) }
-    autosaver.hasProjectWork = { [weak self] in self.map { $0.countSave != nil || $0.projectSaves > 0 } ?? false }
+    autosaver.hasProjectWork = { [weak self] in
+      self.map { $0.countSave != nil || $0.projectSaves > 0 || $0.projectSaveFailed } ?? false
+    }
     autosaver.finishProjectWork = { [weak self] in await self?.finishProjectSaves() }
     autosaver.episodeTitle = { [weak self] id in self?.project.episodes.first { $0.id == id }?.title ?? "" }
   }
@@ -223,7 +228,7 @@ final class ProjectModel {
     undoManager?.registerUndo(withTarget: self) { model in
       MainActor.assumeIsolated {
         model.registerUndoByRestoring(record, actionName: actionName, undoManager: undoManager)
-        Task { await model.runFileUndo { try await model.moveToTrash(record) } }
+        model.enqueueFileUndo { try await model.moveToTrash(record) }
       }
     }
     undoManager?.setActionName(actionName)
@@ -234,17 +239,23 @@ final class ProjectModel {
     undoManager?.registerUndo(withTarget: self) { model in
       MainActor.assumeIsolated {
         model.registerUndoByTrashing(record, actionName: actionName, undoManager: undoManager)
-        Task { await model.runFileUndo { try await model.restoreFromTrash(record) } }
+        model.enqueueFileUndo { try await model.restoreFromTrash(record) }
       }
     }
     undoManager?.setActionName(actionName)
   }
 
-  private func runFileUndo(_ work: () async throws -> Void) async {
-    do {
-      try await work()
-    } catch {
-      errorMessage = "되돌리지 못했어요. 파일은 그대로 두었어요. \(error.localizedDescription)"
+  /// 파일 옮기기는 누른 순서대로 하나씩 한다. ⌘Z·⇧⌘Z를 빠르게 이어 누르면 따로 돈 작업이 서로 끼어들어,
+  /// 목록에는 있는데 파일은 휴지통에 있는 회차가 생길 수 있다.
+  private func enqueueFileUndo(_ work: @escaping () async throws -> Void) {
+    let previous = fileUndoTail
+    fileUndoTail = Task {
+      await previous?.value
+      do {
+        try await work()
+      } catch {
+        errorMessage = "되돌리지 못했어요. 파일은 그대로 두었어요. \(error.localizedDescription)"
+      }
     }
   }
 
@@ -290,6 +301,8 @@ final class ProjectModel {
     while projectSaves > 0 {
       try? await Task.sleep(for: .milliseconds(2))
     }
+    // 앞서 실패한 저장은 아무도 다시 시도하지 않으므로 여기서 한 번 더 한다.
+    if projectSaveFailed { await saveProject() }
   }
 
   /// 저장을 시작만 하고 돌아온다. 시작한 순간부터 "안 끝난 저장"으로 센다(바로 뒤에 앱을 꺼도 기다리게).
@@ -314,8 +327,10 @@ final class ProjectModel {
     let store = store
     do {
       _ = try await queue.save(.project, change: change) { try store.saveProject(snapshot) }
+      projectSaveFailed = false
       errorMessage = nil
     } catch {
+      projectSaveFailed = true
       let reason = (error as? ProjectError)?.userMessage ?? error.localizedDescription
       errorMessage = "회차 목록(project.json)을 저장하지 못했어요. \(reason)"
     }

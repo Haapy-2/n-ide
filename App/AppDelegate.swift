@@ -50,7 +50,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     guard autosavers.contains(where: \.hasWorkBeforeQuit) else { return .terminateNow }
     Task { @MainActor in
       for autosaver in autosavers { await autosaver.finish() }
-      if autosavers.contains(where: \.hasUnsavedChanges) {
+      if !autosavers.contains(where: \.hasUnsavedChanges), autosavers.contains(where: { $0.hasProjectWork() }) {
+        // 원고는 다 저장됐고 회차 목록(project.json)만 못 썼다. 내보낼 원고가 없으니 끌지만 묻는다.
+        let alert = NSAlert()
+        alert.alertStyle = .critical
+        alert.messageText = "회차 목록을 저장하지 못했어요"
+        alert.informativeText = "원고는 저장됐지만, 지금 끄면 회차 추가·순서·이름을 바꾼 것이 사라질 수 있어요. 디스크 공간과 작품 폴더 권한을 확인해 주세요."
+        alert.addButton(withTitle: "취소")
+        alert.addButton(withTitle: "그래도 종료")
+        sender.reply(toApplicationShouldTerminate: alert.runModal() == .alertSecondButtonReturn)
+      } else if autosavers.contains(where: \.hasUnsavedChanges) {
         let alert = NSAlert()
         alert.alertStyle = .critical
         alert.messageText = "저장하지 못한 원고가 있어요"

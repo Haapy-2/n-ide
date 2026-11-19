@@ -30,7 +30,11 @@ struct ShortcutRecorder: View {
     }
     .accessibilityLabel(isRecording ? "키를 누르세요" : "단축키 \(combo?.displayText ?? "없음")")
     .onChange(of: isRecording, initial: true) {
-      if isRecording { monitor.start(handle) } else { monitor.stop() }
+      if isRecording {
+        monitor.start(handle, onOtherWindow: { onFinish(.cancelled) })
+      } else {
+        monitor.stop()
+      }
     }
     .onDisappear {
       if isRecording { onFinish(.cancelled) }
@@ -55,14 +59,22 @@ struct ShortcutRecorder: View {
   }
 }
 
-/// 기록하는 동안 앱의 키 누름을 가로챈다(메뉴·입력 칸으로 가지 않게 삼킨다).
+/// 기록하는 동안 설정 창의 키 누름을 가로챈다(메뉴·입력 칸으로 가지 않게 삼킨다).
+/// 감시는 앱 전체에 걸리므로, 다른 창(원고 창)에서 누른 키는 삼키지 않고 기록을 취소한다.
+/// 안 그러면 설정 창을 기록 중으로 둔 채 원고 창으로 돌아갔을 때 ⌘S도 글자도 원고에 닿지 않는다.
 @MainActor
 private final class KeyDownMonitor {
   private var token: Any?
 
-  func start(_ handler: @escaping (NSEvent) -> Void) {
+  func start(_ handler: @escaping (NSEvent) -> Void, onOtherWindow: @escaping () -> Void) {
     stop()
+    // 칸을 누른 직후라 지금 키 창이 설정 창이다.
+    weak let window = NSApp.keyWindow
     token = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+      guard event.window === window else {
+        onOtherWindow()
+        return event
+      }
       handler(event)
       return nil
     }

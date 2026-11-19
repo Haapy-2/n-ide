@@ -47,15 +47,25 @@ final class CharacterCounter {
 
   /// 회차를 열 때. `text`는 막 읽은 본문, `known`은 project.json에 남아 있던 값(세는 동안 잠깐 보여준다).
   func begin(episode id: EpisodeID, text: String, known: CharacterCount?) {
-    // 떠나는 회차에 아직 세지 않은 입력이 있으면 편집기에 옛 본문이 남아 있는 지금 센다.
-    if waiting != nil {
-      waiting?.cancel()
-      waiting = nil
-      recountNow()
-    }
+    finishLeaving()
     episodeID = id
     if current != known { current = known }
     count(text, for: id)
+  }
+
+  /// 회차 본문을 열지 못했을 때. 앞 회차의 글자 수가 상태 줄에 남지 않게 비운다.
+  func clear() {
+    finishLeaving()
+    episodeID = nil
+    current = nil
+  }
+
+  /// 떠나는 회차에 아직 세지 않은 입력이 있으면 편집기에 옛 본문이 남아 있는 지금 센다.
+  private func finishLeaving() {
+    guard waiting != nil else { return }
+    waiting?.cancel()
+    waiting = nil
+    recountNow()
   }
 
   private func textDidChange() {
