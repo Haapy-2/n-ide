@@ -39,6 +39,7 @@ App/                 앱 소스: 화면(SwiftUI)과 편집기(AppKit)
 Packages/NovelCore/  공통 로직 패키지(모델, 저장, 검색, 글자 수, 스냅샷), 테스트, 더미 작품 생성기
 Tests/AppTests/      앱 쪽 테스트, 디자인 스냅샷
 Scripts/             build.sh, run.sh, test.sh, snapshots.sh, perf.sh (lib.sh는 공통 부분)
+.claude/skills/      verify-noveleditor/ = 에이전트가 실제 앱을 띄워 조작·증명하는 검증 스킬
 docs/                모든 문서 (log/ = 날짜별 작업 기록)
 build/               빌드 산출물과 임시 파일 (git 제외, 지워도 됨)
 ```
