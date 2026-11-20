@@ -625,7 +625,7 @@ private struct UndoConfirmationDialog: ViewModifier {
         isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } }),
         titleVisibility: .visible, presenting: pending
       ) { pending in
-        // 엔터는 취소가 받는다(2026-11-12 사용자 요청). 되돌리기는 클릭이나 Tab → Space로.
+        // 엔터는 취소가 받는다. 되돌리기는 클릭이나 Tab → Space로.
         Button("취소", role: .cancel) { self.pending = nil }
           .keyboardShortcut(.defaultAction)
         Button(pending.isRedo ? "다시 실행" : "되돌리기") { perform(pending) }

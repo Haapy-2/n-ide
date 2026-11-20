@@ -3,6 +3,8 @@
 set -euo pipefail
 source "$(dirname "$0")/lib.sh"
 
+"$ROOT/Scripts/check-comments.sh"
+
 log="$LOGS/core-test.log"
 if swift test --package-path "$ROOT/Packages/NovelCore" --scratch-path "$ROOT/build/spm" >"$log" 2>&1; then
   echo "✓ NovelCore 테스트 성공 · $(grep -hoE "Test run with [0-9]+ tests?( in [0-9]+ suites?)? passed" "$log" | sort -t' ' -k4 -n | tail -1)"

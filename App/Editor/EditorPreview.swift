@@ -37,8 +37,8 @@ struct EditorPreview: NSViewRepresentable {
   }
 
   /// 주어진 폭에서 미리보기 문장이 다 들어가는 높이.
-  /// 화면에 보이는 뷰의 글 상자를 건드리지 않고 따로 만든 글 상자로 잰다. 전에는 잴 때마다 보이는 뷰의 글 상자 폭을
-  /// 바꿔서, 마지막으로 잰 폭(더 좁은 폭)이 남아 줄이 일찍 꺾이고 높이는 넓은 폭 기준이라 아래가 잘렸다(2026-11-12 사용자 지적).
+  /// 화면에 보이는 뷰의 글 상자를 건드리지 않고 따로 만든 글 상자로 잰다. 보이는 뷰의 폭을 바꿔 재면
+  /// 마지막으로 잰 폭(더 좁은 폭)이 남아 줄이 일찍 꺾이고, 높이는 넓은 폭 기준이라 아래가 잘린다.
   func sizeThatFits(_ proposal: ProposedViewSize, nsView view: NSTextView, context: Context) -> CGSize? {
     let width = proposal.width ?? 400
     let storage = NSTextStorage(string: Self.sample, attributes: style.textAttributes)

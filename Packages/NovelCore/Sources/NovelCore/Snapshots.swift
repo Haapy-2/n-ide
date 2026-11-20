@@ -178,8 +178,7 @@ extension ProjectStore {
   }
 
   /// `auto`·`leave`만 함께 세어 `limit`개를 넘으면 오래된 것부터 바로 지운다(휴지통 아님). 지운 목록을 돌려준다.
-  /// 다른 종류와 모르는 파일은 세지도 지우지도 않는다. 메모를 단 것도 "남겨야지"라는 뜻이라 세지도 지우지도 않는다
-  /// (2026-11-17 사용자 결정).
+  /// 다른 종류와 모르는 파일은 세지도 지우지도 않는다. 메모를 단 것도 "남겨야지"라는 뜻이라 세지도 지우지도 않는다.
   @discardableResult
   public func pruneSnapshots(of id: EpisodeID, keeping limit: Int) throws -> [Snapshot] {
     let prunable = try snapshots(of: id).filter { $0.kind.isPrunable && !Self.isRegularFile($0.memoURL) }

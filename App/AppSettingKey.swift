@@ -54,6 +54,6 @@ enum AppSettingKey {
   static let caretColorLight = "caretColorLight"
   /// 다크 모드 커서 색 `CaretColor.storageText` (기본: 빈 문자열 = accent)
   static let caretColorDark = "caretColorDark"
-  /// 사이드바에서 접어 둔 회차 묶음(GroupID를 쉼표로 이음). 이 맥에만 기억한다(2026-11-20 사용자 결정, project.json에 안 씀).
+  /// 사이드바에서 접어 둔 회차 묶음(GroupID를 쉼표로 이음). 이 맥에만 기억한다.
   static let collapsedEpisodeGroups = "collapsedEpisodeGroups"
 }

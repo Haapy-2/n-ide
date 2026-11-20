@@ -2,7 +2,7 @@ import AppKit
 import XCTest
 @testable import NovelEditor
 
-/// 설정 › 커서(2026-11-18 사용자 요청): 두께는 최대 4, 색 저장 글자, 설정이 편집기 커서 칸에 반영되는지.
+/// 설정 › 커서: 두께는 최대 4, 색 저장 글자, 설정이 편집기 커서 칸에 반영되는지.
 @MainActor
 final class CaretSettingsTests: XCTestCase {
   func testWidthStaysBetweenOneAndFour() {

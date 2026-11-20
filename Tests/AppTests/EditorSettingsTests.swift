@@ -58,7 +58,7 @@ final class EditorSettingsTests: XCTestCase {
     XCTAssertEqual(textView.textStorage?.attribute(.font, at: 0, effectiveRange: nil) as? NSFont, before)
   }
 
-  /// 설정 창 미리보기: 창 폭을 바꿔도 줄바꿈 폭과 높이가 맞아 문장이 잘리지 않는다(2026-11-12 사용자 지적).
+  /// 설정 창 미리보기: 창 폭을 바꿔도 줄바꿈 폭과 높이가 맞아 문장이 잘리지 않는다.
   func testPreviewFitsTextAfterWidthChanges() throws {
     let host = NSHostingView(rootView: EditorPreview(style: EditorStyle()))
     let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 300, height: 400), styleMask: [.titled, .resizable], backing: .buffered, defer: false)

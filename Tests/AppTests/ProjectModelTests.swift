@@ -122,7 +122,7 @@ final class ProjectModelTests: XCTestCase {
     XCTAssertFalse(model.autosaver.hasUnsavedChanges)
   }
 
-  /// 마지막 원고를 저장하지 못한 회차는 휴지통으로 보내지 않는다. 보내면 휴지통에는 옛 본문만 남고 마지막 원고는 사라진다(2026-11-20 점검).
+  /// 마지막 원고를 저장하지 못한 회차는 휴지통으로 보내지 않는다. 보내면 휴지통에는 옛 본문만 남고 마지막 원고는 사라진다.
   func testTrashRefusesEpisodeWhoseLastTextIsUnsaved() async throws {
     let model = try makeModel()
     let first = try await model.addEpisode()
@@ -247,7 +247,7 @@ final class ProjectModelTests: XCTestCase {
     XCTAssertFalse(FileManager.default.fileExists(atPath: store.layout.episodeFile(b).path(percentEncoded: false)))
   }
 
-  /// ⌘Z와 ⇧⌘Z를 바로 이어 눌러도 파일과 목록이 어긋나지 않는다. 전에는 두 파일 옮기기가 따로 돌아 서로 끼어들 수 있었다(2026-11-20 점검).
+  /// ⌘Z와 ⇧⌘Z를 바로 이어 눌러도 파일과 목록이 어긋나지 않는다. 파일 옮기기 두 개가 따로 돌면 서로 끼어든다.
   func testRapidUndoRedoOfTrashKeepsFileAndListInStep() async throws {
     let model = try makeModel()
     let a = try await model.addEpisode()
@@ -270,7 +270,6 @@ final class ProjectModelTests: XCTestCase {
   }
 
   /// 회차 목록(project.json) 저장이 실패하면 끝낼 일로 남아, 앱을 끌 때 다시 시도하고 그래도 안 되면 묻는다.
-  /// 전에는 실패하면 아무 일도 없는 것으로 여겨 조용히 꺼졌다(2026-11-20 점검).
   func testFailedProjectSaveIsRetriedBeforeQuit() async throws {
     let model = try makeModel()
     let id = try await model.addEpisode()

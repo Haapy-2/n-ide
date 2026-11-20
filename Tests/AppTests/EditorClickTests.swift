@@ -3,7 +3,7 @@ import XCTest
 @testable import NovelEditor
 
 /// 편집 영역 어디를 눌러도 편집기가 클릭을 받는다. 오른쪽 여백(텍스트 칸 오른쪽) 클릭이 뒤의 clip view로 빠져
-/// 커서가 움직이지 않던 문제(2026-11-18)를 막는다.
+/// 커서가 움직이지 않던 문제를 막는다.
 @MainActor
 final class EditorClickTests: XCTestCase {
   private func makeEditor(width: CGFloat) -> (NSScrollView, ManuscriptTextView) {

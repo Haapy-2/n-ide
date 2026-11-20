@@ -122,7 +122,7 @@ struct SnapshotListView: View {
     return date.formatted(sameYear ? .dateTime.month().day() : .dateTime.year().month().day())
   }
 
-  /// 초까지 보인다(2026-11-17 사용자 요청). 같은 분에 여러 번 찍어도 구분되게.
+  /// 초까지 보인다. 같은 분에 여러 번 찍어도 구분되게.
   static func time(_ date: Date) -> String {
     date.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits).second(.twoDigits))
   }

@@ -15,7 +15,7 @@ struct ProjectStoreTests {
     #expect(try folder.fileNames(in: root) == ["episodes", "notes", "project.json", "snapshots"])
   }
 
-  /// 백업(project.json.bak)을 못 써도 본 저장은 한다. 전에는 백업 실패가 본 저장까지 막았다(2026-11-20 점검).
+  /// 백업(project.json.bak)을 못 써도 본 저장은 한다. 백업은 덤이라 본 저장을 막으면 안 된다.
   @Test func saveProjectSucceedsWhenBackupCannotBeWritten() throws {
     let folder = try TestFolder()
     defer { folder.remove() }

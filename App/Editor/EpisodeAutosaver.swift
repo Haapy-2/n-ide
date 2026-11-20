@@ -105,7 +105,7 @@ final class EpisodeAutosaver {
   /// 회차를 열 때 디스크 대신 보여줄 본문: 저장에 실패해 메모리에 남은 것, 또는 아직 쓰는 중인 것. 없으면 nil.
   /// (빠르게 A→B→A로 돌아왔을 때 A 저장이 끝나기 전 디스크의 옛 본문을 읽지 않기 위해서다.)
   /// 둘 다 있으면(실패한 뒤 더 쓰고 떠나 새 저장이 아직 쓰는 중) 변경 번호가 큰 쪽이 더 새 본문이다.
-  /// 옛 실패 본문을 보여 주면 이어 쓴 글이 그사이 쓴 글을 덮는다(2026-11-19 점검).
+  /// 옛 실패 본문을 보여 주면 이어 쓴 글이 그사이 쓴 글을 덮는다.
   func pendingText(for id: EpisodeID) -> String? {
     guard let failed = unsaved[id] else { return inFlight[id]?.text }
     guard let writing = inFlight[id], writing.change > failed.change else { return failed.text }
@@ -378,7 +378,7 @@ final class EpisodeAutosaver {
   }
 
   /// 저장 하나가 끝나면 상태 줄을 실제 상태에 맞춘다. 마지막 저장의 결과로 덮으면, 다른 회차가 저장된 뒤
-  /// 앞 회차의 실패 표시가 사라지고 "저장 중"에 멈춘다. 충돌(사용자 선택을 기다림)은 실패로 보이지 않는다.
+  /// 앞 회차의 실패 표시가 사라지고 "저장 중"에 멈춘다. 충돌은 실패로 보이지 않는다.
   private func settleStatus() {
     status = unsaved.keys.contains { conflicts[$0] == nil } ? .failed(lastFailure) : .idle
   }

@@ -13,7 +13,7 @@ struct GeneralSettingsPane: View {
   var body: some View {
     Form {
       Section {
-        // 아이콘만 보이고, 마우스를 올리면 이름이 뜬다. 색 없이 시스템 보조 글자색(2026-11-12 사용자 요청, DESIGN 5장 예외).
+        // 아이콘만 보이고, 마우스를 올리면 이름이 뜬다. 색 없이 시스템 보조 글자색.
         Picker("테마", selection: $theme) {
           ForEach(AppTheme.allCases, id: \.self) { theme in
             Image(systemName: theme.symbolName)

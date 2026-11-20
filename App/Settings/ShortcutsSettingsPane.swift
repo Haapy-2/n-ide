@@ -49,7 +49,7 @@ struct ShortcutsSettingsPane: View {
     return VStack(alignment: .trailing, spacing: 4) {
       HStack {
         if command == .saveWithSnapshot {
-          // 켜면 이 칸의 키가 풀리고 지금 저장·스냅샷 찍기 칸이 잠긴다(2026-11-18 사용자 요청).
+          // 켜면 이 칸의 키가 풀리고 지금 저장·스냅샷 찍기 칸이 잠긴다.
           Toggle(command.title, isOn: savesWithSnapshot)
             .labelsHidden()
             .toggleStyle(.switch)

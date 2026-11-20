@@ -9,7 +9,7 @@ import XCTest
 /// 사이드바 + 편집 영역(자동 저장기·글자 수·스냅샷 포함)을 띄우고 500회차를 세 바퀴 돈 뒤 10만 자 회차를 세 번 열고 닫는다.
 /// 바퀴마다 실제 사용량(phys_footprint)과 malloc이 실제로 쥐고 있는 양(size_in_use)을 함께 찍는다.
 /// 해제한 메모리도 malloc이 운영체제에 바로 돌려주지 않아 footprint에는 한동안 남는다.
-/// 그래서 "쌓이는지"는 size_in_use로 본다(2026-11-17 조사: docs/PLAN.md 11장).
+/// 그래서 "쌓이는지"는 size_in_use로 본다.
 @MainActor
 final class MemoryGrowthTests: XCTestCase {
   func testEpisodeSwitchMemory() throws {

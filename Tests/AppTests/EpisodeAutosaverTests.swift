@@ -142,7 +142,7 @@ final class EpisodeAutosaverTests: XCTestCase {
   }
 
   /// 저장이 실패한 뒤 더 새 본문을 쓰는 중에 돌아오면, 옛 실패 본문이 아니라 더 새 본문을 보여 준다.
-  /// 옛 본문을 보여 주면 이어 쓴 글이 그사이 쓴 글("둘")을 덮어 조용히 사라졌다(2026-11-19 점검 ①).
+  /// 옛 본문을 보여 주면 이어 쓴 글이 그사이 쓴 글("둘")을 덮어 조용히 사라진다.
   func testQuickReturnAfterFailedSaveShowsNewestText() async throws {
     let episodes = store.layout.episodesFolder.path(percentEncoded: false)
     try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: episodes)
@@ -169,7 +169,7 @@ final class EpisodeAutosaverTests: XCTestCase {
   }
 
   /// 창이 비활성화되거나 닫힐 때는 본문을 그 자리에서 복사해 저장을 시작한다.
-  /// `Task` 안으로 미루면 창 닫기 처리가 끝난 뒤에 돌아, 그사이 편집기가 사라지면 마지막 입력을 못 읽는다(2026-11-19 점검 ②).
+  /// `Task` 안으로 미루면 창 닫기 처리가 끝난 뒤에 돌아, 그사이 편집기가 사라지면 마지막 입력을 못 읽는다.
   func testStartSaveCopiesTextRightAway() async throws {
     type(" 닫기 직전")
 
@@ -180,7 +180,7 @@ final class EpisodeAutosaverTests: XCTestCase {
     XCTAssertEqual(try store.readEpisode(episode), "첫 문장 닫기 직전")
   }
 
-  // MARK: - 다른 회차의 저장 실패 (2026-11-20 점검)
+  // MARK: - 다른 회차의 저장 실패
 
   /// 이 회차 파일 자리에 비어 있지 않은 폴더를 둬서, 이 회차 저장만 실패하게 한다(폴더 권한을 막으면 모든 회차가 실패한다).
   private func blockSaves(of id: EpisodeID) throws -> URL {
@@ -208,7 +208,7 @@ final class EpisodeAutosaverTests: XCTestCase {
   }
 
   /// 창 닫기·휴지통·⌘S의 `flush`는 열린 회차만이 아니라 저장에 실패해 메모리에 남은 다른 회차도 다시 저장한다.
-  /// 전에는 열린 회차만 저장해서, 다른 회차 본문은 창을 닫으면 조용히 사라졌다.
+  /// 열린 회차만 저장하면 다른 회차 본문은 창을 닫을 때 조용히 사라진다.
   func testFlushRetriesFailedSaveOfAnotherEpisode() async throws {
     let (blocked, _) = try await failFirstThenOpenSecond()
     try FileManager.default.removeItem(at: blocked)
@@ -220,7 +220,7 @@ final class EpisodeAutosaverTests: XCTestCase {
     XCTAssertEqual(autosaver.status, .idle)
   }
 
-  /// 다른 회차가 저장되어도 앞 회차의 실패 표시는 남는다. 전에는 "저장 중"에 멈춰 실패가 화면에서 사라졌다.
+  /// 다른 회차가 저장되어도 앞 회차의 실패 표시는 남는다("저장 중"에 멈춰 실패가 가려지면 안 된다).
   func testFailureStaysVisibleWhileAnotherEpisodeSaves() async throws {
     let (_, second) = try await failFirstThenOpenSecond()
     type(" 둘째에 쓴 문장")

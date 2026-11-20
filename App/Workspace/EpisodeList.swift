@@ -5,7 +5,7 @@ import SwiftUI
 ///
 /// 선택 표시는 시스템 것을 쓰지 않고 은은한 회색 배경 하나만 직접 그린다.
 /// 시스템 선택은 누르는 순간 파란 강조색으로 칠했다가 편집기로 초점이 넘어가면 회색으로 바뀌어
-/// 번쩍이는 것처럼 보이고, 이를 끌 방법이 없다(사용자 요청, DESIGN.md 4장).
+/// 번쩍이는 것처럼 보이고, 이를 끌 방법이 없다.
 struct EpisodeList: View {
   let episodes: [EpisodeMeta]
   /// 회차 묶음 이름(PLAN 8장 B안). 어느 회차가 어느 묶음인지는 회차의 `group`.
@@ -36,7 +36,7 @@ struct EpisodeList: View {
 
   /// 줄 왼쪽 끝 → 창 닫기 버튼 왼쪽 끝 거리. 실행 중에 잰다(TrafficLightOffsetReader).
   @State private var trafficLightOffset: CGFloat?
-  /// 줄 안쪽 왼쪽 여백. "회차" 제목·번호·제목이 모두 이 값을 써서 창 닫기 버튼과 같은 선에서 시작한다(2026-11-12 사용자 요청).
+  /// 줄 안쪽 왼쪽 여백. "회차" 제목·번호·제목이 모두 이 값을 써서 창 닫기 버튼과 같은 선에서 시작한다.
   private var contentInset: CGFloat { TrafficLightOffsetReader.contentInset(for: trafficLightOffset) }
   /// 줄 좌우 여백 0: 회색 선택 칸이 줄 끝까지 차서, 글자를 버튼 선에 맞춰도 칸이 잘리지 않는다.
   private static let rowInsets = EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0)

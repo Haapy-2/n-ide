@@ -2,7 +2,7 @@ import NovelCore
 import SwiftUI
 
 /// 설정 창 "일반"의 "목표" 묶음: 맨 마지막으로 앞에 있던 작품의 회차 목표(project.json, 작품별 값)와 목표 기준(앱 전체).
-/// 바꾸면 이미 있는 모든 회차와 앞으로 만들 회차에 함께 적용된다(2026-11-12 사용자 요청: 기본으로 모든 회차).
+/// 바꾸면 이미 있는 모든 회차와 앞으로 만들 회차에 함께 적용된다.
 /// 회차 하나만 다르게 하려면 회차 메뉴의 "목표 글자 수…"를 쓴다. 작품 창이 없으면 안내 한 줄만 보인다.
 struct ProjectGoalSection: View {
   private var active = ActiveWorkspace.shared
@@ -45,7 +45,7 @@ struct ProjectGoalSection: View {
     .onChange(of: active.model?.project.settings.defaultEpisodeGoal, initial: true) { _, goal in
       if !isEditing, let goal { draft = goal }
     }
-    // 설정 창을 열면 맥이 첫 입력 칸에 커서를 넣는데, 목표 칸이 저절로 입력 상태가 되지 않게 바로 뺀다(2026-11-12 사용자 요청).
+    // 설정 창을 열면 맥이 첫 입력 칸에 커서를 넣는데, 목표 칸이 저절로 입력 상태가 되지 않게 바로 뺀다.
     // 창이 뜨고 맥이 커서를 넣은 다음 차례에 빼야 해서 조금 기다린다.
     .task {
       try? await Task.sleep(for: .milliseconds(50))

@@ -33,7 +33,7 @@ final class ManuscriptTextView: NSTextView {
   private var lineCountCache: Int?
 
   /// 마지막으로 그린 커서 칸. macOS는 원래 굵기(1pt) 칸만 지우거나, 창이 비활성화될 때 지우는 요청을 따로 보내지 않을 수 있어서
-  /// 2pt 커서가 남았다(2026-11-18 사용자 보고: 다른 창으로 가도 커서가 그 자리에 남음). 이 칸은 앱이 직접 지운다.
+  /// 굵은 커서가 남는다. 이 칸은 앱이 직접 지운다.
   private(set) var lastCaretRect: NSRect?
 
   var currentLineCount: Int {
@@ -80,7 +80,7 @@ final class ManuscriptTextView: NSTextView {
     isGrammarCheckingEnabled = false
     isVerticallyResizable = true
     // 높이 한도를 두지 않는다. 기본값이면 처음 잡힌 높이가 한도가 되어, 더 긴 회차로 바꾼 직후
-    // 아직 배치가 안 된 아래쪽으로는 프로그램이 스크롤하지 못했다(검색 결과로 가기, 2026-11-20).
+    // 아직 배치가 안 된 아래쪽으로는 프로그램이 스크롤하지 못한다(검색 결과로 가기).
     maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
     isHorizontallyResizable = false
     autoresizingMask = [.width]
@@ -226,7 +226,7 @@ final class ManuscriptTextView: NSTextView {
   override var undoManager: UndoManager? { episodeUndoManager }
 
   // 편집 메뉴의 실행 취소(⌘Z)·다시 실행(⇧⌘Z)은 처리하는 곳을 응답 사슬에서 찾는데, 편집기가 받지 않으면 창까지 올라가
-  // 창의 기록(사이드바 회차 작업)을 쓴다. 입력은 회차 기록(`episodeUndoManager`)에 쌓이므로 여기서 직접 받는다(2026-11-12 사용자 지적).
+  // 창의 기록(사이드바 회차 작업)을 쓴다. 입력은 회차 기록(`episodeUndoManager`)에 쌓이므로 여기서 직접 받는다.
   @objc func undo(_ sender: Any?) {
     finishComposition()
     episodeUndoManager.undo()
@@ -237,7 +237,7 @@ final class ManuscriptTextView: NSTextView {
     episodeUndoManager.redo()
   }
 
-  /// 되돌리기 단위를 한 글자로 한다(2026-11-12 사용자 요청). NSTextView는 이어서 친 글자를 한 묶음으로 합쳐
+  /// 되돌리기 단위를 한 글자로 한다. NSTextView는 이어서 친 글자를 한 묶음으로 합쳐
   /// ⌘Z 한 번에 문장째 지우므로, 고칠 때마다 묶음을 끊는다. 조합 중에는 끊지 않아 조합이 끝난 한 글자("한")가 한 단위가 된다.
   override func didChangeText() {
     super.didChangeText()
@@ -326,7 +326,7 @@ final class ManuscriptTextView: NSTextView {
   // MARK: - 폭과 여백
 
   /// NSTextView는 텍스트 칸 오른쪽 끝보다 오른쪽 점을 자기 것으로 보지 않아, 오른쪽 여백 클릭이 뒤의 clip view로 가서
-  /// 커서가 움직이지 않았다(2026-11-18 실제 클릭 기록으로 확인). 본문 폭을 고정해 오른쪽 여백이 넓으므로 편집기 안이면 직접 받는다.
+  /// 커서가 움직이지 않는다. 본문 폭을 고정해 오른쪽 여백이 넓으므로 편집기 안이면 직접 받는다.
   override func hitTest(_ point: NSPoint) -> NSView? {
     if let hit = super.hitTest(point) { return hit }
     guard !isHidden else { return nil }

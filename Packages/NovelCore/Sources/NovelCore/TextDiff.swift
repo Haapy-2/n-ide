@@ -62,7 +62,7 @@ public struct TextDiff: Sendable, Equatable {
   }
 
   /// 빈 글은 줄이 없는 것으로 본다(빈 글 → 새 글이면 모두 "넣은 줄").
-  /// 편집기 줄 번호와 같은 규칙(`ParagraphLines`). 예전에는 `"\n"`으로만 나눠서 `\r\n` 파일이 한 줄로 보였다.
+  /// 편집기 줄 번호와 같은 규칙(`ParagraphLines`). `"\n"`으로만 나누면 Swift는 `\r\n`을 한 글자로 봐서 그런 파일이 한 줄이 된다.
   static func lines(_ text: String) -> [String] {
     ParagraphLines.split(text)
   }

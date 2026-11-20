@@ -61,7 +61,7 @@ final class CharacterCountingTests: XCTestCase {
     XCTAssertEqual(model.episode(id)?.characterCount, CharacterCount(withSpaces: 10, withoutSpaces: 8))
   }
 
-  /// 다음 회차 본문을 열지 못하면 앞 회차의 글자 수를 비운다. 전에는 오류 문구 옆에 앞 회차 글자 수가 남았다(2026-11-20 점검).
+  /// 다음 회차 본문을 열지 못하면 앞 회차의 글자 수를 비운다(오류 문구 옆에 남으면 그 회차 것처럼 보인다).
   func testClearDropsPreviousEpisodeCount() async throws {
     let model = try makeModel()
     let id = try await model.addEpisode()

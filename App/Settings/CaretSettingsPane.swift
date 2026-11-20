@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// 설정 창 "커서": 편집기 커서의 두께·높이·색(2026-11-18 사용자 요청). 색은 라이트/다크를 따로 고른다.
-/// 편집기 화면에 넣으면 스크롤이 생겨서 왼쪽 목록에 따로 두었다(사용자 결정).
+/// 설정 창 "커서": 편집기 커서의 두께·높이·색. 색은 라이트/다크를 따로 고른다.
+/// 편집기 화면에 넣으면 스크롤이 생겨서 왼쪽 목록에 따로 두었다.
 struct CaretSettingsPane: View {
   private var caret = CaretStyleSettings()
   private var editor = EditorStyleSettings()
@@ -86,7 +86,7 @@ private struct CaretPreview: View {
   }
 }
 
-/// 두께 입력 칸. 입력을 마치면(엔터·다른 곳 클릭) 1~4pt, 0.5 단위로 맞춘다(최대 4는 사용자 요청).
+/// 두께 입력 칸. 입력을 마치면(엔터·다른 곳 클릭) 1~4pt, 0.5 단위로 맞춘다.
 private struct CaretWidthField: View {
   @Binding var value: Double
   @State private var text = ""

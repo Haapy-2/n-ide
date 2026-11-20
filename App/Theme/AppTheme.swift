@@ -1,4 +1,4 @@
-/// 앱 화면 테마 (설정 창 "화면", 2026-11-12 사용자 요청). 순서는 설정 창에 놓이는 순서다.
+/// 앱 화면 테마. 순서는 설정 창에 놓이는 순서다.
 enum AppTheme: String, CaseIterable {
   case dark
   case system

@@ -11,7 +11,7 @@ struct SnapshotTests {
     return (store, id)
   }
 
-  /// 2026-11-11 09:00:00에서 `seconds`초 뒤.
+  /// 기준 시각에서 `seconds`초 뒤.
   private func time(_ seconds: Int) -> Date {
     var parts = DateComponents()
     (parts.year, parts.month, parts.day, parts.hour) = (2026, 11, 11, 9)

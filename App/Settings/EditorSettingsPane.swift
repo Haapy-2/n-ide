@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 설정 창 "편집기": 본문 모양과 아래 상태 줄(2026-11-12 사용자 요청: 상태 줄 설정을 편집기로).
+/// 설정 창 "편집기": 본문 모양과 아래 상태 줄.
 struct EditorSettingsPane: View {
   private var editor = EditorStyleSettings()
   @AppStorage(AppSettingKey.characterCountDisplay) private var display: CharacterCountDisplay = .both

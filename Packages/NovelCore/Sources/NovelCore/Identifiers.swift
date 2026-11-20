@@ -33,7 +33,7 @@ public struct NoteID: Hashable, Codable, Sendable, CustomStringConvertible {
   }
 }
 
-/// 회차 묶음의 고유 ID(2026-11-20, PLAN 8장 B안). 파일과는 상관없고 `project.json`에만 있다.
+/// 회차 묶음의 고유 ID. 파일과는 상관없고 `project.json`에만 있다.
 public struct GroupID: Hashable, Codable, Sendable, CustomStringConvertible {
   public let rawValue: String
   public init(rawValue: String) { self.rawValue = rawValue }

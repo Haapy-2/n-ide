@@ -5,7 +5,7 @@ import AppKit
 /// 화면 테마도 여기서 앱 전체에 건다: SwiftUI `preferredColorScheme`은 창마다 걸어야 하고,
 /// "기기 설정"(nil)으로 되돌릴 때 이미 열린 창이 바뀌지 않는다.
 /// 입력 칸(설정 창의 목표 등) 밖을 누르면 입력을 끝내는 것도 여기서 한다. 맥은 원래 커서를 그대로 두고,
-/// SwiftUI에는 "창 어디든 누르면"을 받는 방법이 없다(2026-11-12 사용자 요청).
+/// SwiftUI에는 "창 어디든 누르면"을 받는 방법이 없다.
 final class AppDelegate: NSObject, NSApplicationDelegate {
   private var themeObserver: NSObjectProtocol?
   private var clickMonitor: Any?

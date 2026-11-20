@@ -26,11 +26,11 @@ enum CharacterCountDisplay: String, CaseIterable {
   }
 }
 
-/// 상태 줄 목표 진행률의 모양. 설정 창에서 고른다(2026-11-12 사용자 요청).
+/// 상태 줄 목표 진행률의 모양. 설정 창에서 고른다.
 enum GoalProgressStyle: String, CaseIterable {
   /// 가운데가 뚫린 고리
   case ring
-  /// 가운데까지 채워지는 원(파이 모양, 2026-11-12 사용자 요청)
+  /// 가운데까지 채워지는 원
   case pie
   case bar
 

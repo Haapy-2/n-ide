@@ -35,7 +35,7 @@ struct EditorSetting {
   static let lineWidthInCharacters = EditorSetting(defaultValue: 40, range: 30...55, step: 1)
   /// 글자 수 갱신 주기(초). 0 = 실시간
   static let characterCountInterval = EditorSetting(defaultValue: 0.2, range: 0...0.3, step: 0.1)
-  /// 커서 두께(pt)와 높이(글자 크기의 배수). 두께는 숫자 입력 칸이라 최대 4로 막는다(2026-11-18 사용자 요청).
+  /// 커서 두께(pt)와 높이(글자 크기의 배수). 두께는 숫자 입력 칸이라 최대 4로 막는다.
   static let caretWidth = EditorSetting(defaultValue: 2, range: 1...4, step: 0.5)
   static let caretHeightRatio = EditorSetting(defaultValue: 1.2, range: 1...1.75, step: 0.05)
   /// 토스트가 머무는 시간(초). 편집기 설정은 아니지만 같은 슬라이더·맞추기 규칙을 쓰려고 여기에 둔다.

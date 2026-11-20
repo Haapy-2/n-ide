@@ -3,7 +3,7 @@ import XCTest
 @testable import NovelEditor
 
 /// 파일 메뉴에 저장·스냅샷 항목이 실제로 있고 단축키가 맞는지.
-/// (CommandGroup(after: .saveItem)에 붙였을 때 메뉴에서 통째로 빠져 ⌥⌘S·⇧⌘S가 듣지 않았다. 2026-11-17)
+/// (CommandGroup(after: .saveItem)에 붙이면 메뉴에서 통째로 빠져 단축키가 듣지 않는다.)
 /// 항목이 켜지는지는 보지 않는다. 시험용 창(NSHostingView)은 SwiftUI 장면이 아니라 초점 값이 메뉴에 닿지 않아
 /// "새 회차"까지 모두 흐리게 나온다. 켜짐과 판 열기는 손 확인으로 본다.
 @MainActor

@@ -32,7 +32,7 @@ struct NovelEditorApp: App {
     Settings {
       SettingsView()
     }
-    // 창 크기는 고정(SettingsView.windowSize). 크기 조절 테두리도 없다(2026-11-12 사용자 요청).
+    // 창 크기는 고정(SettingsView.windowSize). 크기 조절 테두리도 없다.
     .windowResizability(.contentSize)
   }
 }

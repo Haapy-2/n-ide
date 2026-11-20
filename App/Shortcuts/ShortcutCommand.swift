@@ -4,13 +4,13 @@ import Foundation
 /// 새 메뉴 명령을 만들면 여기에 한 줄 더하고 메뉴에서 `ShortcutSettings.shortcut(_:)`로 읽는다.
 enum ShortcutCommand: String, CaseIterable, Identifiable {
   case newProject, openOther, switchProject, saveNow
-  /// 저장하면서 스냅샷 찍기(2026-11-18 사용자 요청). 설정에서 켰을 때만 쓰이고, 그동안 지금 저장·스냅샷 찍기 칸은 잠긴다.
+  /// 저장하면서 스냅샷 찍기. 설정에서 켰을 때만 쓰이고, 그동안 지금 저장·스냅샷 찍기 칸은 잠긴다.
   case saveWithSnapshot
   case takeSnapshot, showSnapshots
   /// 작품 전체 검색(12단계)
   case searchProject
   case newEpisode, previousEpisode, nextEpisode, renameEpisode, trashEpisode, episodeGoal
-  /// 회차 묶음(2026-11-20). 기본 단축키 없음.
+  /// 회차 묶음. 기본 단축키 없음.
   case groupEpisodes, ungroupEpisodes
 
   var id: Self { self }
@@ -54,7 +54,7 @@ enum ShortcutCommand: String, CaseIterable, Identifiable {
     case .saveNow: KeyCombo("s", [.command])
     // 지금 저장과 같은 ⌘S. 둘은 동시에 쓰이지 않아서 겹치지 않는다(ShortcutSettings.isActive).
     case .saveWithSnapshot: KeyCombo("s", [.command])
-    // ⌥⌘S는 시스템 "사이드바 보기"와 겹쳐 ⌃⌘S로(2026-11-17 사용자 결정)
+    // ⌥⌘S는 시스템 "사이드바 보기"와 겹쳐 ⌃⌘S로
     case .takeSnapshot: KeyCombo("s", [.command, .control])
     case .showSnapshots: KeyCombo("s", [.command, .shift])
     case .searchProject: KeyCombo("f", [.command, .shift])

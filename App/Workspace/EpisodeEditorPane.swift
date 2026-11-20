@@ -28,7 +28,7 @@ struct EpisodeEditorPane: View {
 
   var body: some View {
     let style = editorSettings.style
-    // 상태 줄은 본문 위 아래쪽에 겹쳐 띄운다. 숨으면 바탕도 사라져 본문이 창 맨 아래까지 보인다(2026-11-12 사용자 요청).
+    // 상태 줄은 본문 위 아래쪽에 겹쳐 띄운다. 숨으면 바탕도 사라져 본문이 창 맨 아래까지 보인다.
     ZStack(alignment: .bottom) {
       ZStack {
         Color.paper

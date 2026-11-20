@@ -3,7 +3,7 @@ import SwiftUI
 extension Color {
   /// 선택한 줄의 회색 칸.
   static let rowSelected = Color.ink.opacity(0.08)
-  /// 마우스를 올린 줄의 회색 칸. 선택 칸과 헷갈리지 않게 절반 진하기(2026-11-12 사용자 결정).
+  /// 마우스를 올린 줄의 회색 칸. 선택 칸과 헷갈리지 않게 절반 진하기.
   static let rowHovered = Color.ink.opacity(0.04)
 }
 

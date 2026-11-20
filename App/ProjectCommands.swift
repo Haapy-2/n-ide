@@ -23,7 +23,7 @@ struct ProjectCommands: Commands {
         .keyboardShortcut(shortcuts.shortcut(.switchProject))
 
       // 저장·스냅샷도 이 묶음에 둔다. 문서 앱이 아니면 시스템 저장 묶음(.saveItem)이 비어 있어서
-      // CommandGroup(after: .saveItem)로 붙인 항목은 메뉴에 아예 나타나지 않는다(2026-11-17 확인).
+      // CommandGroup(after: .saveItem)로 붙인 항목은 메뉴에 아예 나타나지 않는다.
       Divider()
       // "저장하면서 스냅샷 찍기"를 켜면 같은 항목이 그 키로 저장과 스냅샷을 함께 한다.
       Button(ShortcutCommand.saveNow.title) {

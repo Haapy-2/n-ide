@@ -24,7 +24,7 @@ struct SaveQueueTests {
   }
 
   /// 쓰기 함수가 "쓰지 않았다"(외부 변경과 충돌)고 알리면 그 번호를 저장된 것으로 세지 않는다.
-  /// 전에는 셌기 때문에, 같은 번호의 다음 저장이 "옛 저장"으로 건너뛰어지고 메모리에 붙잡은 원고까지 지워졌다(2026-11-20 점검).
+  /// 세면 같은 번호의 다음 저장이 "옛 저장"으로 건너뛰어지고 메모리에 붙잡은 원고까지 지워진다.
   @Test func writeThatDidNotHappenIsNotCounted() async throws {
     let queue = SaveQueue(retryDelays: fast)
     let id = EpisodeID.make()

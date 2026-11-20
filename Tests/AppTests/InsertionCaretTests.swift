@@ -2,7 +2,7 @@ import AppKit
 import XCTest
 @testable import NovelEditor
 
-/// 커서 높이 (2026-11-18 사용자 요청: 글자 크기 + 20%). 그리는 것 자체는 창이 앞에 있어야 해서 손 확인으로 본다.
+/// 커서 높이. 그리는 것 자체는 창이 앞에 있어야 해서 손 확인으로 본다.
 @MainActor
 final class InsertionCaretTests: XCTestCase {
   private func makeEditor(_ style: EditorStyle = EditorStyle()) -> ManuscriptTextView {

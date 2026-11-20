@@ -3,7 +3,7 @@ import NovelCore
 import XCTest
 @testable import NovelEditor
 
-/// 전체 점검(2026-11-17)에서 고친 것들: 같은 작품 창 두 개, 종료 직전 project.json 저장, 조합 중 바뀐 모양, 글자 수 칸.
+/// 전체 점검에서 고친 것들: 같은 작품 창 두 개, 종료 직전 project.json 저장, 조합 중 바뀐 모양, 글자 수 칸.
 @MainActor
 final class StabilityTests: XCTestCase {
   private var folder: URL!

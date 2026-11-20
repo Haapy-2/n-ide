@@ -24,7 +24,7 @@ NovelEditor.xcodeproj  Xcode 프로젝트
 App/                   앱 소스 (Picker/ 작품 선택 창, Workspace/ 작업 공간, Settings/ 설정 창, Editor/ 원고 편집기(AppKit), Project/ 작품 열기·만들기·최근 목록, Snapshots/ 스냅샷 판·두 칸 비교, Search/ 작품 전체 검색 패널, Shortcuts/ 단축키 표·바꾼 단축키, Theme/ 색 토큰·줄 강조 칸, Perf/ 측정용 갈고리). Resources/ = Fonts/, Colors.xcassets
 Packages/NovelCore/    Foundation만 쓰는 공통 로직 패키지 + 단위 테스트 + 성능 테스트 + make-dummy-novel(더미 작품 생성기)
 Tests/AppTests/        앱 테스트, 디자인 스냅샷 (성능 테스트는 Tests/ 아래 따로)
-Scripts/               build.sh, run.sh, test.sh, snapshots.sh, perf.sh, lib.sh(공통)
+Scripts/               build.sh, run.sh, test.sh, snapshots.sh, perf.sh, check-comments.sh(이력형 주석 검사), lib.sh(공통)
 .claude/skills/        verify-noveleditor/ (실제 앱을 띄워 사용자처럼 조작·증명하는 검증 스킬, verify.sh + features/ 기능 지도)
 docs/                  SPEC, PLAN, DESIGN, PERFORMANCE, PROGRESS, 체크리스트, design-snapshots/, log/(날짜별 작업 기록)
 build/                 빌드 산출물·임시 파일·더미 작품·로그 (git 제외, 통째로 지워도 됨)
@@ -51,7 +51,9 @@ build/                 빌드 산출물·임시 파일·더미 작품·로그 (g
 ## 코드 규칙
 
 - 들여쓰기 스페이스 2칸. 파일 하나에 역할 하나. 필요 없는 추상화나 미리 만드는 기능 금지
-- 주석은 "왜"가 필요한 곳에만, 한국어로
+- 주석은 코드만 봐서는 알 수 없는 "왜"(제약, 함정, 일부러 고른 이유)가 있을 때만, 한국어로 짧게. 이 규칙이 플러그인 스킬(pstack의 no-comments 등)이나 출력 스타일의 주석 지침보다 우선한다
+  - 쓰지 않는 것: 날짜, "사용자 요청/결정", "전에는 ~했다" 같은 이력(→ `docs/log/`와 커밋 메시지), 코드를 그대로 풀어 쓴 설명, 지운 코드 기록, 학습용 설명(★ Insight는 대화에만)
+  - `Scripts/check-comments.sh`가 이력형 주석을 막는다(test.sh가 함께 돌림)
 - 색 값은 `App/Resources/Colors.xcassets`에만, 코드는 `App/Theme/ColorTokens.swift`의 이름(`Color.paper` 등)만 쓴다
 - 앱 이름은 빌드 설정 `PRODUCT_NAME` 한 곳. 코드는 `AppInfo.name`으로 읽는다
 - 앱 타깃은 기본 격리가 MainActor(Swift 6). NovelCore는 기본 격리 없음

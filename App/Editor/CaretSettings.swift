@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// 커서 팔레트: 미리 정한 색 다섯 개(2026-11-18 사용자 요청). 값은 Colors.xcassets에 라이트/다크 한 쌍씩.
+/// 커서 팔레트: 미리 정한 색 다섯 개. 값은 Colors.xcassets에 라이트/다크 한 쌍씩.
 enum CaretPalette: String, CaseIterable {
   case accent, ink, caretRed, caretGreen, caretOrange
 
@@ -85,7 +85,7 @@ enum CaretColor: Equatable {
   }
 }
 
-/// 편집기 커서의 두께·높이·색. 색은 라이트/다크를 따로 고른다(2026-11-18 사용자 요청).
+/// 편집기 커서의 두께·높이·색. 색은 라이트/다크를 따로 고른다.
 struct CaretStyle: Equatable {
   var width: CGFloat = EditorSetting.caretWidth.defaultValue
   var heightRatio: CGFloat = EditorSetting.caretHeightRatio.defaultValue
