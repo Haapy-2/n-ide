@@ -20,7 +20,7 @@ struct TestFolder {
     try? FileManager.default.removeItem(at: url)
   }
 
-  /// 폴더 안 파일 이름 목록 (숨김 파일 포함).
+  /// 숨김 파일도 포함한다.
   func fileNames(in folder: URL) throws -> [String] {
     try FileManager.default.contentsOfDirectory(atPath: folder.path(percentEncoded: false)).sorted()
   }

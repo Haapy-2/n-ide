@@ -2,7 +2,6 @@ import AppKit
 import XCTest
 @testable import NovelEditor
 
-/// 설정 창은 고정 크기다. 테두리를 끌어 크기를 바꿀 수 없다.
 @MainActor
 final class SettingsWindowTests: XCTestCase {
   func testSettingsWindowHasFixedSize() throws {

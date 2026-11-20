@@ -2,7 +2,6 @@ import AppKit
 import XCTest
 @testable import NovelEditor
 
-/// 설정 › 커서: 두께는 최대 4, 색 저장 글자, 설정이 편집기 커서 칸에 반영되는지.
 @MainActor
 final class CaretSettingsTests: XCTestCase {
   func testWidthStaysBetweenOneAndFour() {
@@ -23,7 +22,6 @@ final class CaretSettingsTests: XCTestCase {
     XCTAssertEqual(CaretColor(storageText: "#12"), .standard)
   }
 
-  /// 팔레트 색은 모드마다 Colors.xcassets의 다른 값으로 풀린다.
   func testPaletteResolvesPerMode() {
     let light = CaretColor.palette(.accent).nsColor(dark: false)
     let dark = CaretColor.palette(.accent).nsColor(dark: true)

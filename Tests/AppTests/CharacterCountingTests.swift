@@ -3,7 +3,6 @@ import NovelCore
 import XCTest
 @testable import NovelEditor
 
-/// 글자 수 세기(편집기 → 회차 목록 → project.json), 목표 글자 수, 상태 줄 흐려짐.
 @MainActor
 final class CharacterCountingTests: XCTestCase {
   private var folder: URL!
@@ -26,7 +25,7 @@ final class CharacterCountingTests: XCTestCase {
       autosaveDelay: .milliseconds(20), countDelay: .milliseconds(20), countSaveDelay: .milliseconds(50))
   }
 
-  /// 편집기를 만들고 회차를 연다(EpisodeEditorPane이 하는 순서대로).
+  /// EpisodeEditorPane과 같은 순서로 연다.
   private func open(_ id: EpisodeID, in model: ProjectModel, textView: ManuscriptTextView? = nil) throws -> ManuscriptTextView {
     let textView = textView ?? ManuscriptTextView.make()
     model.counter.attach(textView)
@@ -86,7 +85,6 @@ final class CharacterCountingTests: XCTestCase {
     XCTAssertEqual(textView.markedRange().length, 1)
   }
 
-  /// 입력 직후(아직 세기 전) 다른 회차로 옮겨도 떠난 회차의 마지막 글자 수가 남는다.
   func testSwitchingRightAfterTypingCountsLeftEpisode() async throws {
     let model = try makeModel()
     let first = try await model.addEpisode()
@@ -102,7 +100,7 @@ final class CharacterCountingTests: XCTestCase {
     XCTAssertEqual(model.episode(second)?.characterCount?.withSpaces, 5)
   }
 
-  /// 앱 밖에서 바뀐 본문으로 다시 읽어도(8단계) 다시 센다.
+  /// 앱 밖에서 바뀐 본문으로 다시 읽어도 다시 센다.
   func testReloadRecounts() async throws {
     let model = try makeModel()
     let id = try await model.addEpisode()
@@ -114,7 +112,6 @@ final class CharacterCountingTests: XCTestCase {
     try await waitUntil { model.counter.current == CharacterCount(withSpaces: 8, withoutSpaces: 6) }
   }
 
-  /// 글자 수는 project.json에 묶어서(조금 뒤에) 저장한다.
   func testCountIsSavedToProjectFileLater() async throws {
     let model = try makeModel()
     let id = try await model.addEpisode()
@@ -136,7 +133,6 @@ final class CharacterCountingTests: XCTestCase {
     XCTAssertEqual(try store.loadProject().episodes[0].characterCount?.withSpaces, 3)
   }
 
-  /// 이름 변경을 되돌려도 그사이 센 글자 수는 옛 값으로 돌아가지 않는다.
   func testUndoRenameKeepsLatestCount() async throws {
     let model = try makeModel()
     let id = try await model.addEpisode()
@@ -182,7 +178,7 @@ final class CharacterCountingTests: XCTestCase {
 
   // MARK: - 상태 줄 숨기기
 
-  /// "타이핑 중 숨기기"를 골랐을 때(SPEC 원래 방식).
+  /// "타이핑 중 숨기기"를 골랐을 때.
   private func typingHidingFade(hideAfter: Duration, showAfter: Duration) -> StatusBarFade {
     let fade = StatusBarFade(hideAfter: hideAfter, showAfter: showAfter)
     fade.hidesWhileTyping = true

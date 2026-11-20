@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import NovelCore
 
-/// 비교 엔진 (11c). 비교 화면과 복원 판단이 이 결과를 믿으므로 줄 맞춤과 칠할 곳을 정확히 본다.
+/// 비교 엔진. 비교 화면과 복원 판단이 이 결과를 믿으므로 줄 맞춤과 칠할 곳을 정확히 본다.
 struct TextDiffTests {
   private func diff(_ old: String, _ new: String) throws -> TextDiff { try TextDiff(old: old, new: new) }
 

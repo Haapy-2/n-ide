@@ -185,7 +185,6 @@ final class StatusBarFade {
     self.idleAfter = idleAfter
   }
 
-  /// 편집기에서 글을 고칠 때마다.
   func noteInput() {
     let now = ContinuousClock.now
     lastInput = now
@@ -248,7 +247,6 @@ final class StatusBarFade {
   }
 }
 
-// Xcode 캔버스(⌥⌘↩)에서 두 모양을 바로 비교할 수 있다.
 #Preview("목표 진행률") {
   VStack(alignment: .trailing, spacing: 12) {
     ForEach(GoalProgressStyle.allCases, id: \.self) { style in

@@ -4,7 +4,6 @@ import NovelCore
 import XCTest
 @testable import NovelEditor
 
-/// 작품 전체 검색(12단계): 열린 회차의 저장 전 글까지 찾는지, 결과를 누르면 편집기가 그 자리로 가는지.
 @MainActor
 final class ProjectSearchTests: XCTestCase {
   private var folder: URL!
@@ -53,7 +52,6 @@ final class ProjectSearchTests: XCTestCase {
     XCTAssertEqual(try store.readEpisode(second), "빈 회차", "디스크에는 아직 없다")
   }
 
-  /// 새로 치면 앞 검색을 버리고, 지우면 결과도 사라진다.
   func testNewQueryReplacesResultAndEmptyClears() async throws {
     let id = EpisodeID.make()
     try store.writeEpisode("사과 배 사과", id: id)
@@ -96,7 +94,6 @@ final class ProjectSearchTests: XCTestCase {
     XCTAssertEqual(textView.selectedRange(), NSRange(location: 11, length: 1))
   }
 
-  /// 검색한 뒤 앞에 글을 더 써서 자리가 밀렸으면 가장 가까운 같은 문구로 간다.
   func testRevealFindsNearestWhenTextMoved() {
     let (window, textView) = editor("아, 그는 검을 들었다.\n검이 울었다.")
     defer { window.close() }
@@ -107,7 +104,6 @@ final class ProjectSearchTests: XCTestCase {
     XCTAssertEqual(textView.selectedRange(), NSRange(location: 14, length: 1))
   }
 
-  /// 긴 본문 가운데의 결과로 가면 그 자리가 화면 안에 보인다.
   func testRevealScrollsMatchIntoView() async throws {
     let paragraphs = (1...200).map { "\($0)번째 문단입니다. 그는 길을 걸었다." }
     let target = 150

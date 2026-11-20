@@ -42,7 +42,6 @@ struct SaveQueueTests {
     #expect(try await queue.save(.episode(id), change: 3) {} == .skippedStale)
   }
 
-  /// 저장 100개를 뒤죽박죽 순서로 동시에 보내도 마지막에는 가장 높은 번호의 내용이 남는다.
   @Test func manyConcurrentSavesEndWithHighestChange() async throws {
     let folder = try TestFolder()
     defer { folder.remove() }

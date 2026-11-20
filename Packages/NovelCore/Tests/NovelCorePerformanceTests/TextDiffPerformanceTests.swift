@@ -2,7 +2,7 @@ import Foundation
 import NovelCore
 import XCTest
 
-/// 비교 엔진 속도 (11c). 메인 스레드 밖에서 돌지만, 스냅샷을 누르면 바로 보여야 하므로 짧아야 한다.
+/// 비교 엔진 속도. 메인 스레드 밖에서 돌지만, 스냅샷을 누르면 바로 보여야 하므로 짧아야 한다.
 /// 더미 5,000자 회차를 고쳐 쓴 판(문단 몇 개 고치기·지우기·넣기)과 비교하고, 이어 붙인 10만 자도 잰다.
 /// 최악: 문단이 하나도 안 겹치는 10만 자 두 개.
 final class TextDiffPerformanceTests: XCTestCase {

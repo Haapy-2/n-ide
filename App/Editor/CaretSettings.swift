@@ -69,7 +69,6 @@ enum CaretColor: Equatable {
     }
   }
 
-  /// 정한 모드 하나의 모양으로 푼 색.
   func nsColor(dark: Bool) -> NSColor {
     switch self {
     case .palette(let palette):

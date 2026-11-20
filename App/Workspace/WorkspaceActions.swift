@@ -12,9 +12,7 @@ struct WorkspaceActions {
   var saveNow: (() -> Void)?
   /// 저장하고 이어서 스냅샷(설정 → 단축키에서 켰을 때 지금 저장 대신). 글이 마지막 스냅샷과 같으면 스냅샷은 건너뛴다.
   var saveWithSnapshot: (() -> Void)?
-  /// 지금 회차 스냅샷 찍기(⌃⌘S)
   var takeSnapshot: (() -> Void)?
-  /// 지금 회차 스냅샷 판 열기(⇧⌘S)
   var showSnapshots: (() -> Void)?
   /// 사이드바 자리에 작품 전체 검색 패널을 연다(⇧⌘F). 이미 열려 있으면 입력 칸에 초점을 준다.
   var showSearch: (() -> Void)?

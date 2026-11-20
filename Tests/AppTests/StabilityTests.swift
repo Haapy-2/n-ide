@@ -3,7 +3,6 @@ import NovelCore
 import XCTest
 @testable import NovelEditor
 
-/// 전체 점검에서 고친 것들: 같은 작품 창 두 개, 종료 직전 project.json 저장, 조합 중 바뀐 모양, 글자 수 칸.
 @MainActor
 final class StabilityTests: XCTestCase {
   private var folder: URL!
@@ -38,7 +37,6 @@ final class StabilityTests: XCTestCase {
     XCTAssertNotEqual(ProjectLauncher.windowValue(for: URL(filePath: "/Users/me/글/작품2.novel")), value)
   }
 
-  /// 목록을 바꾸자마자 앱을 꺼도, 종료 전에 project.json 저장을 끝낸다.
   func testQuitWaitsForProjectSave() async throws {
     let model = try makeModel()
     model.setDefaultEpisodeGoal(3_000)
@@ -102,7 +100,6 @@ final class StabilityTests: XCTestCase {
     (textView.textStorage?.attribute(.font, at: index, effectiveRange: nil) as? NSFont)?.pointSize
   }
 
-  /// 바로가기(심볼릭 링크) 경로로 열어도 같은 작품이면 같은 창 값.
   func testSymlinkedPathGetsSameWindowValue() throws {
     let real = folder.appending(path: "작품.novel")
     let link = folder.appending(path: "바로가기.novel")

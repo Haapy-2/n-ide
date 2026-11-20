@@ -1,6 +1,6 @@
 import NovelCore
 
-/// 스냅샷을 찍는 때 (11b, PLAN 10장 3번). 자동 저장기(`EpisodeAutosaver`)가 갖고 있고 본문은 그쪽이 건넨다.
+/// 스냅샷을 찍는 때 (PLAN 10장 3번). 자동 저장기(`EpisodeAutosaver`)가 갖고 있고 본문은 그쪽이 건넨다.
 /// - 자동: 설정한 간격마다, 지금 회차를 그사이 고쳤을 때만.
 /// - 떠날 때: 회차 전환·창 닫기·앱 종료. 자동을 꺼도 늘 찍는다(결정 16). 이번에 고치지 않은 회차는 찍지 않는다
 ///   (훑어보기만 한 회차마다 스냅샷이 생기지 않게).
@@ -73,7 +73,7 @@ final class EpisodeSnapshotter {
     return try await enqueue(text, id, .manual, skipIfSame: skipIfUnchanged).value
   }
 
-  /// 되돌리기 직전 지금 본문을 `restore`로 남긴다(11e). 같은 내용이어도 늘 찍는다: 메모로 "언제 무엇으로 되돌렸나"를 남기려고.
+  /// 되돌리기 직전 지금 본문을 `restore`로 남긴다. 같은 내용이어도 늘 찍는다: 메모로 "언제 무엇으로 되돌렸나"를 남기려고.
   func takeRestore(_ id: EpisodeID, text: String, memo: String) async throws -> Snapshot? {
     try await enqueue(text, id, .restore, memo: memo).value
   }
@@ -83,7 +83,6 @@ final class EpisodeSnapshotter {
     edited.remove(id)
   }
 
-  /// 지금까지 맡은 쓰기가 다 끝날 때까지 기다린다.
   func waitForWrites() async {
     while pending > 0, let task = tail {
       await task.value

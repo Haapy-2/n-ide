@@ -7,9 +7,9 @@ import Observation
 /// - 실제 쓰기는 `SaveQueue`가 순서대로 처리하고 실패하면 재시도한다.
 /// - 끝내 실패하면 그 회차 본문을 메모리(`unsaved`)에 들고 있다가, 그 회차를 다시 열 때 디스크 대신 이것을 보여준다.
 /// - 텍스트 저장소는 읽기만 한다. 그래서 한글 조합 중에 저장해도 조합이 끊기지 않는다.
-/// - 외부 변경(8단계): 창이 다시 활성화될 때와 저장 직전에 파일이 앱 밖에서 바뀌었는지 본다.
+/// - 외부 변경: 창이 다시 활성화될 때와 저장 직전에 파일이 앱 밖에서 바뀌었는지 본다.
 ///   앱 쪽 변경이 없으면 조용히 다시 읽고, 양쪽 다 바뀌었으면 앱 쪽을 스냅샷으로 남긴 뒤 사용자에게 묻는다(`conflicts`).
-/// - 버전 스냅샷(11단계)은 `snapshots`가 찍는다. 떠날 때는 저장하려고 복사한 본문을 그대로 넘겨 한 번 더 복사하지 않는다.
+/// - 버전 스냅샷은 `snapshots`가 찍는다. 떠날 때는 저장하려고 복사한 본문을 그대로 넘겨 한 번 더 복사하지 않는다.
 @MainActor
 @Observable
 final class EpisodeAutosaver {
@@ -56,7 +56,6 @@ final class EpisodeAutosaver {
   @ObservationIgnored private var pendingSave: Task<Void, Never>?
   /// 마지막 저장 실패의 설명. 실패한 원고가 남아 있는 동안 상태 줄에 보인다.
   @ObservationIgnored private var lastFailure = ""
-  /// 회차마다 앱이 마지막으로 읽거나 쓴 디스크 상태. 외부 변경 판단의 기준.
   @ObservationIgnored let disk = DiskVersions()
 
   init(store: ProjectStore, queue: SaveQueue = SaveQueue(), delay: Duration = .seconds(1)) {
@@ -69,7 +68,6 @@ final class EpisodeAutosaver {
     snapshots.currentText = { [weak self] in self?.textView?.string }
   }
 
-  /// 저장 안 된 변경이 있는지 (지금 회차 또는 저장에 실패한 회차).
   /// 앱을 끄기 전에 마칠 일이 있는지: 저장 안 된 변경, 아직 안 찍은 떠날 때 스냅샷, 쓰는 중인 스냅샷.
   var hasWorkBeforeQuit: Bool { hasUnsavedChanges || snapshots.hasPendingWork || hasProjectWork() }
 
@@ -78,6 +76,7 @@ final class EpisodeAutosaver {
   @ObservationIgnored var hasProjectWork: () -> Bool = { false }
   @ObservationIgnored var finishProjectWork: () async -> Void = {}
 
+  /// 저장 안 된 변경이 있는지 (지금 회차 또는 저장에 실패한 회차).
   var hasUnsavedChanges: Bool {
     if let episodeID, isDirty(episodeID) { return true }
     return !unsaved.isEmpty || !running.isEmpty
@@ -213,7 +212,6 @@ final class EpisodeAutosaver {
     if case .failed = status { settleStatus() }
   }
 
-  /// 편집기에서 사용자가 글을 고칠 때마다.
   func textDidChange() {
     restoreNotice = nil
     guard let episodeID else { return }
@@ -226,10 +224,9 @@ final class EpisodeAutosaver {
     scheduleSave()
   }
 
-  // MARK: - 스냅샷으로 되돌리기 (11e, PLAN 10장 6번)
+  // MARK: - 스냅샷으로 되돌리기 (PLAN 10장 6번)
 
   enum RestoreError: Error {
-    /// 그 회차가 편집기에 열려 있지 않다.
     case notOpen
     /// 외부 변경 충돌을 아직 고르지 않았다.
     case conflict

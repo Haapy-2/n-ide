@@ -3,7 +3,7 @@ import NovelCore
 import XCTest
 @testable import NovelEditor
 
-/// 외부 변경 처리 (8단계). 다른 편집기에서 고친 원고도, 앱에서 쓰던 원고도 잃지 않는지 본다.
+/// 외부 변경 처리. 다른 편집기에서 고친 원고도, 앱에서 쓰던 원고도 잃지 않는지 본다.
 @MainActor
 final class ExternalChangeTests: XCTestCase {
   private var folder: URL!

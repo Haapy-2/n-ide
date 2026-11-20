@@ -38,7 +38,6 @@ public enum DiskCheck: Equatable, Sendable {
   case unchanged(DiskVersion)
   /// 앱 밖에서 내용이 바뀌었다.
   case changed(DiskVersion)
-  /// 파일이 없어졌다.
   case missing
 }
 

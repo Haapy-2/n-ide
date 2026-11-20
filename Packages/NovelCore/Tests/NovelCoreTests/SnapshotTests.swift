@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import NovelCore
 
-/// 스냅샷 저장·목록·메모·정리 (11a). 정리는 실제로 파일을 지우므로 "지우면 안 되는 것"을 가장 꼼꼼히 본다.
+/// 스냅샷 저장·목록·메모·정리. 정리는 실제로 파일을 지우므로 "지우면 안 되는 것"을 가장 꼼꼼히 본다.
 struct SnapshotTests {
   private func makeStore(_ folder: TestFolder) throws -> (ProjectStore, EpisodeID) {
     let store = try ProjectStore.create(at: folder.url.appending(path: "작품.novel"), title: "x")
@@ -11,7 +11,6 @@ struct SnapshotTests {
     return (store, id)
   }
 
-  /// 기준 시각에서 `seconds`초 뒤.
   private func time(_ seconds: Int) -> Date {
     var parts = DateComponents()
     (parts.year, parts.month, parts.day, parts.hour) = (2026, 11, 11, 9)

@@ -16,7 +16,6 @@ let longEpisodeCount = arguments.count > 3 ? Int(arguments[3]) ?? 10 : 10
 let shortEpisodeLength = arguments.count > 4 ? Int(arguments[4]) ?? 300 : 300
 let longEpisodeLength = 5_000
 
-/// 결정적인 의사 난수 (같은 씨앗이면 같은 수열).
 struct SeededGenerator: RandomNumberGenerator {
   var state: UInt64
   mutating func next() -> UInt64 {

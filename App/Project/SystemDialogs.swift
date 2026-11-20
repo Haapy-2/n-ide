@@ -22,7 +22,6 @@ enum SystemDialogs {
     return url
   }
 
-  /// 이미 있는 작품(.novel)을 고른다.
   static func askExistingProject() -> URL? {
     let panel = NSOpenPanel()
     panel.title = "작품 열기"
@@ -74,7 +73,6 @@ extension SystemDialogs {
     }
   }
 
-  /// 오류를 표준 경고 창으로 보여준다.
   static func showError(_ title: String, message: String) {
     let alert = NSAlert()
     alert.alertStyle = .warning

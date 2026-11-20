@@ -8,7 +8,7 @@ public struct ProjectFile: Codable, Equatable, Sendable {
   public var episodes: [EpisodeMeta]
   public var notes: [NoteMeta]
   public var settings: ProjectSettings
-  /// 회차 묶음의 이름(2단계 형식). 어느 회차가 어느 묶음인지는 회차의 `group`에 있다.
+  /// 회차 묶음의 이름(형식 2). 어느 회차가 어느 묶음인지는 회차의 `group`에 있다.
   /// 묶음은 늘 이어진 회차들이고, 회원이 없는 묶음은 남기지 않는다(`EpisodeGrouping.normalized`).
   public var groups: [EpisodeGroup]
 
@@ -91,7 +91,6 @@ public struct NoteMeta: Codable, Equatable, Sendable, Identifiable {
 
 /// 작품별 설정. 글꼴 같은 앱 전체 설정은 여기 두지 않는다 (PLAN.md 결정 사항 6).
 public struct ProjectSettings: Codable, Equatable, Sendable {
-  /// 새 회차를 만들 때 쓰는 목표 글자 수.
   public var defaultEpisodeGoal: Int
 
   public init(defaultEpisodeGoal: Int = 5_000) {

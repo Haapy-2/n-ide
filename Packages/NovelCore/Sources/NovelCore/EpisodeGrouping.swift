@@ -53,14 +53,14 @@ public enum EpisodeGrouping {
     return normalized(List(episodes: rest, groups: list.groups + [group]))
   }
 
-  /// 묶음을 푼다. 회차는 그 자리에 그대로 남는다.
+  /// 회차는 그 자리에 그대로 남는다.
   public static func ungroup(_ group: GroupID, in list: List) -> List {
     var episodes = list.episodes
     for index in episodes.indices where episodes[index].group == group { episodes[index].group = nil }
     return normalized(List(episodes: episodes, groups: list.groups))
   }
 
-  /// 회차들을 이미 있는 묶음에 넣는다. 묶음의 끝에 붙는다.
+  /// 묶음의 끝에 붙는다.
   public static func add(_ ids: Set<EpisodeID>, to group: GroupID, in list: List) -> List {
     guard list.groups.contains(where: { $0.id == group }) else { return list }
     let moving = list.episodes.filter { ids.contains($0.id) && $0.group != group }.map { episode in

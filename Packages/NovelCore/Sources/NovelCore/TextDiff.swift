@@ -1,10 +1,9 @@
 import Foundation
 
-/// 두 글의 차이 (11c, PLAN 10장 4번). 과거(old) ↔ 현재(new) 비교 화면이 그대로 그릴 수 있는 모양으로 만든다.
+/// 두 글의 차이 (PLAN 10장 4번). 과거(old) ↔ 현재(new) 비교 화면이 그대로 그릴 수 있는 모양으로 만든다.
 /// - 줄 = 문단(`ParagraphLines` 규칙, 편집기 줄 번호와 같음). 같은 줄은 두 칸에 나란히, 지운 줄은 왼쪽만, 넣은 줄은 오른쪽만.
 /// - 붙어 있는 "지운 줄"과 "넣은 줄"은 순서대로 짝지어 "고친 줄"로 만든다(두 칸에서 같은 높이).
 /// - 고친 줄 안은 바뀐 크기에 맞춰 칠할 곳을 정한다: 많이 바뀌면 줄 전체, 아니면 어절, 어절 안에서 몇 글자면 그 글자만.
-/// 결과는 화면과 따로 둔다. 나중에 다른 출처(고친 기록)도 같은 모양으로 넘길 수 있게.
 public struct TextDiff: Sendable, Equatable {
   /// 고친 줄에서 칠할 곳. 범위는 그 줄 안의 `Character` 위치(0부터)라 한글 음절·이모지가 쪼개지지 않는다.
   public enum Highlight: Sendable, Equatable {
@@ -37,7 +36,7 @@ public struct TextDiff: Sendable, Equatable {
   public static let defaultInlineLimit = 2_000
 
   /// 메인 스레드 밖에서 부른다. 도중에 작업이 취소되면 `CancellationError`를 던진다.
-  /// `wholeLineRatio`: 고친 줄에서 바뀐 글자가 이 비율을 넘으면 줄 전체를 칠한다("절반" 기준은 실제 원고로 보고 정한다).
+  /// `wholeLineRatio`: 고친 줄에서 바뀐 글자가 이 비율을 넘으면 줄 전체를 칠한다.
   public init(
     old: String, new: String, wholeLineRatio: Double = 0.5, inlineLimit: Int = TextDiff.defaultInlineLimit
   ) throws {
@@ -61,8 +60,6 @@ public struct TextDiff: Sendable, Equatable {
     self.isLineOnly = isLineOnly
   }
 
-  /// 빈 글은 줄이 없는 것으로 본다(빈 글 → 새 글이면 모두 "넣은 줄").
-  /// 편집기 줄 번호와 같은 규칙(`ParagraphLines`). `"\n"`으로만 나누면 Swift는 `\r\n`을 한 글자로 봐서 그런 파일이 한 줄이 된다.
   static func lines(_ text: String) -> [String] {
     ParagraphLines.split(text)
   }

@@ -4,7 +4,6 @@ import Testing
 
 /// `project.json` 보호와 복구. 어떤 경우에도 본문 파일은 지워지거나 바뀌면 안 된다.
 struct ProjectRecoveryTests {
-  /// 회차 3개와 본문이 있는 작품을 만든다.
   private func makeProject(in folder: TestFolder) throws -> (ProjectStore, ProjectFile) {
     let store = try ProjectStore.create(at: folder.url.appending(path: "달빛 아래 검.novel"), title: "달빛 아래 검")
     var project = try store.loadProject()

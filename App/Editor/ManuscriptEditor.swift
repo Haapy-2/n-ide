@@ -113,7 +113,6 @@ struct ManuscriptEditor: NSViewRepresentable {
 
     private weak var observedWindow: NSWindow?
 
-    /// 그 창이 비활성화·활성화될 때를 지켜본다.
     private func observeWindow(_ window: NSWindow) {
       if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
       if let becomeKeyObserver { NotificationCenter.default.removeObserver(becomeKeyObserver) }

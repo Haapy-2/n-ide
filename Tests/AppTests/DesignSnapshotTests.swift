@@ -27,7 +27,7 @@ final class DesignSnapshotTests: XCTestCase {
     }
   }
 
-  /// 11f 편집기 줄 번호(A안: 왼쪽 여백 끝에서 20pt). 긴 문단은 첫 줄에만 번호가 붙는다.
+  /// 편집기 줄 번호(왼쪽 여백 끝에서 20pt). 긴 문단은 첫 줄에만 번호가 붙는다.
   func testRenderLineNumbers() throws {
     guard ProcessInfo.processInfo.environment["NOVEL_SNAPSHOTS"] == "1" else {
       throw XCTSkip("Scripts/snapshots.sh로 실행할 때만 스냅샷을 만든다")
@@ -56,7 +56,7 @@ final class DesignSnapshotTests: XCTestCase {
     }
   }
 
-  /// 11d 스냅샷 판: 과거 원고와 고친 지금 원고를 실제처럼 비교해 띄운다.
+  /// 스냅샷 판: 과거 원고와 고친 지금 원고를 실제처럼 비교해 띄운다.
   func testRenderSnapshotPanel() async throws {
     guard ProcessInfo.processInfo.environment["NOVEL_SNAPSHOTS"] == "1" else {
       throw XCTSkip("Scripts/snapshots.sh로 실행할 때만 스냅샷을 만든다")
@@ -118,7 +118,6 @@ final class DesignSnapshotTests: XCTestCase {
     소녀가 먼저 웃었다.
     """
 
-  /// 긴 본문: 대사와 서술이 섞인 문단을 여러 번 되풀이한다.
   private static let longText = ManuscriptEditor.Content(
     token: UUID(), episodeID: EpisodeID(rawValue: "snapshot"),
     text: String(repeating: """
@@ -130,7 +129,6 @@ final class DesignSnapshotTests: XCTestCase {
 
       """, count: 6))
 
-  /// 설정을 바꾼 편집 영역 예: 명조, 19pt, 줄 간격 2배, 본문 폭 34자.
   private static let myungjoStyle = EditorStyle(
     font: .appleMyungjo, fontSize: 19, lineSpacing: 2, paragraphSpacing: 0.8, lineWidthInCharacters: 34)
 

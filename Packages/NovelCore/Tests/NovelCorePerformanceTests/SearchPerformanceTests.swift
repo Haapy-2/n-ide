@@ -2,7 +2,7 @@ import Foundation
 import NovelCore
 import XCTest
 
-/// 작품 전체 검색 (12단계, SPEC 8장 목표 0.5초): 더미 500회차를 디스크에서 읽어 모두 찾는다.
+/// 작품 전체 검색 (SPEC 8장 목표 0.5초): 더미 500회차를 디스크에서 읽어 모두 찾는다.
 /// 없는 문구로 찾아 끝까지 다 읽게 한다(가장 오래 걸리는 경우). 많이 나오는 문구는 1,000개에서 일찍 멈춘다.
 /// 처음 찾기(이 프로세스에서 처음)와 두 번째 이후를 따로 적는다(SPEC 8장 측정 방법).
 final class SearchPerformanceTests: XCTestCase {

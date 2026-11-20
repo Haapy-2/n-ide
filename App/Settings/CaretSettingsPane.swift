@@ -56,7 +56,7 @@ struct CaretSettingsPane: View {
 }
 
 /// 한 줄짜리 종이 위에 지금 글꼴·크기로 짧은 문장과 커서를 그린다. 고르는 모드(라이트/다크)의 모양으로.
-/// 산만하지 않게 깜빡이지 않는다(사용자와 정함).
+/// 산만하지 않게 깜빡이지 않는다.
 private struct CaretPreview: View {
   let editor: EditorStyle
   let caret: CaretStyle

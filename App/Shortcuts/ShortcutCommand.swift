@@ -7,7 +7,6 @@ enum ShortcutCommand: String, CaseIterable, Identifiable {
   /// 저장하면서 스냅샷 찍기. 설정에서 켰을 때만 쓰이고, 그동안 지금 저장·스냅샷 찍기 칸은 잠긴다.
   case saveWithSnapshot
   case takeSnapshot, showSnapshots
-  /// 작품 전체 검색(12단계)
   case searchProject
   case newEpisode, previousEpisode, nextEpisode, renameEpisode, trashEpisode, episodeGoal
   /// 회차 묶음. 기본 단축키 없음.

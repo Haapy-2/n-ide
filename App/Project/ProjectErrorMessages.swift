@@ -2,7 +2,6 @@ import Foundation
 import NovelCore
 
 extension ProjectError {
-  /// 사용자에게 보여줄 한국어 설명.
   var userMessage: String {
     switch self {
     case .alreadyExists(let url):

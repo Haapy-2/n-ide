@@ -10,7 +10,7 @@ struct EpisodeEditorPane: View {
   let goal: Int
   /// 마지막으로 센 이 회차의 글자 수. 회차를 연 직후, 새로 세기 전까지 보여준다. 회차를 열 때만 읽는다.
   let knownCount: () -> CharacterCount?
-  /// 검색 결과로 가기(12단계). 이 회차의 본문이 올라간 뒤 편집기가 처리한다.
+  /// 검색 결과로 가기. 이 회차의 본문이 올라간 뒤 편집기가 처리한다.
   var reveal: TextReveal?
   @State private var content: ManuscriptEditor.Content?
   @State private var errorMessage: String?

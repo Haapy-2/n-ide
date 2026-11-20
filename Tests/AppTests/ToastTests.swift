@@ -1,8 +1,7 @@
 import XCTest
 @testable import NovelEditor
 
-/// 토스트: 정한 시간 뒤 사라짐, 새 알림이 이전 것을 바꿈, 마우스가 올라가 있으면 기다림, 버튼.
-/// 실제 3초를 기다리지 않으려고 짧은 시간으로 만든다. 기기가 바빠도 흔들리지 않게 여유를 넉넉히 둔다.
+/// 실제 알림 시간(기본 2초)을 기다리지 않으려고 짧은 시간으로 만든다. 기기가 바빠도 흔들리지 않게 여유를 넉넉히 둔다.
 @MainActor
 final class ToastTests: XCTestCase {
   private let short = Duration.milliseconds(300)

@@ -1,7 +1,7 @@
 import NovelCore
 import SwiftUI
 
-/// 사이드바 자리에 뜨는 작품 전체 검색 패널(12단계, DESIGN 6장). 위에 입력 칸, 아래에 회차별로 묶인 결과.
+/// 사이드바 자리에 뜨는 작품 전체 검색 패널(DESIGN 6장). 위에 입력 칸, 아래에 회차별로 묶인 결과.
 /// 결과 한 줄 = 줄 번호 + 줄 미리 보기(일치한 곳만 accent 바탕). 누르면 그 회차의 그 자리로 간다.
 struct SearchPanel: View {
   let search: ProjectSearch

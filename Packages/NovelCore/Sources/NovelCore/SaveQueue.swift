@@ -7,9 +7,7 @@ public enum SaveTarget: Hashable, Sendable {
   case note(NoteID)
 }
 
-/// 저장 요청의 결과.
 public enum SaveOutcome: Equatable, Sendable {
-  /// 파일에 썼다.
   case written
   /// 이미 더 새 변경 번호의 내용이 저장되어 있어서 건너뛰었다. 최신 원고를 되돌리지 않기 위해서다.
   case skippedStale

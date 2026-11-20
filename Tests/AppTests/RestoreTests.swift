@@ -3,7 +3,7 @@ import NovelCore
 import XCTest
 @testable import NovelEditor
 
-/// 스냅샷으로 되돌리기(11e, PLAN 10장 6번). 지금 글을 잃지 않는지를 가장 먼저 본다.
+/// 스냅샷으로 되돌리기(PLAN 10장 6번). 지금 글을 잃지 않는지를 가장 먼저 본다.
 @MainActor
 final class RestoreTests: XCTestCase {
   private var folder: URL!
@@ -92,7 +92,6 @@ final class RestoreTests: XCTestCase {
     XCTAssertNil(autosaver.restoreNotice)
   }
 
-  /// 복원 전 스냅샷을 못 남기면(디스크에 쓸 수 없음) 본문을 바꾸지 않는다.
   func testFailedRestoreSnapshotKeepsCurrentText() async throws {
     let snapshotFolder = store.layout.snapshotFolder(episode)
     try FileManager.default.createDirectory(at: snapshotFolder, withIntermediateDirectories: true)
@@ -140,7 +139,6 @@ final class RestoreTests: XCTestCase {
     XCTAssertEqual(textView.string, "지금 글 더")
   }
 
-  /// 조합 중에 되돌려도 조합을 먼저 끝내고 바꾼다(글자가 깨지지 않는다).
   func testRestoreDuringCompositionFinishesItFirst() async throws {
     textView.setSelectedRange(NSRange(location: textView.string.utf16.count, length: 0))
     textView.setMarkedText("ㅎ", selectedRange: NSRange(location: 1, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))

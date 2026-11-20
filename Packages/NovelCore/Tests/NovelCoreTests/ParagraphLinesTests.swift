@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import NovelCore
 
-/// 줄 나누는 규칙 (11f). 편집기 줄 번호와 비교 화면이 같은 줄을 가리키는지가 핵심이라
+/// 줄 나누는 규칙. 편집기 줄 번호와 비교 화면이 같은 줄을 가리키는지가 핵심이라
 /// NSString 문단 나누기(NSTextView가 쓰는 규칙)와 늘 같은 답을 내는지 본다.
 struct ParagraphLinesTests {
   @Test func enterSplitsLines() {
@@ -23,7 +23,7 @@ struct ParagraphLinesTests {
     #expect(ParagraphLines.split("가\n\n나") == ["가", "", "나"])
   }
 
-  /// Swift String은 \r\n을 글자 하나로 묶어 "\n"으로 나뉘지 않는다. 예전 비교 엔진이 여기서 회차 전체를 한 줄로 봤다.
+  /// Swift String은 \r\n을 글자 하나로 묶어 "\n"으로 나뉘지 않는다(그대로 나누면 회차 전체가 한 줄이 된다).
   @Test func windowsLineEndingIsOneBreak() {
     #expect(ParagraphLines.split("가\r\n나\r\n다") == ["가", "나", "다"])
     #expect(ParagraphLines.lineCount(in: "가\r\n나\r\n다" as NSString) == 3)
@@ -97,7 +97,6 @@ struct ParagraphLinesTests {
     if case .changed(2, 2, _) = result.rows[2] {} else { Issue.record("셋째 줄이 고친 줄이 아님: \(result.rows)") }
   }
 
-  /// 같은 글을 줄바꿈 방식만 바꿔 저장해도 바뀐 것이 없다.
   @Test func diffIgnoresLineEndingStyle() throws {
     let result = try TextDiff(old: "가\r\n나\r\n", new: "가\n나\n")
     #expect(!result.hasChanges)

@@ -3,7 +3,7 @@ import NovelCore
 import XCTest
 @testable import NovelEditor
 
-/// 회차 묶음(PLAN 8장 B안): project.json에 저장되고, ⌘Z로 되돌아가고, 본문 파일은 건드리지 않는다.
+/// 회차 묶음(PLAN 8장). 묶어도 본문 파일은 건드리지 않는다.
 @MainActor
 final class EpisodeGroupTests: XCTestCase {
   private var folder: URL!

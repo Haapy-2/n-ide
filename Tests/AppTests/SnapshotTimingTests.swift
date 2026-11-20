@@ -3,7 +3,6 @@ import NovelCore
 import XCTest
 @testable import NovelEditor
 
-/// 스냅샷 찍는 때 (11b): 떠날 때, 자동(간격), 직접, 설정.
 @MainActor
 final class SnapshotTimingTests: XCTestCase {
   private var folder: URL!

@@ -42,7 +42,7 @@ public struct Snapshot: Hashable, Sendable, Identifiable {
   var memoURL: URL { url.deletingPathExtension().appendingPathExtension("memo") }
 
   /// `20261111-094512-auto.md`, `20261111-094512-auto-2.md`를 읽는다. 모르는 모양이면 nil(목록에도 정리에도 안 잡힘).
-  /// 시각은 `DateFormatter` 대신 숫자를 직접 잘라 달력으로 만든다(측정: 50개 목록 12.6ms → 아래 값, docs/log/log26-11-17.md).
+  /// 시각은 `DateFormatter` 대신 숫자를 직접 잘라 달력으로 만든다(`DateFormatter`는 50개 목록에 12.6ms).
   init?(url: URL, episodeID: EpisodeID, calendar: Calendar = Snapshot.calendar) {
     let name = url.lastPathComponent
     guard !name.hasPrefix("."), url.pathExtension == "md" else { return nil }

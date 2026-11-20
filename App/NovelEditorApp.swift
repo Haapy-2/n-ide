@@ -28,7 +28,6 @@ struct NovelEditorApp: App {
     // 바깥에서 들어온 파일 열기 요청으로 빈 작업 공간 창이 생기지 않게 한다.
     .handlesExternalEvents(matching: [])
 
-    // 앱 메뉴의 "설정…"(⌘,)
     Settings {
       SettingsView()
     }

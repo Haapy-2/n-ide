@@ -2,7 +2,7 @@ import Foundation
 import NovelCore
 import Observation
 
-/// 작품 전체 검색 패널 하나의 상태(12단계, PLAN 13장). 입력이 0.2초 멈추면 메인 스레드 밖에서 찾는다.
+/// 작품 전체 검색 패널 하나의 상태(PLAN 13장). 입력이 0.2초 멈추면 메인 스레드 밖에서 찾는다.
 /// 새로 치면 하던 검색은 취소하고, 새 결과가 나올 때까지 앞 결과를 그대로 보여 준다(목록이 깜빡이지 않게).
 @MainActor
 @Observable

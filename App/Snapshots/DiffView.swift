@@ -93,7 +93,7 @@ private struct DiffRow: View {
   private enum Side { case old, new }
 
   /// 빗금·막대는 칸 높이를 따라가도록 겹쳐 그린다. 칸 안에 같이 늘어놓으면 글자 기준선 맞춤이 막대 아래 끝을 기준선으로 보고
-  /// 글자를 아래로 밀어낸다(디자인 스냅샷에서 줄이 겹쳐 보였던 원인).
+  /// 글자를 아래로 밀어낸다.
   private func cell(side: Side) -> some View {
     let line = lineIndex(side)
     let hasLine = line != nil

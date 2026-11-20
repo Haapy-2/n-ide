@@ -2,7 +2,7 @@ import Foundation
 import NovelCore
 import XCTest
 
-/// 스냅샷 한 번 찍는 시간 (11a). 앱은 메인 스레드 밖에서 부르지만, 회차 전환·앱 종료 때 기다리므로 짧아야 한다.
+/// 스냅샷 한 번 찍는 시간. 앱은 메인 스레드 밖에서 부르지만, 회차 전환·앱 종료 때 기다리므로 짧아야 한다.
 /// 보관 개수 50개가 꽉 찬 회차에 "마지막 것과 비교 → 쓰기 → 정리(가장 오래된 것 지우기)"를 한 번에 잰다.
 final class SnapshotPerformanceTests: XCTestCase {
   func testWriteAndPrune() throws {

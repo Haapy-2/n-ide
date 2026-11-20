@@ -44,7 +44,7 @@ enum AppSettingKey {
   static let paragraphSpacing = "paragraphSpacing"
   /// 본문 폭, 한 줄에 들어가는 한글 글자 수 (기본: 40)
   static let lineWidthInCharacters = "lineWidthInCharacters"
-  /// 편집기 왼쪽 여백에 줄 번호 (기본: 끔, 11f)
+  /// 편집기 왼쪽 여백에 줄 번호 (기본: 끔)
   static let showsLineNumbers = "showsLineNumbers"
   /// 커서 두께 pt. 1~4, 0.5 단위 (기본: 2)
   static let caretWidth = "caretWidth"

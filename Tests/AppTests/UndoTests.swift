@@ -2,7 +2,6 @@ import AppKit
 import XCTest
 @testable import NovelEditor
 
-/// 편집기 ⌘Z·⇧⌘Z(회차 기록으로 보내기)와 사이드바 되돌리기 확인 창의 "다시 묻지 않기" 기간.
 @MainActor
 final class UndoTests: XCTestCase {
   private var defaults: UserDefaults!
@@ -79,7 +78,6 @@ final class UndoTests: XCTestCase {
     XCTAssertEqual(textView.string, "12")
   }
 
-  /// 조합 중에 ⌘Z를 누르면 조합을 먼저 확정하고 되돌려, 조합 글자가 남거나 깨지지 않는다.
   func testUndoDuringCompositionFinishesCompositionFirst() {
     let textView = ManuscriptTextView.make()
     textView.replaceAllText(with: "가")

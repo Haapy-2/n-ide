@@ -21,7 +21,7 @@ final class EditorPerformanceTests: XCTestCase {
 
   /// 키 입력: 5,000자 회차에서 1,000번. 한글 IME처럼 조합(setMarkedText) 두 번 + 확정(insertText) 한 번을 한 글자로.
   /// 이벤트를 받은 때부터 글자가 반영되고 레이아웃과 그리기가 끝날 때까지.
-  /// 키 입력마다 함께 불리는 글자 수 세기(텍스트 저장소 알림)와 상태 줄 흐려짐도 붙여서 잰다(9단계).
+  /// 키 입력마다 함께 불리는 글자 수 세기(텍스트 저장소 알림)와 상태 줄 흐려짐도 붙여서 잰다.
   func testKeystroke() throws {
     let (window, textView) = makeEditorWindow()
     defer { window.close() }
@@ -79,7 +79,7 @@ final class EditorPerformanceTests: XCTestCase {
     report("keystroke_realtime_100k_ms", samples)
   }
 
-  /// 줄 번호를 켠 키 입력(11f): 10만 자 회차 거의 끝(보이는 첫 문단 번호를 구하려고 앞을 가장 많이 셈)에서 300번.
+  /// 줄 번호를 켠 키 입력: 10만 자 회차 거의 끝(보이는 첫 문단 번호를 구하려고 앞을 가장 많이 셈)에서 300번.
   /// 조합 두 번 + 확정 한 번을 한 글자로, 30번에 한 번은 엔터(줄 수가 바뀌어 보이는 번호를 모두 다시 그리는 가장 무거운 경우).
   func testKeystrokeLineNumbers100k() throws {
     let (window, textView) = makeEditorWindow()
@@ -185,7 +185,7 @@ final class EditorPerformanceTests: XCTestCase {
 
   // MARK: - 도구
 
-  /// 스냅샷 판 열기(11g): 스냅샷 50개 찬 회차에서 판을 열어 목록·메모를 읽고, 가장 최근 것과 비교가 끝날 때까지.
+  /// 스냅샷 판 열기: 스냅샷 50개 찬 회차에서 판을 열어 목록·메모를 읽고, 가장 최근 것과 비교가 끝날 때까지.
   /// 읽기와 비교는 메인 스레드 밖이라, 메인 스레드가 막히는지는 키 입력 측정이 따로 본다. 여기서는 사용자가 기다리는 시간.
   /// 5,000자(보통 회차)와 10만 자(아주 긴 회차). 측정용 작품은 build/tmp에 따로 만든다(더미 작품에 스냅샷을 쌓지 않게).
   func testSnapshotPanelOpen() async throws {
@@ -217,7 +217,7 @@ final class EditorPerformanceTests: XCTestCase {
     }
   }
 
-  /// 스냅샷으로 되돌리기(11e·11g): 10만 자 본문을 실행 취소 한 단위로 통째 바꾸고 보이는 곳을 다시 그리기까지(메인 스레드).
+  /// 스냅샷으로 되돌리기: 10만 자 본문을 실행 취소 한 단위로 통째 바꾸고 보이는 곳을 다시 그리기까지(메인 스레드).
   func testRestoreReplace100k() throws {
     let (window, textView) = makeEditorWindow()
     defer { window.close() }

@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import NovelCore
 
-/// 외부 변경 확인과 충돌 스냅샷 (8단계). 잘못 판단하면 다른 편집기에서 고친 원고를 앱이 덮어쓰므로 꼼꼼히 본다.
+/// 외부 변경 확인과 충돌 스냅샷. 잘못 판단하면 다른 편집기에서 고친 원고를 앱이 덮어쓰므로 꼼꼼히 본다.
 struct ExternalChangeTests {
   private func makeStore(_ folder: TestFolder) throws -> (ProjectStore, EpisodeID) {
     let store = try ProjectStore.create(at: folder.url.appending(path: "작품.novel"), title: "x")

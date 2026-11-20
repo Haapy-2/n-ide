@@ -14,7 +14,7 @@ public struct CharacterCount: Codable, Equatable, Hashable, Sendable {
 
   public static let zero = CharacterCount(withSpaces: 0, withoutSpaces: 0)
 
-  /// 본문 전체를 한 번 훑어 센다. 메인 스레드가 아닌 곳에서 부른다.
+  /// 메인 스레드가 아닌 곳에서 부른다.
   public init(counting text: String) {
     // 편집기에서 꺼낸 문자열은 UTF-16 NSString을 감싼 것이라 글자 단위로 훑기가 느리다.
     // Swift 문자열로 한 번 바꾼 뒤 세면 10만 자 기준 20ms → 10ms (Swift 문자열이면 아무 일도 안 한다).

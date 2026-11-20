@@ -1,6 +1,6 @@
 import Foundation
 
-/// 본문 한 곳에서 찾은 문구 (12단계 작품 전체 검색).
+/// 본문 한 곳에서 찾은 문구.
 public struct SearchMatch: Equatable, Sendable {
   /// 본문 전체에서의 자리(UTF-16 단위). 편집기 선택(NSRange)에 그대로 쓴다.
   public let location: Int
@@ -77,7 +77,6 @@ public enum TextSearch {
   }
 }
 
-/// 여러 회차를 찾은 결과
 public struct ProjectSearchResult: Equatable, Sendable {
   public struct Episode: Equatable, Sendable {
     public let id: EpisodeID

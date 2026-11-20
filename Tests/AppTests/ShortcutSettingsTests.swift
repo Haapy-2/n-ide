@@ -1,7 +1,6 @@
 import XCTest
 @testable import NovelEditor
 
-/// 단축키 표와 사용자가 바꾼 단축키(PLAN.md 12장).
 @MainActor
 final class ShortcutSettingsTests: XCTestCase {
   /// 지금 저장과 저장하면서 스냅샷 찍기는 같은 ⌘S지만 동시에 쓰이지 않으므로(isActive) 쓰이는 명령끼리만 본다.

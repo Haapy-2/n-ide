@@ -21,7 +21,7 @@ final class ManuscriptTextView: NSTextView {
   /// 조합 중에 모양이 바뀌어 본문 전체에는 아직 못 입혔다. 조합이 끝나면 입힌다.
   private var needsRestyle = false
 
-  /// 왼쪽 여백에 줄 번호(11f, `LineNumberGutter.swift`). 그림만 바뀌고 본문·선택은 건드리지 않아 조합 중에 바뀌어도 안전하다.
+  /// 왼쪽 여백에 줄 번호(`LineNumberGutter.swift`). 그림만 바뀌고 본문·선택은 건드리지 않아 조합 중에 바뀌어도 안전하다.
   var showsLineNumbers = false {
     didSet {
       guard showsLineNumbers != oldValue else { return }
@@ -116,11 +116,10 @@ final class ManuscriptTextView: NSTextView {
     if showsLineNumbers { drawLineNumbers(in: rect) }
   }
 
-  // 커서를 글자 크기의 1.2배로(`InsertionCaret.swift`). 끌 때(깜빡임)는 원래 칸 전체를 지워 흔적이 남지 않게 한다.
+  // 커서 모양은 `InsertionCaret.swift`. 끌 때(깜빡임)는 원래 칸 전체를 지워 흔적이 남지 않게 한다.
   override func drawInsertionPoint(in rect: NSRect, color: NSColor, turnedOn flag: Bool) {
     if flag {
       let caret = caretRect(in: rect)
-      // 다른 자리로 옮겨 그리면 옛 자리는 직접 지운다.
       if let last = lastCaretRect, last != caret { eraseCaret(last) }
       lastCaretRect = caret
       super.drawInsertionPoint(in: caret, color: color, turnedOn: true)
@@ -189,7 +188,7 @@ final class ManuscriptTextView: NSTextView {
     scroll(.zero)
   }
 
-  /// 스냅샷으로 되돌리기(11e): 본문 전체를 실행 취소 한 단위로 바꾼다. 회차 전환과 달리 기록을 비우지 않아 ⌘Z 한 번으로 돌아간다.
+  /// 스냅샷으로 되돌리기: 본문 전체를 실행 취소 한 단위로 바꾼다. 회차 전환과 달리 기록을 비우지 않아 ⌘Z 한 번으로 돌아간다.
   /// 바꿨으면 true. 커서는 같은 자리(본문이 짧아졌으면 끝)에 둔다.
   func replaceAllUndoably(with text: String, actionName: String) -> Bool {
     finishComposition()
@@ -209,7 +208,7 @@ final class ManuscriptTextView: NSTextView {
     return true
   }
 
-  /// 앱 밖에서 바뀐 본문으로 갈아 끼운다(8단계). 회차 전환과 달리 커서와 스크롤 위치를 되도록 그대로 둔다.
+  /// 앱 밖에서 바뀐 본문으로 갈아 끼운다. 회차 전환과 달리 커서와 스크롤 위치를 되도록 그대로 둔다.
   /// 실행 취소 기록은 비운다: 옛 본문 기준의 기록을 새 본문에 적용하면 엉뚱한 곳이 바뀐다.
   func reloadText(with text: String) {
     // 조합을 확정하고 입력기에도 끝났다고 알린다. unmarkText만 하면 입력기는 아직 조합 중이라 여겨,
@@ -262,8 +261,7 @@ final class ManuscriptTextView: NSTextView {
     return true
   }
 
-  /// 판을 닫은 뒤: 커서가 있던 자리로 초점을 돌려준다.
-  /// 검색 결과로 가기(12단계): 찾은 곳을 선택해 화면 가운데로 올리고 초점을 받는다.
+  /// 검색 결과로 가기: 찾은 곳을 선택해 화면 가운데로 올리고 초점을 받는다.
   /// 검색 뒤 글이 바뀌어 그 자리에 문구가 없으면 가장 가까운 같은 문구로 간다. 문구가 아예 없으면 움직이지 않는다.
   func reveal(_ target: TextReveal) {
     finishComposition()
@@ -306,6 +304,7 @@ final class ManuscriptTextView: NSTextView {
     enclosingScrollView?.reflectScrolledClipView(clip)
   }
 
+  /// 판을 닫은 뒤: 커서가 있던 자리로 초점을 돌려준다.
   func regainFocusAfterPanel() {
     window?.makeFirstResponder(self)
   }

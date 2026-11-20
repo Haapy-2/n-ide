@@ -3,7 +3,6 @@ import NovelCore
 import XCTest
 @testable import NovelEditor
 
-/// 스냅샷 판(11d): 같은 줄 접기, 목록 읽기·최근 것 고르기, 메모 고치기, 날짜 묶음 이름.
 @MainActor
 final class SnapshotPanelTests: XCTestCase {
   private var folder: URL!
@@ -158,7 +157,6 @@ final class SnapshotPanelTests: XCTestCase {
     }
   }
 
-  /// 목록과 비교 칸 제목의 시각은 초까지 보인다.
   func testTimeShowsSeconds() throws {
     let date = try XCTUnwrap(Calendar.current.date(from: DateComponents(year: 2026, month: 11, day: 17, hour: 14, minute: 23, second: 5)))
     XCTAssertEqual(SnapshotListView.time(date), "14:23:05")

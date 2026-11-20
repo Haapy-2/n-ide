@@ -3,7 +3,6 @@ import NovelCore
 import XCTest
 @testable import NovelEditor
 
-/// 회차 관리: 추가, 이름 변경, 순서 변경, 휴지통으로 보내기. 바뀐 목록이 project.json에 저장되는지까지 본다.
 @MainActor
 final class ProjectModelTests: XCTestCase {
   private var folder: URL!

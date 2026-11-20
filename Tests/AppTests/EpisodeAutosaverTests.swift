@@ -60,7 +60,6 @@ final class EpisodeAutosaverTests: XCTestCase {
     XCTAssertFalse(FileManager.default.fileExists(atPath: store.layout.episodeFile(episode).path(percentEncoded: false)))
   }
 
-  /// 저장이 계속 실패하면 원고를 메모리에 들고 있고, 다시 쓸 수 있게 되면 저장한다.
   func testFailedSaveKeepsTextInMemoryAndRecovers() async throws {
     let episodes = store.layout.episodesFolder.path(percentEncoded: false)
     try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: episodes)

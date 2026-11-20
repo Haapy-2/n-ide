@@ -6,7 +6,6 @@ struct WorkspaceView: View {
   /// nil이면 미리보기·스냅샷용이라 본문을 읽지 않고 목록을 바꿀 수 없다.
   private let model: ProjectModel?
   private let previewProject: ProjectFile?
-  /// 사이드바 뒤로 다른 앱·바탕화면이 흐릿하게 비치는 효과. 설정 창에서 끄고 켠다.
   @AppStorage(AppSettingKey.sidebarSeesThroughWindow) private var sidebarSeesThroughWindow = true
   @AppStorage(AppSettingKey.characterCountGoalBasis) private var goalBasis: CharacterCountBasis = .withSpaces
   @State private var selection: EpisodeID?
@@ -14,7 +13,6 @@ struct WorkspaceView: View {
   @State private var marked: Set<EpisodeID> = []
   /// 묶을 회차(이름 묻는 창이 떠 있음)
   @State private var grouping: Set<EpisodeID>?
-  /// 이름을 바꿀 묶음
   @State private var renamingGroup: GroupID?
   @State private var groupTitle = ""
   @State private var renaming: EpisodeID?
@@ -35,7 +33,7 @@ struct WorkspaceView: View {
   /// 확인을 기다리는 사이드바 되돌리기. nil이 아니면 확인 창이 뜬다.
   @State private var pendingUndo: PendingUndo?
   @State private var stopAskingUndo = false
-  /// 작품 전체 검색(12단계). 처음 열 때 만들고, 패널을 닫아도 문구와 결과는 남긴다(다시 열면 이어서).
+  /// 작품 전체 검색. 처음 열 때 만들고, 패널을 닫아도 문구와 결과는 남긴다(다시 열면 이어서).
   @State private var search: ProjectSearch?
   @State private var showingSearch = false
   /// ⇧⌘F를 누를 때마다 늘려 입력 칸에 초점을 준다.
@@ -591,7 +589,6 @@ private struct SeeThroughWindowBackground: ViewModifier {
   }
 }
 
-// Xcode 캔버스(⌥⌘↩)에서 작업 공간을 바로 볼 수 있다.
 #Preview("빈 작품") {
   WorkspaceView(previewProject: ProjectFile(title: "회귀한 검성은 이번 생에서만큼은 조용히 살고 싶다"))
     .frame(width: 1100, height: 760)

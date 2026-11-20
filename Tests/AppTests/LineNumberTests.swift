@@ -2,7 +2,7 @@ import AppKit
 import XCTest
 @testable import NovelEditor
 
-/// 편집기 줄 번호 (11f). 켜고 꺼도 본문이 움직이지 않는지, 엔터마다 번호가 맞는지, 비교 화면과 같은 규칙인지 본다.
+/// 편집기 줄 번호. 켜고 꺼도 본문이 움직이지 않는지, 엔터마다 번호가 맞는지, 비교 화면과 같은 규칙인지 본다.
 @MainActor
 final class LineNumberTests: XCTestCase {
   private func makeEditor(_ text: String, width: CGFloat = 1300, height: CGFloat = 800, numbers: Bool = true) -> ManuscriptTextView {
@@ -49,7 +49,6 @@ final class LineNumberTests: XCTestCase {
     XCTAssertEqual(Set(ys).count, ys.count)
   }
 
-  /// 화면에서 저절로 넘어간 줄에는 번호가 없다(엔터마다 하나).
   func testWrappedParagraphHasOneNumber() {
     let textView = makeEditor(String(repeating: "가나다라마바사 ", count: 60) + "\n짧은 문단")
     XCTAssertEqual(numbers(textView), [1, 2])
@@ -65,7 +64,6 @@ final class LineNumberTests: XCTestCase {
     XCTAssertEqual(baselines(trailing)[1], baselines(normal)[1], accuracy: 0.5)
   }
 
-  /// 빈 회차도 1번 줄이 보이고, 높이는 글자가 있는 첫 줄과 같다.
   func testEmptyEpisodeShowsOneAtFirstLineHeight() {
     let empty = makeEditor("")
     let filled = makeEditor("가")
@@ -86,7 +84,6 @@ final class LineNumberTests: XCTestCase {
     XCTAssertLessThan(right, textView.textContainerOrigin.x)
   }
 
-  /// 왼쪽 여백이 좁으면 번호만 숨긴다.
   func testHiddenWhenMarginTooNarrow() {
     let textView = makeEditor("가\n나", width: 740)
     XCTAssertFalse(textView.lineNumbersFit)
@@ -113,7 +110,6 @@ final class LineNumberTests: XCTestCase {
     XCTAssertGreaterThan(long.lineNumberColumnWidth, short.lineNumberColumnWidth)
   }
 
-  /// 엔터를 치면 줄 수가 바로 늘고, 지우면 줄어든다.
   func testLineCountFollowsEditing() {
     let textView = makeEditor("가")
     XCTAssertEqual(textView.currentLineCount, 1)
@@ -126,7 +122,6 @@ final class LineNumberTests: XCTestCase {
     XCTAssertEqual(textView.currentLineCount, 1)
   }
 
-  /// 한글 조합 중에 켜고 꺼도 조합과 본문이 그대로다.
   func testTogglingDuringCompositionKeepsMarkedText() {
     let textView = makeEditor("가\n", numbers: false)
     textView.setSelectedRange(NSRange(location: 2, length: 0))

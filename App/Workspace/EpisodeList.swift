@@ -244,7 +244,7 @@ struct EpisodeList: View {
 
 /// 회차 한 줄의 보이는 부분: 글자 + 회색 선택 칸 + 클릭 영역.
 /// 글자 수는 회차마다 따로 있는 칸(`EpisodeCountBox`)에서 읽는다. 타이핑 중에는 0.2초마다 지금 회차의 글자 수 하나만
-/// 바뀌는데, 이 줄만 다시 그려지고 나머지 줄과 작업 공간은 그대로다(측정: docs/log/log26-11-17.md).
+/// 바뀌는데, 이 줄만 다시 그려지고 나머지 줄과 작업 공간은 그대로다.
 private struct EpisodeRowCell: View {
   let number: Int
   let title: String

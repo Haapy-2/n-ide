@@ -4,7 +4,7 @@ import SwiftUI
 /// 앱 전체 설정이라 UserDefaults에 저장되고(목표만 작품별), 바꾸면 열린 창들에 바로 반영된다.
 /// 창 크기는 고정이다. 열 때마다 "일반"부터 보인다.
 struct SettingsView: View {
-  /// 왼쪽 목록 180 + 오른쪽 520. 오른쪽 폭은 슬라이더(240)와 이름이 넉넉한 예전 설정 창 폭.
+  /// 왼쪽 목록 180 + 오른쪽 520. 오른쪽 폭은 슬라이더(240)와 이름이 넉넉히 들어가는 폭.
   /// 높이는 가장 긴 "편집기"가 스크롤 없이 들어가고 13인치 화면에도 들어가는 값(스냅샷으로 확인).
   static let windowSize = CGSize(width: 700, height: 640)
   static let sidebarWidth: CGFloat = 180
@@ -24,8 +24,7 @@ struct SettingsView: View {
       // 시스템 선택(파란 강조색 칸) 대신 작업 공간 사이드바와 같은 회색 칸을 직접 그린다.
       VStack(spacing: 0) {
         ForEach(SettingsSection.allCases) { item in
-          // 아이콘은 빨간 닫기 버튼과 같은 선, 이름은 아이콘 오른쪽에 왼쪽 정렬.
-          // 간격은 따로 정하지 않고 시스템 기본(예전 15pt는 없앰). 이름 가운데 정렬은 해 보고 되돌림(사용자).
+          // 아이콘은 빨간 닫기 버튼과 같은 선, 이름은 아이콘 오른쪽에 왼쪽 정렬. 간격은 시스템 기본.
           HStack {
             // 색 없는 아이콘: 라이트에서는 진한 회색, 다크에서는 밝은 회색
             // 아이콘 칸 폭을 같게 두어 이름의 왼쪽 끝이 한 줄로 맞는다. 아이콘은 칸 왼쪽에 붙여 버튼 선을 지킨다.
@@ -84,7 +83,7 @@ private struct RowLayout: Equatable {
   }
 }
 
-/// 설정 창 왼쪽 목록의 섹션. 순서는 사용자가 정한 그대로. 커서는 편집기 바로 아래.
+/// 설정 창 왼쪽 목록의 섹션. 선언 순서가 목록 순서다(커서는 편집기 바로 아래).
 enum SettingsSection: String, CaseIterable, Identifiable {
   case general, editor, caret, sidebar, shortcuts
 

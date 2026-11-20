@@ -2,7 +2,7 @@ import Foundation
 import NovelCore
 import Observation
 
-/// 떠 있는 판(⇧⌘S) 하나의 상태: 한 회차의 스냅샷 목록, 고른 스냅샷, 과거↔현재 비교 (11d, PLAN 10장 5번).
+/// 떠 있는 판(⇧⌘S) 하나의 상태: 한 회차의 스냅샷 목록, 고른 스냅샷, 과거↔현재 비교 (PLAN 10장 5번).
 /// 목록·메모 읽기와 비교는 모두 메인 스레드 밖에서 한다. 다른 스냅샷을 고르면 하던 비교는 취소한다.
 @MainActor
 @Observable
@@ -93,7 +93,7 @@ final class SnapshotBrowser {
     return diff.hasChanges
   }
 
-  /// 고른 스냅샷으로 회차 전체를 되돌린다(11e). 되돌렸으면 true(판을 닫는다). 실패하면 판에 이유를 띄운다.
+  /// 고른 스냅샷으로 회차 전체를 되돌린다. 되돌렸으면 true(판을 닫는다). 실패하면 판에 이유를 띄운다.
   func restoreSelected(with autosaver: EpisodeAutosaver) async -> Bool {
     guard canRestore, let item = selected else { return false }
     isRestoring = true

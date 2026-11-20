@@ -3,7 +3,7 @@ import SwiftUI
 import XCTest
 @testable import NovelEditor
 
-/// 편집기 설정 값: 기본값이 DESIGN.md 3장과 같은지, 이상한 저장 값이 쓸 수 있는 값으로 맞춰지는지, 글꼴 3종이 다 있는지.
+/// 기본값은 DESIGN.md 3장 값과 같아야 한다.
 @MainActor
 final class EditorSettingsTests: XCTestCase {
   func testDefaultsMatchDesign() {
@@ -44,7 +44,6 @@ final class EditorSettingsTests: XCTestCase {
     }
   }
 
-  /// 조합 중에는 모양을 바꿔도 본문 글자의 속성을 건드리지 않는다(한글 입력 보호).
   func testStyleChangeDuringCompositionKeepsStorage() {
     let textView = ManuscriptTextView.make()
     textView.replaceAllText(with: "가나다")

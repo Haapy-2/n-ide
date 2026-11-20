@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// 설정 창 "사이드바"
 struct SidebarSettingsPane: View {
   @AppStorage(AppSettingKey.sidebarShowsCharacterCount) private var showsCount = true
   @AppStorage(AppSettingKey.sidebarSeesThroughWindow) private var seesThroughWindow = true
