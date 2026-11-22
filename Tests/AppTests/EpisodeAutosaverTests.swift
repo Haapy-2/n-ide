@@ -48,6 +48,23 @@ final class EpisodeAutosaverTests: XCTestCase {
     XCTAssertFalse(autosaver.hasUnsavedChanges)
   }
 
+  func testSavesWhileTypingWithoutPause() async throws {
+    autosaver = EpisodeAutosaver(
+      store: store, queue: SaveQueue(retryDelays: [.milliseconds(5)]),
+      delay: .milliseconds(150), maxWait: .milliseconds(300))
+    autosaver.attach(textView)
+    autosaver.begin(episode: episode)
+
+    for _ in 0..<25 {
+      type("가")
+      try await Task.sleep(for: .milliseconds(30))
+    }
+
+    let saved = try store.readEpisode(episode)
+    XCTAssertNotEqual(saved, "첫 문장", "쉬지 않고 쳐도 최대 대기 시간이 지나면 저장한다")
+    XCTAssertTrue(textView.string.hasPrefix(saved))
+  }
+
   func testFlushSavesImmediately() async throws {
     type(" 바로 저장")
     await autosaver.flush()

@@ -43,6 +43,7 @@ final class EpisodeAutosaver {
   let snapshots: EpisodeSnapshotter
   private let queue: SaveQueue
   private let delay: Duration
+  private let maxWait: Duration
   @ObservationIgnored private weak var textView: ManuscriptTextView?
   @ObservationIgnored private(set) var episodeID: EpisodeID?
   /// 회차별 변경 번호. 입력할 때마다 1씩 오른다.
@@ -54,14 +55,19 @@ final class EpisodeAutosaver {
   @ObservationIgnored private var inFlight: [EpisodeID: SaveJob] = [:]
   @ObservationIgnored private var running: [UUID: Task<Void, Never>] = [:]
   @ObservationIgnored private var pendingSave: Task<Void, Never>?
+  /// 지금 회차에서 아직 저장을 시작하지 않은 첫 변경의 시각.
+  @ObservationIgnored private var waitingSince: ContinuousClock.Instant?
   /// 마지막 저장 실패의 설명. 실패한 원고가 남아 있는 동안 상태 줄에 보인다.
   @ObservationIgnored private var lastFailure = ""
   @ObservationIgnored let disk = DiskVersions()
 
-  init(store: ProjectStore, queue: SaveQueue = SaveQueue(), delay: Duration = .seconds(1)) {
+  init(
+    store: ProjectStore, queue: SaveQueue = SaveQueue(), delay: Duration = .seconds(1), maxWait: Duration = .seconds(10)
+  ) {
     self.store = store
     self.queue = queue
     self.delay = delay
+    self.maxWait = maxWait
     snapshots = EpisodeSnapshotter(store: store)
     AutosaverRegistry.shared.register(self)
     snapshots.currentEpisode = { [weak self] in self?.episodeID }
@@ -124,6 +130,7 @@ final class EpisodeAutosaver {
   /// (메모리에 남은 본문으로 열었으면 nil: 기준은 전에 기억한 것을 그대로 쓴다.)
   func begin(episode id: EpisodeID, version: DiskVersion? = nil) {
     episodeID = id
+    waitingSince = nil
     if let version { disk[id] = version }
     // 메모리에 남은 본문으로 연 경우 바로 다시 저장을 시도한다.
     if unsaved[id] != nil { scheduleSave() }
@@ -380,10 +387,16 @@ final class EpisodeAutosaver {
     status = unsaved.keys.contains { conflicts[$0] == nil } ? .failed(lastFailure) : .idle
   }
 
+  /// 입력이 `delay`만큼 멈추면 저장한다. 쉬지 않고 계속 치면 이 기다림이 끝없이 미뤄지므로,
+  /// 저장하지 않은 첫 변경부터 `maxWait`이 지나면 멈춤을 기다리지 않는다.
   private func scheduleSave() {
     pendingSave?.cancel()
-    pendingSave = Task { [delay] in
-      try? await Task.sleep(for: delay)
+    let now = ContinuousClock.now
+    let since = waitingSince ?? now
+    waitingSince = since
+    let wait = min(delay, max(.zero, since + maxWait - now))
+    pendingSave = Task { [wait] in
+      if wait > .zero { try? await Task.sleep(for: wait) }
       guard !Task.isCancelled else { return }
       if let job = self.makeSaveJob() { self.start(job) }
     }
@@ -406,6 +419,7 @@ final class EpisodeAutosaver {
   }
 
   private func start(_ job: SaveJob) {
+    if job.id == episodeID { waitingSince = nil }
     let key = UUID()
     inFlight[job.id] = job
     running[key] = Task {
