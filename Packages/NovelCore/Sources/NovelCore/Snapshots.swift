@@ -14,13 +14,15 @@ public enum SnapshotKind: String, Sendable, CaseIterable {
   case conflict
   /// 충돌에서 앱 쪽을 골라 덮어쓴 바깥 본문
   case external
+  /// 작품 전체 바꾸기 직전의 본문
+  case replace
 
   /// 보관 개수를 넘으면 지워도 되는 종류. 지울 수 있는 것을 하나씩 적는 허용 목록이라,
   /// 나중에 종류가 늘어도 여기에 적지 않으면 지워지지 않는다.
   public var isPrunable: Bool {
     switch self {
     case .auto, .leave: true
-    case .manual, .restore, .conflict, .external: false
+    case .manual, .restore, .conflict, .external, .replace: false
     }
   }
 }

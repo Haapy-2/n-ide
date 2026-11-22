@@ -22,29 +22,41 @@ public enum TextSearch {
 
   /// `limit`개까지만 찾는다. 줄을 넘는 문구(줄바꿈이 든 문구)와 빈 문구는 찾지 않는다.
   public static func matches(of query: String, in text: String, caseSensitive: Bool, limit: Int = .max) -> [SearchMatch] {
-    guard isSearchable(query), limit > 0 else { return [] }
+    guard limit > 0 else { return [] }
     let text = text as NSString
-    let options: NSString.CompareOptions = caseSensitive ? [] : [.caseInsensitive]
     var found: [SearchMatch] = []
+    forEachHit(of: query, in: text, caseSensitive: caseSensitive) { hit, line, paragraph in
+      found.append(match(hit, line: line, paragraph: paragraph, in: text))
+      return found.count < limit
+    }
+    return found
+  }
+
+  /// 찾은 곳마다 `body(자리, 줄 번호, 그 문단)`을 부른다. false를 돌려주면 멈춘다.
+  /// 찾기와 바꾸기가 이 하나로 같은 곳을 고르게 한다.
+  static func forEachHit(
+    of query: String, in text: NSString, caseSensitive: Bool, _ body: (NSRange, Int, NSRange) -> Bool
+  ) {
+    guard isSearchable(query) else { return }
+    let options: NSString.CompareOptions = caseSensitive ? [] : [.caseInsensitive]
     var start = 0
     var line = 1
     while start <= text.length {
       var end = 0
       var contentsEnd = 0
       text.getParagraphStart(nil, end: &end, contentsEnd: &contentsEnd, for: NSRange(location: start, length: 0))
+      let paragraph = NSRange(location: start, length: contentsEnd - start)
       var from = start
       while from < contentsEnd {
         let hit = text.range(of: query, options: options, range: NSRange(location: from, length: contentsEnd - from))
         guard hit.location != NSNotFound, hit.length > 0 else { break }
-        found.append(match(hit, line: line, paragraph: NSRange(location: start, length: contentsEnd - start), in: text))
-        if found.count == limit { return found }
+        guard body(hit, line, paragraph) else { return }
         from = hit.location + hit.length
       }
       guard end > start, end < text.length else { break }
       start = end
       line += 1
     }
-    return found
   }
 
   /// 찾을 수 있는 문구인지. 줄바꿈이 들면 문단 안에서는 절대 맞지 않는다.
