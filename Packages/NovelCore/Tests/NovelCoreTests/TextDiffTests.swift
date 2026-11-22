@@ -84,6 +84,15 @@ struct TextDiffTests {
     #expect(try highlight("오늘은 비가 왔다", "내일 아침에는 눈이 내릴 것이다") == .wholeLine)
   }
 
+  /// 기본 기준(PLAN 10장 4번): 짧은 대사를 늘리면 늘어난 곳만, 문장을 통째로 바꾸면 줄 전체.
+  @Test func defaultRatioKeepsShortDialogueEditsVisible() throws {
+    guard case .ranges = try highlight("\"어디 가?\"", "\"어디 가는 거야?\"") else {
+      Issue.record("짧은 대사를 늘린 것은 늘어난 곳만 칠해야 한다")
+      return
+    }
+    #expect(try highlight("그는 검을 들었다.", "칼날이 달빛에 번뜩였다.") == .wholeLine)
+  }
+
   @Test func ratioIsAdjustable() throws {
     let result = try TextDiff(old: "그는 빨리 달렸다", new: "그는 천천히 달렸다", wholeLineRatio: 0.2)
     #expect(result.rows == [.changed(old: 0, new: 0, .wholeLine)], "기준을 낮추면 같은 변화도 줄 전체")

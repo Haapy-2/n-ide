@@ -35,10 +35,14 @@ public struct TextDiff: Sendable, Equatable {
   /// 측정: 한 줄에 약 0.013ms라 2,000줄이면 26ms 안팎(10만 자 전부 고친 2,861줄은 37ms 더 듦).
   public static let defaultInlineLimit = 2_000
 
+  /// 고친 줄에서 바뀐 글자가 이 비율을 넘으면 줄 전체를 칠한다. 한국어 문장 고침 10가지로 정했다(PLAN 10장 4번):
+  /// 0.5면 짧은 대사를 늘린 것(`"어디 가?"` → `"어디 가는 거야?"`)도 줄 전체가 되고, 0.7이면 문장을 통째로 바꾼 것도 조각으로 칠한다.
+  public static let defaultWholeLineRatio = 0.6
+
   /// 메인 스레드 밖에서 부른다. 도중에 작업이 취소되면 `CancellationError`를 던진다.
-  /// `wholeLineRatio`: 고친 줄에서 바뀐 글자가 이 비율을 넘으면 줄 전체를 칠한다.
   public init(
-    old: String, new: String, wholeLineRatio: Double = 0.5, inlineLimit: Int = TextDiff.defaultInlineLimit
+    old: String, new: String, wholeLineRatio: Double = TextDiff.defaultWholeLineRatio,
+    inlineLimit: Int = TextDiff.defaultInlineLimit
   ) throws {
     // 다른 편집기가 한글을 자모로 풀어 저장해도(NFD) 같은 글자로 보도록 맞춘다.
     let oldLines = Self.lines(old.precomposedStringWithCanonicalMapping)

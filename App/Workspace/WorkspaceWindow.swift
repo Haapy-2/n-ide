@@ -47,7 +47,13 @@ struct WorkspaceWindow: View {
       recoveryNotice = Self.notice(for: recovery)
       let backup = AppInfo.emergencyBackup
       if let backup { project = await EmergencyBackupRecovery.run(backup, project: project, root: url) }
-      state = .loaded(ProjectModel(project: project, store: ProjectStore(root: url), backup: backup))
+      let model = ProjectModel(project: project, store: ProjectStore(root: url), backup: backup)
+      state = .loaded(model)
+      let adopted = await model.adoptUnlistedEpisodes()
+      if adopted > 0 {
+        let found = "목록에 없던 회차 파일 \(adopted)개를 찾아 맨 끝에 \"되찾은 회차\"로 넣었어요. 본문은 그대로예요."
+        recoveryNotice = [recoveryNotice, found].compactMap { $0 }.joined(separator: "\n\n")
+      }
     } catch let error as ProjectError {
       state = .failed(error.userMessage)
     } catch {

@@ -20,8 +20,6 @@ final class SnapshotBrowser {
     case failed(String)
   }
 
-  /// 고친 줄에서 바뀐 글자가 이 비율을 넘으면 줄 전체를 칠한다. 실제 원고로 보고 사용자와 정한다(PLAN 10장 4번).
-  static let wholeLineRatio = 0.5
 
   let episodeID: EpisodeID
   /// 판을 열 때 편집기에서 한 번 복사한 지금 본문. 판이 열려 있는 동안은 편집기에 초점이 없어 바뀌지 않는다.
@@ -71,11 +69,10 @@ final class SnapshotBrowser {
     comparison = .comparing
     let store = store
     let current = currentText
-    let ratio = Self.wholeLineRatio
     let job = Task.detached(priority: .userInitiated) {
       let old = try store.readSnapshot(item.snapshot)
       try Task.checkCancellation()
-      return try TextDiff(old: old, new: current, wholeLineRatio: ratio)
+      return try TextDiff(old: old, new: current)
     }
     self.job = job
     Task {

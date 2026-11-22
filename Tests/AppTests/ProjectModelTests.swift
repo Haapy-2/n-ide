@@ -35,6 +35,25 @@ final class ProjectModelTests: XCTestCase {
       })
   }
 
+  /// 백업으로 되살린 목록처럼 `project.json`에 없는 회차 파일은 맨 끝에 "되찾은 회차"로 들어오고 목록에 저장된다.
+  /// 빈 파일(회차를 만들다 꺼진 자국)은 넣지 않는다.
+  func testAdoptsEpisodeFilesMissingFromList() async throws {
+    let model = try makeModel()
+    let kept = try await model.addEpisode()
+    let lost = EpisodeID.make()
+    try store.writeEpisode("백업 뒤에 쓴 회차", id: lost)
+    try store.writeEpisode("", id: EpisodeID.make())
+
+    let adopted = await model.adoptUnlistedEpisodes()
+
+    XCTAssertEqual(adopted, 1)
+    XCTAssertEqual(model.episodes.map(\.id), [kept, lost])
+    XCTAssertEqual(model.episodes.last?.title, "되찾은 회차")
+    XCTAssertEqual(try store.loadProject().episodes.map(\.id), [kept, lost])
+    let again = await model.adoptUnlistedEpisodes()
+    XCTAssertEqual(again, 0, "두 번 불러도 한 번만 넣는다")
+  }
+
   func testAddEpisodeCreatesEmptyFileAndSavesList() async throws {
     let model = try makeModel()
 

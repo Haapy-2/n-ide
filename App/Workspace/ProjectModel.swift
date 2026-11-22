@@ -234,6 +234,24 @@ final class ProjectModel {
     registerUndoByRestoring(record, actionName: "휴지통으로 이동", undoManager: undoManager)
   }
 
+  /// `project.json`에 없는 회차 파일(`unlistedEpisodes`)을 목록 끝에 "되찾은 회차"로 넣고 저장한다. 넣은 수를 돌려준다.
+  /// 작품을 연 뒤 화면을 막지 않고 부른다. 찾는 사이 만들거나 휴지통으로 보낸 회차는 넣지 않는다.
+  func adoptUnlistedEpisodes() async -> Int {
+    let store = store
+    let listed = Set(project.episodes.map(\.id))
+    guard let found = try? await Task.detached(operation: { try store.unlistedEpisodes(excluding: listed) }).value
+    else { return 0 }
+    let fresh = found.filter { id in
+      !project.episodes.contains { $0.id == id }
+        && FileManager.default.fileExists(atPath: store.layout.episodeFile(id).path(percentEncoded: false))
+    }
+    guard !fresh.isEmpty else { return 0 }
+    let goal = project.settings.defaultEpisodeGoal
+    project.episodes += fresh.map { EpisodeMeta(id: $0, title: "되찾은 회차", goal: goal) }
+    await saveProject()
+    return fresh.count
+  }
+
   // MARK: - 휴지통과 되돌리기
 
   /// 휴지통으로 보낸(또는 보낼) 회차 하나의 기록. 되돌리기와 다시 실행이 같은 기록을 주고받는다.

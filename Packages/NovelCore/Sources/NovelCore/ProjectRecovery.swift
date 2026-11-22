@@ -69,28 +69,39 @@ extension ProjectStore {
   private func rebuildFromFiles() throws -> ProjectFile {
     let title = layout.root.deletingPathExtension().lastPathComponent
     var project = ProjectFile(title: title)
-    project.episodes = try markdownFileIDs(in: layout.episodesFolder).map {
-      EpisodeMeta(id: EpisodeID(rawValue: $0), title: "", goal: project.settings.defaultEpisodeGoal)
+    project.episodes = try markdownFiles(in: layout.episodesFolder).map {
+      EpisodeMeta(id: EpisodeID(rawValue: $0.id), title: "", goal: project.settings.defaultEpisodeGoal)
     }
-    project.notes = try markdownFileIDs(in: layout.notesFolder).map {
-      NoteMeta(id: NoteID(rawValue: $0), title: "")
+    project.notes = try markdownFiles(in: layout.notesFolder).map {
+      NoteMeta(id: NoteID(rawValue: $0.id), title: "")
     }
     return project
   }
 
-  /// 폴더 안 `.md` 파일의 이름(=ID)을 만든 시각 순서로. 폴더가 없으면 빈 목록.
-  private func markdownFileIDs(in folder: URL) throws -> [String] {
+  /// `episodes/`에 있지만 목록(`listed`)에 없는 회차 파일, 만든 시각 순서로. 파일 이름과 크기만 보고 내용은 읽지 않는다.
+  /// 백업으로 되살린 목록에는 백업 뒤에 만든 회차가 없어서 그 원고가 목록에서 사라져 보인다. 그런 회차를 찾는다.
+  /// 빈 파일은 뺀다: 회차를 만들다(빈 본문 → 목록 저장) 앱이 꺼진 자국이라 되살릴 글이 없다.
+  public func unlistedEpisodes(excluding listed: Set<EpisodeID>) throws -> [EpisodeID] {
+    try markdownFiles(in: layout.episodesFolder)
+      .filter { $0.size > 0 }
+      .map { EpisodeID(rawValue: $0.id) }
+      .filter { !listed.contains($0) }
+  }
+
+  /// 폴더 안 `.md` 파일의 이름(=ID)과 크기, 만든 시각 순서로. 폴더가 없으면 빈 목록.
+  private func markdownFiles(in folder: URL) throws -> [(id: String, size: Int)] {
     let fileManager = FileManager.default
     guard fileManager.fileExists(atPath: folder.path(percentEncoded: false)) else { return [] }
     let files = try fileManager.contentsOfDirectory(
-      at: folder, includingPropertiesForKeys: [.creationDateKey], options: [.skipsHiddenFiles]
+      at: folder, includingPropertiesForKeys: [.creationDateKey, .fileSizeKey], options: [.skipsHiddenFiles]
     )
     .filter { $0.pathExtension == "md" }
-    let dated = files.map { url in
-      (url, (try? url.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast)
+    let described = files.map { url in
+      let values = try? url.resourceValues(forKeys: [.creationDateKey, .fileSizeKey])
+      return (url: url, created: values?.creationDate ?? .distantPast, size: values?.fileSize ?? 0)
     }
-    return dated
-      .sorted { $0.1 == $1.1 ? $0.0.lastPathComponent < $1.0.lastPathComponent : $0.1 < $1.1 }
-      .map { $0.0.deletingPathExtension().lastPathComponent }
+    return described
+      .sorted { $0.created == $1.created ? $0.url.lastPathComponent < $1.url.lastPathComponent : $0.created < $1.created }
+      .map { ($0.url.deletingPathExtension().lastPathComponent, $0.size) }
   }
 }

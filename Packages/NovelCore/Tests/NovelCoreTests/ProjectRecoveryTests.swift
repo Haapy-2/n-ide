@@ -113,6 +113,24 @@ struct ProjectRecoveryTests {
     }
   }
 
+  /// 목록에 없는 회차 파일: 빈 파일(회차를 만들다 꺼진 자국)과 목록에 있는 회차는 빼고, 본문은 건드리지 않는다.
+  @Test func findsNonEmptyEpisodeFilesMissingFromList() throws {
+    let folder = try TestFolder()
+    defer { folder.remove() }
+    let (store, project) = try makeProject(in: folder)
+    let lost = EpisodeID.make()
+    let empty = EpisodeID.make()
+    try store.writeEpisode("백업 뒤에 쓴 회차", id: lost)
+    try store.writeEpisode("", id: empty)
+    let bodiesBefore = try episodeBytes(store)
+
+    let found = try store.unlistedEpisodes(excluding: Set(project.episodes.map(\.id)))
+
+    #expect(found == [lost])
+    #expect(try episodeBytes(store) == bodiesBefore)
+    #expect(try store.unlistedEpisodes(excluding: Set(project.episodes.map(\.id) + [lost])).isEmpty)
+  }
+
   @Test func missingProjectFileIsRebuiltWhenEpisodesExist() throws {
     let folder = try TestFolder()
     defer { folder.remove() }
