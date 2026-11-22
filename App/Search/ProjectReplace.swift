@@ -44,6 +44,8 @@ final class ProjectReplace {
       let after: Snapshot?
     }
 
+    var query = ""
+    var replacement = ""
     /// 바꾼 회차, 바꾼 차례대로(열린 회차가 맨 끝)
     var replaced: [Episode] = []
     /// 외부 변경 충돌을 기다리는 회차
@@ -63,6 +65,8 @@ final class ProjectReplace {
   private(set) var pending: Pending?
   /// 세거나 바꾸는 중. 그동안 버튼을 막는다.
   private(set) var isWorking = false
+  /// 마지막으로 끝난 바꾸기. 검색 패널이 바꾼 회차 목록으로 보여 주고, 검색어를 고치거나 패널을 닫으면 비운다.
+  private(set) var finished: Report?
 
   @ObservationIgnored private let store: ProjectStore
   @ObservationIgnored private let autosaver: EpisodeAutosaver
@@ -112,7 +116,7 @@ final class ProjectReplace {
     // 열린 회차는 맨 끝에: 글을 쓰는 중이면 조합이 끝나기를 기다리는 동안 다른 회차가 먼저 끝나게.
     let open = autosaver.episodeID
     let ids = pending.plan.episodes.map(\.id).filter { $0 != open } + pending.plan.episodes.map(\.id).filter { $0 == open }
-    var report = Report(unreadable: pending.plan.unreadable.count)
+    var report = Report(query: pending.query, replacement: pending.replacement, unreadable: pending.plan.unreadable.count)
     for id in ids {
       // 센 뒤 휴지통으로 간 회차에 쓰면 지운 본문 파일이 되살아난다. 작가가 지운 회차라 건너뜀으로 세지 않는다.
       guard episodeIDs().contains(id) else { continue }
@@ -127,7 +131,18 @@ final class ProjectReplace {
       case .unreadable: report.unreadable += 1
       }
     }
+    // 바꾼 회차 목록은 회차 순서대로(바꾼 차례는 열린 회차가 맨 끝이라 목록으로는 어색하다).
+    let order = Dictionary(uniqueKeysWithValues: pending.plan.episodes.enumerated().map { ($1.id, $0) })
+    finished = Report(
+      query: report.query, replacement: report.replacement,
+      replaced: report.replaced.sorted { order[$0.id, default: 0] < order[$1.id, default: 0] },
+      conflicted: report.conflicted, snapshotFailed: report.snapshotFailed, keptChanging: report.keptChanging,
+      unreadable: report.unreadable)
     return report
+  }
+
+  func clearFinished() {
+    finished = nil
   }
 
   /// 끝난 뒤 토스트에 띄울 한 줄. 0인 항목은 띄우지 않는다.

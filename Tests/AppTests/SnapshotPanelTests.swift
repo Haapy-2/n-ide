@@ -119,6 +119,27 @@ final class SnapshotPanelTests: XCTestCase {
     }
   }
 
+  /// 바꾼 회차 목록에서 열면 `바꾸기 전`을 골라 둔 채 연다(가장 최근인 `바꾼 뒤`가 아니라).
+  func testOpensWithPreferredSnapshotSelected() async throws {
+    let now = Date()
+    let before = try XCTUnwrap(try store.writeSnapshot("민준", episode: episode, kind: .replace, at: now))
+    try store.writeSnapshot("도윤", episode: episode, kind: .replaced, at: now)
+    let browser = SnapshotBrowser(store: store, episodeID: episode, currentText: "도윤", preferredID: before.id)
+    await browser.load()
+    XCTAssertEqual(browser.items?.first?.snapshot.kind, .replaced)
+    XCTAssertEqual(browser.selectedID, before.id)
+    try await waitUntil {
+      if case .ready(let diff) = browser.comparison { diff.oldLines == ["민준"] } else { false }
+    }
+  }
+
+  func testMissingPreferredSnapshotFallsBackToNewest() async throws {
+    try store.writeSnapshot("글", episode: episode, kind: .auto)
+    let browser = SnapshotBrowser(store: store, episodeID: episode, currentText: "글", preferredID: "없는.md")
+    await browser.load()
+    XCTAssertEqual(browser.selectedID, browser.items?.first?.id)
+  }
+
   func testEmptyEpisodeHasEmptyList() async {
     let browser = SnapshotBrowser(store: store, episodeID: episode, currentText: "")
     await browser.load()

@@ -37,6 +37,8 @@ struct WorkspaceView: View {
   @State private var search: ProjectSearch?
   /// 작품 전체 바꾸기. 검색과 함께 만든다.
   @State private var replace: ProjectReplace?
+  /// 바꾼 회차 목록에서 고른 회차. 편집기에 그 회차 본문이 올라간 뒤 스냅샷 판을 연다.
+  @State private var snapshotRequest: SnapshotRequest?
   @State private var showingSearch = false
   /// ⇧⌘F를 누를 때마다 늘려 입력 칸에 초점을 준다.
   @State private var searchFocusRequest = 0
@@ -155,6 +157,7 @@ struct WorkspaceView: View {
     // 판이 보고 있던 회차에서 벗어나면(메뉴·단축키로 회차를 옮기거나 휴지통으로 보냄) 판을 닫는다.
     .onChange(of: selection) {
       if snapshotBrowser?.episodeID != selection { closeSnapshots() }
+      if snapshotRequest?.episodeID != selection { snapshotRequest = nil }
       // 메뉴·단축키·검색으로 회차를 옮기면 여러 개 고른 것을 그 회차 하나로 줄인다.
       if let selection, !marked.contains(selection) { marked = [selection] }
     }
@@ -193,9 +196,13 @@ struct WorkspaceView: View {
           reveal = target
         },
         onReplaced: { report in
-          toasts.show(ProjectReplace.summary(of: report))
+          let first = replace.finished?.replaced.first
+          toasts.show(
+            ProjectReplace.summary(of: report),
+            action: first.map { entry in .init(title: "바꾼 곳 보기") { showReplaced(entry) } })
           search.refresh()
         },
+        onShowReplaced: { showReplaced($0) },
         onClose: { showingSearch = false })
     } else {
       EpisodeList(
@@ -280,7 +287,8 @@ struct WorkspaceView: View {
         goal: project.episodes.first { $0.id == selection }?.goal ?? 0,
         // 글자 수는 body에서 읽지 않는다(읽으면 글자 수가 바뀔 때마다 작업 공간 전체가 다시 계산된다).
         knownCount: { model.countBox(for: selection).value },
-        reveal: reveal)
+        reveal: reveal,
+        onShown: { episodeShown($0) })
     } else {
       Color.clear
     }
@@ -378,12 +386,32 @@ struct WorkspaceView: View {
   }
 
   /// 판을 열기 전에 편집기의 조합을 끝내고 초점을 내려놓는다. 지금 본문은 이때 한 번만 복사한다.
-  private func showSnapshots() {
+  private func showSnapshots(preferring preferredID: String? = nil) {
     guard let model, let id = selection, snapshotBrowser == nil, let editor = model.autosaver.beginPanel() else { return }
     editorHadFocus = editor.hadFocus
-    let browser = SnapshotBrowser(store: model.store, episodeID: id, currentText: editor.text)
+    let browser = SnapshotBrowser(store: model.store, episodeID: id, currentText: editor.text, preferredID: preferredID)
     snapshotBrowser = browser
     Task { await browser.load() }
+  }
+
+  /// 바꾼 회차 목록(또는 토스트의 "바꾼 곳 보기"): 그 회차로 옮기고 스냅샷 판을 `바꾸기 전`을 골라 둔 채 연다.
+  /// 판은 지금 본문과 비교하므로, 회차를 옮겼으면 편집기에 그 본문이 올라간 뒤(`onShown`) 연다.
+  private func showReplaced(_ entry: ProjectReplace.Report.Episode) {
+    guard project.episodes.contains(where: { $0.id == entry.id }) else { return }
+    closeSnapshots()
+    let request = SnapshotRequest(episodeID: entry.id, preferredID: entry.before?.id)
+    if selection == entry.id, model?.autosaver.episodeID == entry.id {
+      showSnapshots(preferring: request.preferredID)
+    } else {
+      snapshotRequest = request
+      selection = entry.id
+    }
+  }
+
+  private func episodeShown(_ id: EpisodeID) {
+    guard let request = snapshotRequest, request.episodeID == id, selection == id else { return }
+    snapshotRequest = nil
+    showSnapshots(preferring: request.preferredID)
   }
 
   private func closeSnapshots() {
@@ -617,6 +645,12 @@ extension ProjectFile {
       title: "달빛 아래 검",
       episodes: (0..<500).map { EpisodeMeta(title: titles[$0 % titles.count], goal: 5_000) })
   }
+}
+
+/// 바꾼 회차 목록에서 고른 회차의 스냅샷 판 열기 요청.
+private struct SnapshotRequest {
+  let episodeID: EpisodeID
+  let preferredID: String?
 }
 
 /// 사이드바 되돌리기 확인 창(맥 기본 확인 창 + "다시 묻지 않기" 체크).

@@ -138,6 +138,21 @@ final class ReplaceTests: XCTestCase {
     XCTAssertEqual(try store.snapshots(of: untouched), [])
   }
 
+  /// 검색 패널의 바꾼 회차 목록: 회차 순서대로(바꾼 차례와 달리 열린 회차가 끝이 아님), 검색어를 고치면 비운다.
+  func testFinishedListsReplacedEpisodesInEpisodeOrder() async throws {
+    let report = try await replaceAll("민준", "도윤")
+
+    XCTAssertEqual(report.replaced.map(\.id), [closed, open])
+    let finished = try XCTUnwrap(replace.finished)
+    XCTAssertEqual(finished.replaced.map(\.id), [open, closed])
+    XCTAssertEqual(finished.replaced.map(\.count), [1, 2])
+    XCTAssertEqual(finished.query, "민준")
+    XCTAssertEqual(finished.replacement, "도윤")
+    XCTAssertEqual(finished.replaced.first?.before?.kind, .replace)
+    replace.clearFinished()
+    XCTAssertNil(replace.finished)
+  }
+
   func testCancelLeavesNoSnapshot() async throws {
     _ = try await prepare("민준", "도윤")
     replace.cancel()

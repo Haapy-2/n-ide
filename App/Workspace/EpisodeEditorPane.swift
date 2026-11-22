@@ -12,6 +12,8 @@ struct EpisodeEditorPane: View {
   let knownCount: () -> CharacterCount?
   /// 검색 결과로 가기. 이 회차의 본문이 올라간 뒤 편집기가 처리한다.
   var reveal: TextReveal?
+  /// 이 회차의 본문이 편집기에 올라간 뒤 한 번.
+  var onShown: (EpisodeID) -> Void = { _ in }
   @State private var content: ManuscriptEditor.Content?
   @State private var errorMessage: String?
   @State private var fade = StatusBarFade()
@@ -49,7 +51,8 @@ struct EpisodeEditorPane: View {
             onReady: {
               autosaver.attach($0)
               counter.attach($0)
-            })
+            },
+            onShown: onShown)
         } else if let errorMessage {
           Text(errorMessage)
             .font(.system(size: 13))

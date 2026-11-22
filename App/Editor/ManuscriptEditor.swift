@@ -30,6 +30,9 @@ struct ManuscriptEditor: NSViewRepresentable {
   var onFocusGained: () -> Void = {}
   /// 편집기가 만들어졌을 때 한 번.
   var onReady: (ManuscriptTextView) -> Void = { _ in }
+  /// 회차 본문을 편집기에 넣은 뒤 한 번(바꾼 회차 목록에서 그 회차의 스냅샷 판을 열 때).
+  /// 화면 갱신 중에 상태를 바꾸지 않도록 한 차례 뒤에 부른다.
+  var onShown: (EpisodeID) -> Void = { _ in }
 
   func makeNSView(context: Context) -> NSScrollView {
     let scrollView = NSScrollView()
@@ -94,6 +97,9 @@ struct ManuscriptEditor: NSViewRepresentable {
     coordinator.rememberPlace()
     // 이미 창에 붙어 있으면(회차 전환) 지금 초점을 준다. 아직이면(처음 만들 때) viewDidMoveToWindow가 맡는다.
     if let window = textView.window { coordinator.attach(to: window) }
+    let shown = onShown
+    let id = content.episodeID
+    DispatchQueue.main.async { shown(id) }
   }
 
   func makeCoordinator() -> Coordinator { Coordinator() }

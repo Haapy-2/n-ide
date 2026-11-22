@@ -36,16 +36,19 @@ final class SnapshotBrowser {
 
   @ObservationIgnored private let store: ProjectStore
   @ObservationIgnored private var job: Task<TextDiff, any Error>?
+  /// 처음 고를 스냅샷(바꾼 회차 목록에서 열 때 `바꾸기 전`). 없거나 못 찾으면 가장 최근 것.
+  @ObservationIgnored private let preferredID: String?
 
-  init(store: ProjectStore, episodeID: EpisodeID, currentText: String) {
+  init(store: ProjectStore, episodeID: EpisodeID, currentText: String, preferredID: String? = nil) {
     self.store = store
     self.episodeID = episodeID
     self.currentText = currentText
+    self.preferredID = preferredID
   }
 
   var selected: Item? { items?.first { $0.id == selectedID } }
 
-  /// 목록과 메모를 읽고 가장 최근 것을 고른다.
+  /// 목록과 메모를 읽고 처음 고를 것(없으면 가장 최근 것)을 고른다.
   func load() async {
     let store = store
     let id = episodeID
@@ -54,7 +57,7 @@ final class SnapshotBrowser {
         try store.snapshots(of: id).reversed().map { Item(snapshot: $0, memo: store.readMemo($0)) }
       }.value
       items = loaded
-      if let first = loaded.first { select(first.id) }
+      if let first = loaded.first(where: { $0.id == preferredID }) ?? loaded.first { select(first.id) }
     } catch {
       items = []
       errorMessage = "스냅샷 목록을 읽지 못했어요."
