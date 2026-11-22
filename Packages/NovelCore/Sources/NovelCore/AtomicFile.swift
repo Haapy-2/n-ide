@@ -15,11 +15,15 @@ enum AtomicFile {
     let temp = folder.appending(
       path: ".\(destination.lastPathComponent).\(UUID().uuidString).tmp", directoryHint: .notDirectory)
 
-    guard FileManager.default.createFile(atPath: temp.path(percentEncoded: false), contents: nil) else {
-      throw ProjectError.writeFailed(destination, reason: "임시 파일을 만들 수 없음")
+    // FileManager.createFile은 실패 까닭을 알려 주지 않아 open으로 만든다(errno로 권한·공간 부족을 가린다).
+    let descriptor = open(temp.path(percentEncoded: false), O_WRONLY | O_CREAT | O_EXCL, 0o644)
+    guard descriptor >= 0 else {
+      let code = errno
+      throw ProjectError.writeFailed(
+        destination, reason: String(cString: strerror(code)), problem: WriteProblem(errno: code))
     }
     do {
-      let handle = try FileHandle(forWritingTo: temp)
+      let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
       defer { try? handle.close() }
       try handle.write(contentsOf: data)
       // 전원이 갑자기 꺼져도 내용이 디스크에 남도록 이름을 바꾸기 전에 내려 쓴다.
@@ -30,16 +34,16 @@ enum AtomicFile {
       }
     } catch {
       try? FileManager.default.removeItem(at: temp)
-      throw ProjectError.writeFailed(destination, reason: error.localizedDescription)
+      throw ProjectError.writeFailed(destination, reason: error.localizedDescription, problem: WriteProblem(error: error))
     }
 
     let tempPath = temp.path(percentEncoded: false)
     let destinationPath = destination.path(percentEncoded: false)
     if replacing {
       if rename(tempPath, destinationPath) != 0 {
-        let reason = String(cString: strerror(errno))
+        let code = errno
         try? FileManager.default.removeItem(at: temp)
-        throw ProjectError.writeFailed(destination, reason: reason)
+        throw ProjectError.writeFailed(destination, reason: String(cString: strerror(code)), problem: WriteProblem(errno: code))
       }
     } else {
       // link는 새 이름이 이미 있으면 실패하고, 성공하면 다 쓴 파일이 한 번에 그 이름으로 보인다. 그 뒤 임시 이름만 지운다.
@@ -65,14 +69,14 @@ enum AtomicFile {
       let code = errno
       unlink(temp)
       if code == EEXIST { throw AlreadyExists() }
-      throw ProjectError.writeFailed(url, reason: String(cString: strerror(code)))
+      throw ProjectError.writeFailed(url, reason: String(cString: strerror(code)), problem: WriteProblem(errno: code))
     }
     close(placeholder)
     if rename(temp, destination) != 0 {
-      let reason = String(cString: strerror(errno))
+      let code = errno
       unlink(temp)
       unlink(destination)
-      throw ProjectError.writeFailed(url, reason: reason)
+      throw ProjectError.writeFailed(url, reason: String(cString: strerror(code)), problem: WriteProblem(errno: code))
     }
   }
 }

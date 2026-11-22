@@ -118,7 +118,9 @@ final class EpisodeAutosaverTests: XCTestCase {
 
     await autosaver.flush()
 
-    guard case .failed = autosaver.status else { return XCTFail("실패 상태여야 한다: \(autosaver.status)") }
+    guard case .failed(let failure) = autosaver.status else { return XCTFail("실패 상태여야 한다: \(autosaver.status)") }
+    XCTAssertEqual(failure.label, "쓸 권한 없음", "까닭에 맞는 짧은 안내")
+    XCTAssertTrue(failure.detail.contains("권한"))
     XCTAssertTrue(autosaver.hasUnsavedChanges)
     XCTAssertEqual(autosaver.pendingText(for: episode), "첫 문장 지켜야 할 문장")
     XCTAssertEqual(try store.readEpisode(episode), "첫 문장", "실패해도 원래 파일은 그대로")

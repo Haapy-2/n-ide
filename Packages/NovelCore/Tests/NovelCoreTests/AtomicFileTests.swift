@@ -76,3 +76,60 @@ struct AtomicFileTests {
   }
 }
 
+
+/// 저장 실패 까닭을 나눠 앱이 알맞은 안내를 고르게 한다.
+struct WriteProblemTests {
+  @Test func readOnlyFolderIsNoPermission() throws {
+    let folder = try TestFolder()
+    defer {
+      try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: folder.url.path(percentEncoded: false))
+      folder.remove()
+    }
+    try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: folder.url.path(percentEncoded: false))
+
+    #expect(problem { try AtomicFile.write(Data("x".utf8), to: folder.url.appending(path: "a.md")) } == .noPermission)
+  }
+
+  @Test func lockedFileIsLocked() throws {
+    let folder = try TestFolder()
+    let file = folder.url.appending(path: "a.md")
+    defer {
+      try? FileManager.default.setAttributes([.immutable: false], ofItemAtPath: file.path(percentEncoded: false))
+      folder.remove()
+    }
+    try AtomicFile.write(Data("원래".utf8), to: file)
+    try FileManager.default.setAttributes([.immutable: true], ofItemAtPath: file.path(percentEncoded: false))
+
+    #expect(problem { try AtomicFile.write(Data("새 글".utf8), to: file) } == .locked)
+    #expect(try String(contentsOf: file, encoding: .utf8) == "원래")
+  }
+
+  @Test func missingFolderIsMissingFolder() throws {
+    let folder = try TestFolder()
+    defer { folder.remove() }
+    #expect(problem { try AtomicFile.write(Data("x".utf8), to: folder.url.appending(path: "없는 폴더/a.md")) } == .missingFolder)
+  }
+
+  @Test func errnoAndCocoaCodesMap() {
+    #expect(WriteProblem(errno: ENOSPC) == .diskFull)
+    #expect(WriteProblem(errno: EDQUOT) == .diskFull)
+    #expect(WriteProblem(errno: EROFS) == .readOnlyVolume)
+    #expect(WriteProblem(errno: EIO) == .other)
+    #expect(WriteProblem(error: NSError(domain: NSCocoaErrorDomain, code: NSFileWriteOutOfSpaceError)) == .diskFull)
+    let wrapped = NSError(
+      domain: NSCocoaErrorDomain, code: 512,
+      userInfo: [NSUnderlyingErrorKey: NSError(domain: NSPOSIXErrorDomain, code: Int(EACCES))])
+    #expect(WriteProblem(error: wrapped) == .noPermission)
+  }
+
+  private func problem(_ work: () throws -> Void) -> WriteProblem? {
+    do {
+      try work()
+      return nil
+    } catch ProjectError.writeFailed(_, _, let problem) {
+      return problem
+    } catch {
+      return nil
+    }
+  }
+}

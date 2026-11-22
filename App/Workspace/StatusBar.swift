@@ -52,21 +52,43 @@ struct StatusBar: View {
     }
   }
 
+  private func failureExplanation(_ failure: EpisodeAutosaver.Failure) -> String {
+    let safety =
+      failure.isBackedUp
+      ? "원고는 앱 메모리에 있고, 앱이 꺼져도 다음에 열 때 되살릴 수 있게 작품 밖에 따로 백업해 두었어요."
+      : "원고는 앱 메모리에 있어요. 앱을 끄기 전에 다시 시도하거나 다른 곳에 저장해 주세요."
+    return failure.detail + "\n\n" + safety
+  }
+
   /// 평소엔 비어 있다. 실패 표시는 흐려지지 않는다.
   @ViewBuilder
   private var saveStatus: some View {
     switch autosaver.status {
-    case .failed(let message):
-      Button("저장 실패 · 원고는 메모리에 있음") { showsFailureReason = true }
-        .buttonStyle(.plain)
-        .foregroundStyle(Color.error)
-        .popover(isPresented: $showsFailureReason) {
-          Text(message)
-            .font(.system(size: 12))
-            .frame(maxWidth: 320, alignment: .leading)
-            .fixedSize(horizontal: false, vertical: true)
-            .padding(12)
+    case .failed(let failure):
+      HStack(spacing: 4) {
+        Button("저장 실패 · \(failure.label)") { showsFailureReason = true }
+          .buttonStyle(.plain)
+          .foregroundStyle(Color.error)
+          .help("까닭 보기")
+          .popover(isPresented: $showsFailureReason) {
+            Text(failureExplanation(failure))
+              .font(.system(size: 12))
+              .frame(maxWidth: 320, alignment: .leading)
+              .fixedSize(horizontal: false, vertical: true)
+              .padding(12)
+          }
+        Text("·")
+        Button("다시 시도") { Task { await autosaver.flush() } }
+          .buttonStyle(.plain)
+          .foregroundStyle(Color.ink)
+        Text("·")
+        Button("다른 곳에 저장…") {
+          if SystemDialogs.exportUnsaved(autosaver.unsavedManuscripts()) { autosaver.markRescued() }
         }
+        .buttonStyle(.plain)
+        .foregroundStyle(Color.ink)
+        .help("저장하지 못한 원고를 고른 폴더에 .md로 저장")
+      }
     case .retrying:
       Text("저장 실패 · 다시 시도 중")
         .foregroundStyle(Color.error)

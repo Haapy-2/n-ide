@@ -18,7 +18,24 @@ final class EpisodeAutosaver {
     case saving
     /// 저장이 실패해 다시 시도하는 중.
     case retrying
-    case failed(String)
+    case failed(Failure)
+  }
+
+  /// 저장 실패 표시. `label`은 상태 줄 한 줄, `detail`은 눌렀을 때 보이는 설명.
+  struct Failure: Equatable {
+    var label = WriteProblem.other.statusLabel
+    var detail = ""
+    var isBackedUp = false
+
+    init() {}
+
+    init(_ error: Error, isBackedUp: Bool) {
+      let problem: WriteProblem =
+        if case ProjectError.writeFailed(_, _, let problem) = error { problem } else { WriteProblem(error: error) }
+      label = problem.statusLabel
+      detail = (error as? ProjectError)?.userMessage ?? error.localizedDescription
+      self.isBackedUp = isBackedUp
+    }
   }
 
   /// 외부 변경과 부딪친 회차. 사용자가 고를 때까지 그 회차는 저장하지 않는다.
@@ -58,7 +75,7 @@ final class EpisodeAutosaver {
   /// 지금 회차에서 아직 저장을 시작하지 않은 첫 변경의 시각.
   @ObservationIgnored private var waitingSince: ContinuousClock.Instant?
   /// 마지막 저장 실패의 설명. 실패한 원고가 남아 있는 동안 상태 줄에 보인다.
-  @ObservationIgnored private var lastFailure = ""
+  @ObservationIgnored private var lastFailure = Failure()
   @ObservationIgnored let disk = DiskVersions()
 
   init(
@@ -479,7 +496,7 @@ final class EpisodeAutosaver {
       if savedChanges[job.id, default: 0] < job.change, (unsaved[job.id]?.change ?? 0) <= job.change {
         unsaved[job.id] = job
         backUp(job)
-        lastFailure = (error as? ProjectError)?.userMessage ?? error.localizedDescription
+        lastFailure = Failure(error, isBackedUp: backup != nil)
       }
       settleStatus()
     }
