@@ -62,8 +62,18 @@ computer-use 백그라운드 도구만 쓴다. 사용자 화면을 빼앗지 않
 - 마지막으로 `computer-use`의 `app_release`.
 - 실패한 시도 뒤에도 반드시 cleanup을 돌린다. 안 그러면 다음 launch가 "이미 켜져 있음"으로 거부되고, 사용자 설정이 검증 값으로 남는다.
 
+## 한글 조합 확인 (실제 키 코드)
+
+두벌식 입력기를 실제로 돌리려면 키 코드를 시스템에 보내야 한다. 사용자 화면을 잠시 빼앗으므로 꼭 필요할 때만.
+
+1. 도구 빌드: `xcrun swiftc -O .claude/skills/verify-noveleditor/keys.swift -o build/verify/keys`
+2. 본문 끝에 커서(`app_click`), `request_full_control`, 앱을 앞으로: `osascript -e 'tell application id "com.haapy2.NovelEditor" to activate'`
+3. 키 보내기: `build/verify/keys 14,4,2,11,1,49`(= "도윤 "). 두벌식 키 코드: ㄱ 15(r) ㄴ 1(s) ㄷ 14(e) ㅇ 2(d) ㅏ 40(k) ㅗ 4(h) ㅠ 11(b) 공백 49 ⌫ 51 엔터 36. ⌘Z `c6`, ⇧⌘Z `cs6`. ⌘가 든 키 앞에는 매번 앱을 앞으로 다시 가져온다.
+4. 확인은 `app_zoom`(백그라운드)과 디스크 파일. 끝나면 `release_full_control`.
+- 입력기는 앱마다 방식(표시된 글자 없이 바꾸기 / 표시된 글자)을 기억하고 바꾼다(PLAN 16장 5번). 결과가 이상하면 어느 방식이었는지부터 본다.
+
 ## 할 수 없는 것
 
-- **한글 조합(IME)은 검증하지 못한다.** `app_type`은 접근성으로 완성된 글자를 한 번에 넣기 때문에 `hasMarkedText` 경로를 지나지 않는다. 조합 중 동작은 `docs/checklist-hangul.md`로 사람이 직접 확인한다.
+- 컴퓨터 유스의 `app_type`·`key`로는 한글 조합(IME)을 재현하지 못한다(완성 글자를 바로 넣거나 키 코드가 0). 아래 "한글 조합 확인"을 쓴다.
 - 동시에 두 인스턴스를 띄우지 않는다. 설정 저장소가 하나라 서로 덮는다.
 - 성능 수치는 이 스킬로 재지 않는다. `Scripts/perf.sh`를 쓴다.

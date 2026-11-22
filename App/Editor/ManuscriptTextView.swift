@@ -43,6 +43,10 @@ final class ManuscriptTextView: NSTextView {
     return count
   }
 
+  private var isInsertingInput = false
+  /// 입력기가 지금 만들고 있는 한 글자의 되돌리기 기록.
+  private var currentInput: InputUndoUnit?
+
   /// 회차마다 따로 쓰는 실행 취소 기록. 회차를 바꾸면 비운다(PLAN.md 세부 기준).
   let episodeUndoManager = UndoManager()
 
@@ -185,6 +189,7 @@ final class ManuscriptTextView: NSTextView {
     textStorage?.setAttributedString(NSAttributedString(string: text, attributes: style.textAttributes))
     setSelectedRange(NSRange(location: 0, length: 0))
     episodeUndoManager.removeAllActions()
+    currentInput = nil
     scroll(.zero)
   }
 
@@ -219,6 +224,7 @@ final class ManuscriptTextView: NSTextView {
     textStorage?.setAttributedString(NSAttributedString(string: text, attributes: style.textAttributes))
     setSelectedRange(NSRange(location: min(cursor, (text as NSString).length), length: 0))
     episodeUndoManager.removeAllActions()
+    currentInput = nil
     scroll(origin)
   }
 
@@ -236,12 +242,79 @@ final class ManuscriptTextView: NSTextView {
     episodeUndoManager.redo()
   }
 
+  /// 두벌식 입력기(macOS 27)는 표시된 글자 없이 "커서 앞 글자를 이 글로"(`replacementRange`)로 조합을 이어 가기도 한다
+  /// (ㄱ → 가 → 각 → 가 + 가). 이때는 `hasMarkedText`가 늘 false이고, NSTextView는 이 바꾸기들을 한 묶음으로 합치지 않아
+  /// ⌘Z가 조합 중간 글자("각")를 보여 준다. 그래서 입력기가 넣는 한 글자는 직접 한 단위로 기록하고, 입력기가 그 글자를
+  /// 고치는 동안은 같은 기록의 범위만 늘린다. 되돌릴 때는 LIFO라 그 사이의 다른 변경이 먼저 되돌려져 범위가 맞는다.
+  override func insertText(_ string: Any, replacementRange: NSRange) {
+    let text = (string as? NSAttributedString)?.string ?? (string as? String) ?? ""
+    guard !hasMarkedText() else {
+      super.insertText(string, replacementRange: replacementRange)
+      return
+    }
+    if replacementRange.location == NSNotFound {
+      let range = selectedRange()
+      let original = (self.string as NSString).substring(with: range)
+      breakUndoCoalescing()
+      insertWithoutUndo(string, replacementRange: replacementRange)
+      let unit = InputUndoUnit(range: NSRange(location: range.location, length: (text as NSString).length), original: original)
+      currentInput = unit
+      episodeUndoManager.registerUndo(withTarget: self) { view in
+        MainActor.assumeIsolated { view.revert(unit) }
+      }
+    } else if let unit = currentInput, NSIntersectionRange(unit.range, replacementRange) == replacementRange {
+      insertWithoutUndo(string, replacementRange: replacementRange)
+      unit.range.length += (text as NSString).length - replacementRange.length
+    } else {
+      currentInput = nil
+      breakUndoCoalescing()
+      super.insertText(string, replacementRange: replacementRange)
+    }
+  }
+
+  private func insertWithoutUndo(_ string: Any, replacementRange: NSRange) {
+    isInsertingInput = true
+    episodeUndoManager.disableUndoRegistration()
+    defer {
+      episodeUndoManager.enableUndoRegistration()
+      isInsertingInput = false
+    }
+    super.insertText(string, replacementRange: replacementRange)
+  }
+
+  /// 한 글자 기록 되돌리기(다시 실행도 같은 함수). 바꾼 뒤의 범위와 바뀌기 전 글로 반대 기록을 직접 남긴다.
+  /// NSTextView가 `shouldChangeText`에서 스스로 남기는 기록은 끈다: 그 기록은 다시 실행 때 범위가 어긋나 앱을 죽였다.
+  /// 범위가 본문 밖이면(있어서는 안 되는 상태) 아무것도 바꾸지 않는다.
+  private func revert(_ unit: InputUndoUnit) {
+    currentInput = nil
+    let range = unit.range
+    let text = string as NSString
+    guard NSMaxRange(range) <= text.length else { return }
+    let replaced = text.substring(with: range)
+    episodeUndoManager.disableUndoRegistration()
+    let changed = shouldChangeText(in: range, replacementString: unit.original)
+    if changed {
+      textStorage?.replaceCharacters(in: range, with: NSAttributedString(string: unit.original, attributes: typingAttributes))
+      didChangeText()
+    }
+    episodeUndoManager.enableUndoRegistration()
+    guard changed else { return }
+    let inverse = InputUndoUnit(range: NSRange(location: range.location, length: (unit.original as NSString).length), original: replaced)
+    episodeUndoManager.registerUndo(withTarget: self) { view in
+      MainActor.assumeIsolated { view.revert(inverse) }
+    }
+    setSelectedRange(NSRange(location: NSMaxRange(inverse.range), length: 0))
+  }
+
   /// 되돌리기 단위를 한 글자로 한다. NSTextView는 이어서 친 글자를 한 묶음으로 합쳐
   /// ⌘Z 한 번에 문장째 지우므로, 고칠 때마다 묶음을 끊는다. 조합 중에는 끊지 않아 조합이 끝난 한 글자("한")가 한 단위가 된다.
   override func didChangeText() {
     super.didChangeText()
     guard !hasMarkedText() else { return }
-    breakUndoCoalescing()
+    if !isInsertingInput {
+      currentInput = nil
+      breakUndoCoalescing()
+    }
     if needsRestyle { applyStyle() }
   }
 
@@ -361,5 +434,16 @@ final class ManuscriptTextView: NSTextView {
     }
     let inset = NSSize(width: side, height: EditorStyle.topInset)
     if textContainerInset != inset { textContainerInset = inset }
+  }
+}
+
+/// 입력기가 넣은 한 글자(음절)의 되돌리기 기록. 입력기가 그 글자를 고치는 동안 범위가 바뀌므로 참조형이다.
+private final class InputUndoUnit {
+  var range: NSRange
+  let original: String
+
+  init(range: NSRange, original: String) {
+    self.range = range
+    self.original = original
   }
 }

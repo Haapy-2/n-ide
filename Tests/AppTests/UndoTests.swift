@@ -51,6 +51,42 @@ final class UndoTests: XCTestCase {
     XCTAssertEqual(textView.string, "가나")
   }
 
+  /// macOS 27 두벌식 입력기는 표시된 글자 없이 "커서 앞 한 글자를 이 글로"(replacementRange)로 조합을 이어 간다.
+  /// 실제 앱에서 기록한 호출 순서(ㄱ → 가 → 각 → 가 + 가)를 키마다 넣고, 되돌릴 때 조합 중간 글자("각", "ㄱ")가 나오지 않는지 본다.
+  /// 키마다 기록 묶음을 직접 여닫으면 아무것도 남기지 않은 키도 빈 묶음이 되어 ⌘Z 한 번을 먹으므로, 보이는 글이 바뀐 것만 센다.
+  func testUndoSkipsJamoStepsOfReplacementInput() {
+    let textView = ManuscriptTextView.make()
+    textView.replaceAllText(with: "")
+    let undo = textView.episodeUndoManager
+    undo.groupsByEvent = false
+    let none = NSRange(location: NSNotFound, length: 0)
+    let previous = NSRange(location: 0, length: 1)
+    func key(_ calls: [(String, NSRange)]) {
+      undo.beginUndoGrouping()
+      for (text, range) in calls { textView.insertText(text, replacementRange: range) }
+      undo.endUndoGrouping()
+    }
+    key([("ㄱ", none)])
+    key([("가", previous)])
+    key([("각", previous)])
+    key([("가", previous), ("가", none)])
+    XCTAssertEqual(textView.string, "가가")
+
+    var seen = [textView.string]
+    while undo.canUndo {
+      textView.undo(nil)
+      if seen.last != textView.string { seen.append(textView.string) }
+    }
+    XCTAssertEqual(seen, ["가가", "가", ""])
+
+    var redone = [textView.string]
+    while undo.canRedo {
+      textView.redo(nil)
+      if redone.last != textView.string { redone.append(textView.string) }
+    }
+    XCTAssertEqual(redone, ["", "가", "가가"])
+  }
+
   /// 실제 키 입력(keyDown)으로 친 글자도 한 글자씩 되돌린다. NSTextView는 키로 이어 친 글자를 한 묶음으로 합치므로
   /// 이 테스트가 묶음 끊기를 확인한다. 숫자는 한글 입력기에서도 조합 없이 바로 들어간다.
   func testTypedKeysUndoOneAtATime() throws {
