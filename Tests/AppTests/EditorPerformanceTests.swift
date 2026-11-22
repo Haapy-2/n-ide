@@ -252,6 +252,10 @@ final class EditorPerformanceTests: XCTestCase {
     replace.replacement = "그녀석은"
     await replace.prepare(query: "그는", caseSensitive: false)
     let pending = try XCTUnwrap(replace.pending)
+    // 사본 만들기와 앞선 측정이 남긴 쓰기를 먼저 디스크에 내린다. 안 그러면 첫 F_FULLFSYNC가 그것까지 떠안아 바꾸기에 얹힌다.
+    let barrier = try FileHandle(forUpdating: scratch.layout.projectFile)
+    _ = fcntl(barrier.fileDescriptor, F_FULLFSYNC)
+    try barrier.close()
     let start = ContinuousClock.now
     let report = await replace.confirm(pending)
     let elapsed = ContinuousClock.now - start

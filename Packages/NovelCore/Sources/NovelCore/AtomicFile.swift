@@ -9,7 +9,10 @@ enum AtomicFile {
 
   /// - Parameter replacing: false면 이미 있는 파일을 절대 덮지 않는다(스냅샷). 있으면 `AlreadyExists`를 던진다.
   ///   "있는지 보고 쓰기"는 보는 순간과 쓰는 순간 사이에 다른 쓰기가 끼어들 수 있어서, 확인과 쓰기를 운영체제가 한 번에 한다.
-  static func write(_ data: Data, to destination: URL, replacing: Bool = true) throws {
+  /// - Parameter fullSync: false면 저장 장치까지만 보내고(fsync) 장치 캐시는 비우지 않는다(3.2 → 0.16ms).
+  ///   F_FULLFSYNC는 장치 캐시 전체를 비우므로, 바로 뒤에 F_FULLFSYNC로 쓰는 파일이 있을 때 그 쓰기가 이 파일도 함께 내려 준다.
+  ///   그렇게 순서가 보장되는 곳(전체 바꾸기의 스냅샷 → 본문)에서만 끈다.
+  static func write(_ data: Data, to destination: URL, replacing: Bool = true, fullSync: Bool = true) throws {
     let folder = destination.deletingLastPathComponent()
     // 이름을 점으로 시작해 Finder에 보이지 않게 한다. 같은 폴더여야 이름 바꾸기가 원자적이다.
     let temp = folder.appending(
@@ -29,7 +32,7 @@ enum AtomicFile {
       // 전원이 갑자기 꺼져도 내용이 디스크에 남도록 이름을 바꾸기 전에 내려 쓴다.
       // 애플 기기에서 fsync는 저장 장치의 캐시까지는 비우지 않아 F_FULLFSYNC를 쓴다(측정 0.2 → 2.9ms, 메인 스레드 밖).
       // 이것을 지원하지 않는 파일 시스템(일부 네트워크 드라이브)에서는 fsync로 대신한다.
-      if fcntl(handle.fileDescriptor, F_FULLFSYNC) == -1 {
+      if !fullSync || fcntl(handle.fileDescriptor, F_FULLFSYNC) == -1 {
         try handle.synchronize()
       }
     } catch {

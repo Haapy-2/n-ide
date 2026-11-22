@@ -103,10 +103,11 @@ extension ProjectStore {
   /// 본문을 `snapshots/<회차ID>/<시각>-<종류>.md`로 남긴다. 이미 있는 스냅샷은 덮지 않고 같은 초면 `-2`, `-3`을 붙인다.
   /// `skipIfSameAsLatest`이면 가장 최근 스냅샷(종류 무관)과 내용이 같을 때 찍지 않고 nil을 돌려준다.
   /// 메모가 비어 있지 않으면 같은 이름의 `.memo`에 함께 쓴다. 본문을 먼저 써서, 메모 쓰기가 실패해도 본문은 남는다.
+  /// `fullSync`는 `AtomicFile.write`와 같다: 바로 뒤에 본문을 F_FULLFSYNC로 쓰는 곳(전체 바꾸기)에서만 끈다.
   @discardableResult
   public func writeSnapshot(
     _ text: String, episode id: EpisodeID, kind: SnapshotKind, memo: String? = nil,
-    at date: Date = Date(), skipIfSameAsLatest: Bool = false
+    at date: Date = Date(), skipIfSameAsLatest: Bool = false, fullSync: Bool = true
   ) throws -> Snapshot? {
     if skipIfSameAsLatest, let latest = try snapshots(of: id).last, try readSnapshot(latest) == text {
       return nil
@@ -120,7 +121,7 @@ extension ProjectStore {
     // 이름이 있으면 다음 번호로. 같은 순간에 다른 곳(충돌 스냅샷 등)이 같은 이름을 써도 서로 덮지 않는다.
     while true {
       do {
-        try AtomicFile.write(data, to: url, replacing: false)
+        try AtomicFile.write(data, to: url, replacing: false, fullSync: fullSync)
         break
       } catch is AtomicFile.AlreadyExists {
         url = folder.appending(path: "\(base)-\(number).md", directoryHint: .notDirectory)
@@ -130,7 +131,7 @@ extension ProjectStore {
     guard let snapshot = Snapshot(url: url, episodeID: id) else {
       throw ProjectError.writeFailed(url, reason: "스냅샷 이름을 읽을 수 없음")
     }
-    if let memo { try writeMemo(memo, for: snapshot) }
+    if let memo { try writeMemo(memo, for: snapshot, fullSync: fullSync) }
     return snapshot
   }
 
@@ -171,13 +172,13 @@ extension ProjectStore {
   }
 
   /// 앞뒤 공백을 다듬어 쓴다. 비우면 메모 파일을 없앤다(본문 스냅샷은 그대로).
-  public func writeMemo(_ memo: String, for snapshot: Snapshot) throws {
+  public func writeMemo(_ memo: String, for snapshot: Snapshot, fullSync: Bool = true) throws {
     let trimmed = memo.trimmingCharacters(in: .whitespacesAndNewlines)
     if trimmed.isEmpty {
       let path = snapshot.memoURL.path(percentEncoded: false)
       if FileManager.default.fileExists(atPath: path) { try FileManager.default.removeItem(atPath: path) }
     } else {
-      try AtomicFile.write(Data(trimmed.utf8), to: snapshot.memoURL)
+      try AtomicFile.write(Data(trimmed.utf8), to: snapshot.memoURL, fullSync: fullSync)
     }
   }
 

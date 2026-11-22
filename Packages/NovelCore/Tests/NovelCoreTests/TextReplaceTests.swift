@@ -113,6 +113,20 @@ struct TextReplaceTests {
     await #expect(throws: CancellationError.self) { try await task.value }
   }
 
+  /// 장치 캐시를 비우지 않는 빠른 쓰기도 스냅샷·메모를 똑같이 남긴다(전체 바꾸기가 쓴다).
+  @Test func snapshotWithoutFullSyncWritesTextAndMemo() throws {
+    let folder = try TestFolder()
+    defer { folder.remove() }
+    let store = try ProjectStore.create(at: folder.url.appending(path: "작품.novel"), title: "x")
+    let id = EpisodeID.make()
+
+    let snapshot = try #require(
+      try store.writeSnapshot("바꾸기 전 글", episode: id, kind: .replace, memo: "메모", fullSync: false))
+
+    #expect(try store.readSnapshot(snapshot) == "바꾸기 전 글")
+    #expect(store.readMemo(snapshot) == "메모")
+  }
+
   @Test func replaceSnapshotsAreNeverPruned() {
     #expect(!SnapshotKind.replace.isPrunable)
     #expect(!SnapshotKind.replaced.isPrunable)

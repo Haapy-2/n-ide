@@ -41,7 +41,6 @@ final class ProjectReplace {
       /// 이 회차에서 바꾼 곳 수(바꾸는 순간의 글 기준)
       let count: Int
       let before: Snapshot?
-      let after: Snapshot?
     }
 
     var query = ""
@@ -113,23 +112,25 @@ final class ProjectReplace {
     let replacement = EpisodeAutosaver.Replacement(
       query: pending.query, replacement: pending.replacement, caseSensitive: pending.caseSensitive, date: Date(),
       memo: pending.memo)
-    // 열린 회차는 맨 끝에: 글을 쓰는 중이면 조합이 끝나기를 기다리는 동안 다른 회차가 먼저 끝나게.
-    let open = autosaver.episodeID
-    let ids = pending.plan.episodes.map(\.id).filter { $0 != open } + pending.plan.episodes.map(\.id).filter { $0 == open }
     var report = Report(query: pending.query, replacement: pending.replacement, unreadable: pending.plan.unreadable.count)
-    for id in ids {
-      // 센 뒤 휴지통으로 간 회차에 쓰면 지운 본문 파일이 되살아난다. 작가가 지운 회차라 건너뜀으로 세지 않는다.
-      guard episodeIDs().contains(id) else { continue }
-      switch await autosaver.replace(id, replacement) {
-      case .replaced(let count, let characters, let before, let after):
-        report.replaced.append(.init(id: id, count: count, before: before, after: after))
-        if let characters { recordCount(characters, id) }
-      case .nothing: break
-      case .conflict: report.conflicted += 1
-      case .snapshotFailed: report.snapshotFailed += 1
-      case .keptChanging: report.keptChanging += 1
-      case .unreadable: report.unreadable += 1
-      }
+    // 열린 회차는 맨 끝에 따로: 글을 쓰는 중이면 조합이 끝나기를 기다리는 동안 다른 회차가 먼저 끝나게.
+    let open = autosaver.episodeID
+    let ids = pending.plan.episodes.map(\.id)
+    // 나머지는 몇 개씩 겹쳐 돈다: 한 회차가 본문을 F_FULLFSYNC로 내리는 동안(3ms 남짓) 다음 회차의 읽기·스냅샷을 한다.
+    // 회차 안의 순서(바꾸기 전 스냅샷 → 본문)는 그대로이고, 본문 쓰기는 저장 줄이 하나씩 한다.
+    var running: [Task<(EpisodeID, EpisodeAutosaver.ReplaceOutcome?), Never>] = []
+    for id in ids where id != open {
+      running.append(Task { (id, await replaceIfListed(id, replacement)) })
+      guard running.count >= Self.overlap else { continue }
+      let (done, outcome) = await running.removeFirst().value
+      if let outcome { tally(outcome, for: done, into: &report) }
+    }
+    for task in running {
+      let (done, outcome) = await task.value
+      if let outcome { tally(outcome, for: done, into: &report) }
+    }
+    if let open, ids.contains(open), let outcome = await replaceIfListed(open, replacement) {
+      tally(outcome, for: open, into: &report)
     }
     // 바꾼 회차 목록은 회차 순서대로(바꾼 차례는 열린 회차가 맨 끝이라 목록으로는 어색하다).
     let order = Dictionary(uniqueKeysWithValues: pending.plan.episodes.enumerated().map { ($1.id, $0) })
@@ -139,6 +140,30 @@ final class ProjectReplace {
       conflicted: report.conflicted, snapshotFailed: report.snapshotFailed, keptChanging: report.keptChanging,
       unreadable: report.unreadable)
     return report
+  }
+
+  /// 동시에 바꾸는 회차 수. 더 늘려도 본문 쓰기는 하나씩이라 빨라지지 않고 메모리만 쓴다.
+  private static let overlap = 8
+
+  /// 센 뒤 휴지통으로 간 회차에 쓰면 지운 본문 파일이 되살아난다. 작가가 지운 회차라 건너뜀으로 세지 않는다(nil).
+  private func replaceIfListed(
+    _ id: EpisodeID, _ replacement: EpisodeAutosaver.Replacement
+  ) async -> EpisodeAutosaver.ReplaceOutcome? {
+    guard episodeIDs().contains(id) else { return nil }
+    return await autosaver.replace(id, replacement)
+  }
+
+  private func tally(_ outcome: EpisodeAutosaver.ReplaceOutcome, for id: EpisodeID, into report: inout Report) {
+    switch outcome {
+    case .replaced(let count, let characters, let before):
+      report.replaced.append(.init(id: id, count: count, before: before))
+      if let characters { recordCount(characters, id) }
+    case .nothing: break
+    case .conflict: report.conflicted += 1
+    case .snapshotFailed: report.snapshotFailed += 1
+    case .keptChanging: report.keptChanging += 1
+    case .unreadable: report.unreadable += 1
+    }
   }
 
   func clearFinished() {

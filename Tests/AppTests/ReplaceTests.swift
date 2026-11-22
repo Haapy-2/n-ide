@@ -121,6 +121,7 @@ final class ReplaceTests: XCTestCase {
   /// 회차마다 바꾸기 전·바꾼 뒤를 짝으로, 한 번의 바꾸기는 모두 같은 시각, 메모는 저절로.
   func testLeavesBeforeAndAfterSnapshotsWithMemo() async throws {
     let report = try await replaceAll("민준", "도윤")
+    await autosaver.snapshots.waitForWrites()
 
     let cases: [(EpisodeID, String, String, Int)] = [(open, "민준이 웃었다", "도윤이 웃었다", 1), (closed, "민준과 민준", "도윤과 도윤", 2)]
     for (id, before, after, count) in cases {
@@ -132,7 +133,6 @@ final class ReplaceTests: XCTestCase {
       XCTAssertEqual(store.readMemo(snapshots[1]), "'민준' → '도윤' 전체 바꾸기 · 바꾼 뒤 · \(count)곳")
       let entry = report.replaced.first { $0.id == id }
       XCTAssertEqual(entry?.before, snapshots[0])
-      XCTAssertEqual(entry?.after, snapshots[1])
     }
     XCTAssertEqual(Set(report.replaced.compactMap { $0.before?.date }).count, 1, "모든 회차가 같은 시각")
     XCTAssertEqual(try store.snapshots(of: untouched), [])

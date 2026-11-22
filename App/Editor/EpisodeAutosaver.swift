@@ -324,7 +324,8 @@ final class EpisodeAutosaver {
   enum ReplaceOutcome: Equatable {
     /// 바꿨다. 열리지 않은 회차를 끝내 쓰지 못했으면 평소 저장 실패처럼 메모리에 붙잡고 상태 줄이 알린다.
     /// `characters`는 바꾼 글의 글자 수. 열린 회차는 편집기의 글자 수 세기가 맡아 nil.
-    case replaced(count: Int, characters: CharacterCount?, before: Snapshot?, after: Snapshot?)
+    /// `바꾼 뒤` 스냅샷은 쓰기를 시작만 해 두므로 여기에 없다(같은 시각·종류 `replaced`로 찾는다).
+    case replaced(count: Int, characters: CharacterCount?, before: Snapshot?)
     /// 지금 글에는 바꿀 곳이 없다.
     case nothing
     /// 외부 변경 충돌을 아직 고르지 않았다.
@@ -388,10 +389,10 @@ final class EpisodeAutosaver {
     // 저장을 기다렸다가 바꾼 본문째 옮긴다.
     guard isListed(id) else { return .nothing }
     guard await writeReplacement(id, text: computed.text, readVersion: source.version) else { return nil }
-    let after = try? await snapshots.takeReplace(
+    snapshots.startReplace(
       id, kind: .replaced, text: computed.text, memo: "\(replacement.memo) · 바꾼 뒤 · \(computed.count)곳",
       at: replacement.date)
-    return .replaced(count: computed.count, characters: computed.characters, before: beforeSnapshot, after: after)
+    return .replaced(count: computed.count, characters: computed.characters, before: beforeSnapshot)
   }
 
   /// 열린 회차: 지금 글을 남긴 뒤, 한글 조합이 끝난 그 순간 지금 글에서 찾은 자리만 바꾼다.
@@ -420,10 +421,10 @@ final class EpisodeAutosaver {
           textView.replaceOccurrences(ranges, with: replacement.replacement, actionName: "전체 바꾸기")
         else { return .nothing }
         noteChange(id)
-        let after = try? await snapshots.takeReplace(
+        snapshots.startReplace(
           id, kind: .replaced, text: textView.string, memo: "\(replacement.memo) · 바꾼 뒤 · \(ranges.count)곳",
           at: replacement.date)
-        return .replaced(count: ranges.count, characters: nil, before: beforeSnapshot, after: after)
+        return .replaced(count: ranges.count, characters: nil, before: beforeSnapshot)
       }
       try? await Task.sleep(for: .milliseconds(50))
     }

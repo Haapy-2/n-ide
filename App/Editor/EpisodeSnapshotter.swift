@@ -45,6 +45,8 @@ final class EpisodeSnapshotter {
   private var tail: Task<Void, Never>?
   /// 아직 안 끝난 쓰기 수
   private var pending = 0
+  /// 줄 밖에서 쓰는 중인 바꾸기 스냅샷. 끝나면 스스로 빠진다.
+  private var unqueued: [UUID: Task<Void, Never>] = [:]
   private var timer: Task<Void, Never>?
 
   init(store: ProjectStore) {
@@ -53,7 +55,7 @@ final class EpisodeSnapshotter {
   }
 
   /// 찍어야 할 것이 남았는지(앱 종료 때 기다릴지 정한다).
-  var hasPendingWork: Bool { !edited.isEmpty || pending > 0 }
+  var hasPendingWork: Bool { !edited.isEmpty || pending > 0 || !unqueued.isEmpty }
 
   func noteEdit(_ id: EpisodeID) {
     edited.insert(id)
@@ -81,8 +83,30 @@ final class EpisodeSnapshotter {
 
   /// 전체 바꾸기 직전(`replace`)·직후(`replaced`) 본문. 늘 찍고 보관 개수로 지우지 않는다.
   /// 한 번의 바꾸기에서 나온 스냅샷이 회차가 달라도 같은 시각을 갖도록 시각을 받는다.
+  /// 장치 캐시는 비우지 않는다(`fullSync: false`): 회차마다 바로 뒤의 본문 쓰기(열린 회차는 자동 저장)가 F_FULLFSYNC로
+  /// 이 스냅샷까지 함께 내려 주므로 "바꾸기 전 글이 본문보다 먼저 디스크에"는 그대로다. 다 F_FULLFSYNC로 쓰면 회차마다
+  /// 다섯 번(스냅샷 둘·메모 둘·본문, 한 번 3.2ms)이라 500화에 몇 초가 걸린다.
+  /// 다른 스냅샷처럼 한 줄로 세우지 않는다: "마지막과 같으면 건너뛰기"·보관 개수 정리가 없어 앞 쓰기를 기다릴 까닭이 없고,
+  /// 회차 여러 개를 겹쳐 바꿀 때 그 줄이 병목이 된다. 앱을 끌 때는 `waitForWrites`가 함께 기다린다.
   func takeReplace(_ id: EpisodeID, kind: SnapshotKind, text: String, memo: String, at date: Date) async throws -> Snapshot? {
-    try await enqueue(text, id, kind, memo: memo, date: date).value
+    try await startReplace(id, kind: kind, text: text, memo: memo, at: date).value
+  }
+
+  /// `takeReplace`와 같지만 쓰기를 시작만 한다(바꾼 뒤 스냅샷: 다 쓰기를 기다리면 회차마다 메인 스레드를 한 번 더 오간다).
+  @discardableResult
+  func startReplace(
+    _ id: EpisodeID, kind: SnapshotKind, text: String, memo: String, at date: Date
+  ) -> Task<Snapshot?, any Error> {
+    let store = store
+    let write = Task.detached {
+      try store.writeSnapshot(text, episode: id, kind: kind, memo: memo, at: date, fullSync: false)
+    }
+    let key = UUID()
+    unqueued[key] = Task {
+      _ = await write.result
+      unqueued[key] = nil
+    }
+    return write
   }
 
   /// 휴지통으로 보낸 회차는 더 찍지 않는다.
@@ -92,6 +116,9 @@ final class EpisodeSnapshotter {
 
   func waitForWrites() async {
     while pending > 0, let task = tail {
+      await task.value
+    }
+    while let task = unqueued.values.first {
       await task.value
     }
   }
@@ -122,7 +149,7 @@ final class EpisodeSnapshotter {
   @discardableResult
   private func enqueue(
     _ text: String, _ id: EpisodeID, _ kind: SnapshotKind, memo: String? = nil, skipIfSame: Bool = false,
-    date: Date = Date()
+    date: Date = Date(), fullSync: Bool = true
   ) -> Task<Snapshot?, any Error> {
     let previous = tail
     let retention = settings.retention
@@ -130,7 +157,8 @@ final class EpisodeSnapshotter {
       await previous?.value
       defer { pending -= 1 }
       do {
-        return try await write(text, id, kind, memo: memo, skipIfSame: skipIfSame, retention: retention, date: date)
+        return try await write(
+          text, id, kind, memo: memo, skipIfSame: skipIfSame, retention: retention, date: date, fullSync: fullSync)
       } catch {
         // 못 찍었으면(디스크가 꽉 찼을 때 등) "고친 회차"로 되돌린다. 아직 그 회차를 보고 있으면 다음 간격이나 떠날 때 다시 찍는다.
         if kind.isPrunable { edited.insert(id) }
@@ -143,14 +171,16 @@ final class EpisodeSnapshotter {
   }
 
   private func write(
-    _ text: String, _ id: EpisodeID, _ kind: SnapshotKind, memo: String?, skipIfSame: Bool, retention: Int, date: Date
+    _ text: String, _ id: EpisodeID, _ kind: SnapshotKind, memo: String?, skipIfSame: Bool, retention: Int, date: Date,
+    fullSync: Bool
   ) async throws -> Snapshot? {
     let store = store
     return try await Task.detached {
       // 자동·떠날 때만 마지막과 같으면 건너뛴다. 직접·복원 전은 사용자가 그 순간을 남기려는 것이라 늘 찍는다
       // (저장하면서 찍는 직접 찍기만 예외로 건너뛴다).
       let snapshot = try store.writeSnapshot(
-        text, episode: id, kind: kind, memo: memo, at: date, skipIfSameAsLatest: kind.isPrunable || skipIfSame)
+        text, episode: id, kind: kind, memo: memo, at: date, skipIfSameAsLatest: kind.isPrunable || skipIfSame,
+        fullSync: fullSync)
       // 정리가 실패해도 방금 찍은 것은 남았으니 실패로 치지 않는다. 다음에 찍을 때 다시 정리한다.
       if kind.isPrunable { _ = try? store.pruneSnapshots(of: id, keeping: retention) }
       return snapshot
