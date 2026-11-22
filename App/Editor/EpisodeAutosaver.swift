@@ -121,6 +121,15 @@ final class EpisodeAutosaver {
     unsaved.values.sorted { $0.id.rawValue < $1.id.rawValue }.map { (episodeTitle($0.id), $0.text) }
   }
 
+  /// 아직 디스크에 썼다고 확인되지 않은 원고: 저장에 실패했거나, 쓰는 중이거나, 열린 회차에서 저장 전인 글.
+  /// 종료가 늦어 사용자가 기다리지 않고 내보낼 때 쓴다.
+  func pendingManuscripts() -> [(title: String, text: String)] {
+    var texts: [EpisodeID: String] = [:]
+    for id in Set(unsaved.keys).union(inFlight.keys) { texts[id] = pendingText(for: id) }
+    if let episodeID, isDirty(episodeID), let textView { texts[episodeID] = textView.string }
+    return texts.sorted { $0.key.rawValue < $1.key.rawValue }.map { (episodeTitle($0.key), $0.value) }
+  }
+
   /// 사용자가 다른 곳으로 내보냈다. 메모리의 원고를 놓아 더는 "저장 안 됨"으로 세지 않는다.
   func markRescued() {
     for id in unsaved.keys { savedChanges[id] = max(savedChanges[id, default: 0], changes[id, default: 0]) }

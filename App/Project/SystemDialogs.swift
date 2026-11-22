@@ -52,6 +52,43 @@ extension SystemDialogs {
     return exportUnsaved(manuscripts)
   }
 
+  enum SlowSaveChoice {
+    case finished, export, cancel
+  }
+
+  /// 종료하는데 저장이 늦을 때. 저장(`finishing`)이 끝나면 저절로 닫히고 `.finished`.
+  /// `runModal`을 쓰지 않는다: 모달이 떠 있는 동안 메인 액터 작업이 멈춰 저장 재시도도, 저절로 닫기도 돌지 않았다.
+  /// 그래서 알림 창을 보통 창처럼 띄우고 버튼을 직접 받는다.
+  static func waitForSaves(until finishing: Task<Void, Never>) async -> SlowSaveChoice {
+    let alert = NSAlert()
+    alert.messageText = "저장을 마치는 중이에요"
+    alert.informativeText = "작품 폴더에 쓰는 데 평소보다 오래 걸리고 있어요. 네트워크 드라이브나 iCloud라면 연결을 확인해 주세요. 저장이 끝나면 저절로 꺼져요."
+    alert.addButton(withTitle: "기다리지 않고 내보내기…")
+    alert.addButton(withTitle: "종료 취소")
+    let spinner = NSProgressIndicator(frame: NSRect(x: 0, y: 0, width: 20, height: 20))
+    spinner.style = .spinning
+    spinner.controlSize = .small
+    spinner.startAnimation(nil)
+    alert.accessoryView = spinner
+    alert.layout()
+    let window = alert.window
+    return await withCheckedContinuation { continuation in
+      let choice = SlowSaveAnswer(continuation, window: window)
+      for (index, button) in alert.buttons.enumerated() {
+        button.tag = index
+        button.target = choice
+        button.action = #selector(SlowSaveAnswer.pressed(_:))
+      }
+      window.level = .modalPanel
+      window.center()
+      window.makeKeyAndOrderFront(nil)
+      Task { @MainActor in
+        await finishing.value
+        choice.answer(.finished)
+      }
+    }
+  }
+
   enum BackupChoice {
     case restore, export, discard
   }
@@ -100,5 +137,28 @@ extension SystemDialogs {
     alert.messageText = title
     alert.informativeText = message
     alert.runModal()
+  }
+}
+
+/// 늦은 저장 알림의 답. 버튼이든 저장 끝이든 먼저 온 것 하나만 받고 창을 닫는다.
+@MainActor
+private final class SlowSaveAnswer: NSObject {
+  private var continuation: CheckedContinuation<SystemDialogs.SlowSaveChoice, Never>?
+  private let window: NSWindow
+
+  init(_ continuation: CheckedContinuation<SystemDialogs.SlowSaveChoice, Never>, window: NSWindow) {
+    self.continuation = continuation
+    self.window = window
+  }
+
+  @objc func pressed(_ sender: NSButton) {
+    answer(sender.tag == 0 ? .export : .cancel)
+  }
+
+  func answer(_ choice: SystemDialogs.SlowSaveChoice) {
+    guard let continuation else { return }
+    self.continuation = nil
+    window.orderOut(nil)
+    continuation.resume(returning: choice)
   }
 }

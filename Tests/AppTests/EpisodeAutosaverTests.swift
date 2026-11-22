@@ -99,6 +99,16 @@ final class EpisodeAutosaverTests: XCTestCase {
     XCTAssertFalse(FileManager.default.fileExists(atPath: backup.folder.path(percentEncoded: false)))
   }
 
+  func testPendingManuscriptsIncludeUnsavedEditorText() async throws {
+    autosaver.episodeTitle = { _ in "1화" }
+    XCTAssertTrue(autosaver.pendingManuscripts().isEmpty)
+    type(" 아직 저장 전")
+    XCTAssertEqual(autosaver.pendingManuscripts().map(\.text), ["첫 문장 아직 저장 전"])
+    XCTAssertEqual(autosaver.pendingManuscripts().map(\.title), ["1화"])
+    await autosaver.flush()
+    XCTAssertTrue(autosaver.pendingManuscripts().isEmpty, "저장이 끝나면 내보낼 것이 없다")
+  }
+
   func testFlushSavesImmediately() async throws {
     type(" 바로 저장")
     await autosaver.flush()
