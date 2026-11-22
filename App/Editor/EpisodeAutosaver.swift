@@ -90,6 +90,14 @@ final class EpisodeAutosaver {
 
   /// 회차 제목. 저장하지 못한 원고를 다른 곳으로 내보낼 때 파일 이름으로 쓴다. `ProjectModel`이 건다.
   @ObservationIgnored var episodeTitle: (EpisodeID) -> String = { _ in "" }
+  @ObservationIgnored var projectTitle: () -> String = { "" }
+
+  /// 저장에 끝내 실패한 원고를 작품 밖에 따로 두는 곳. 없으면(테스트 기본값) 백업하지 않는다.
+  @ObservationIgnored var backup: EmergencyBackup?
+  /// 이번 실행에서 백업한 회차와 그 변경 번호. 그보다 새 본문이 저장되면 백업을 지운다.
+  @ObservationIgnored private var backedUp: [EpisodeID: Int] = [:]
+  /// 백업 쓰기·지우기를 차례대로(옛 쓰기가 새 지우기 뒤에 끝나 낡은 백업이 남지 않게).
+  @ObservationIgnored private var backupTail: Task<Void, Never>?
 
   /// 끝내 저장하지 못해 메모리에만 있는 원고(창 닫기·앱 종료 때 다른 곳으로 내보내려고).
   func unsavedManuscripts() -> [(title: String, text: String)] {
@@ -166,6 +174,7 @@ final class EpisodeAutosaver {
   func finish() async {
     snapshotLeaving()
     await flush()
+    await backupTail?.value
     await snapshots.waitForWrites()
     await finishProjectWork()
   }
@@ -215,6 +224,7 @@ final class EpisodeAutosaver {
     inFlight[id] = nil
     conflicts[id] = nil
     disk[id] = nil
+    removeBackup(id)
     snapshots.forget(id)
     if case .failed = status { settleStatus() }
   }
@@ -376,6 +386,7 @@ final class EpisodeAutosaver {
     disk[id] = version
     unsaved[id] = nil
     inFlight[id] = nil
+    removeBackup(id)
     savedChanges[id] = changes[id, default: 0]
     if id == episodeID { textView?.reloadText(with: version.text) }
     if case .failed = status { settleStatus() }
@@ -461,17 +472,50 @@ final class EpisodeAutosaver {
       // 메모리에 남아 있던 본문이 방금 저장한 것보다 옛것이면 그 내용은 이미 디스크에 있으므로 지운다.
       // (그 뒤에 더 친 글이 있어도 지운다. 그 글은 편집기에 있고 다음 저장이 맡는다.)
       if let failed = unsaved[job.id], failed.change <= job.change { unsaved[job.id] = nil }
+      if let backed = backedUp[job.id], backed <= job.change { removeBackup(job.id) }
       settleStatus()
     } catch {
       // 더 새 본문이 이미 저장됐거나 메모리에 남아 있으면 이 실패는 지난 일이다. 옛 본문으로 덮지 않는다.
       if savedChanges[job.id, default: 0] < job.change, (unsaved[job.id]?.change ?? 0) <= job.change {
         unsaved[job.id] = job
+        backUp(job)
         lastFailure = (error as? ProjectError)?.userMessage ?? error.localizedDescription
       }
       settleStatus()
     }
     if inFlight[job.id]?.text == job.text { inFlight[job.id] = nil }
     releaseBaselineIfIdle(job.id)
+  }
+
+  // MARK: - 비상 백업 (PLAN 17장 1번)
+
+  private func backUp(_ job: SaveJob) {
+    guard let backup else { return }
+    backedUp[job.id] = job.change
+    let episodeTitle = episodeTitle(job.id)
+    let projectTitle = projectTitle()
+    let text = job.text
+    let id = job.id
+    enqueueBackup { try backup.write(text, episode: id, episodeTitle: episodeTitle, projectTitle: projectTitle) }
+  }
+
+  private func removeBackup(_ id: EpisodeID) {
+    guard let backup, backedUp.removeValue(forKey: id) != nil else { return }
+    enqueueBackup { try backup.remove(id) }
+  }
+
+  /// 백업을 못 써도 원고는 메모리에 남고 상태 줄이 실패를 보여 주므로, 오류는 삼킨다.
+  private func enqueueBackup(_ work: @escaping @Sendable () throws -> Void) {
+    let previous = backupTail
+    backupTail = Task.detached(priority: .utility) {
+      await previous?.value
+      try? work()
+    }
+  }
+
+  /// 테스트: 쌓인 백업 작업이 끝날 때까지.
+  func waitForBackups() async {
+    await backupTail?.value
   }
 }
 

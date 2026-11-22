@@ -42,10 +42,12 @@ struct WorkspaceWindow: View {
     let url = url
     do {
       // 파일 읽기와 복구는 메인 스레드 밖에서.
-      let (project, recovery) = try await Task.detached { try ProjectStore(root: url).open() }.value
+      var (project, recovery) = try await Task.detached { try ProjectStore(root: url).open() }.value
       RecentProjects.record(url: url, title: project.title, episodeCount: project.episodes.count)
       recoveryNotice = Self.notice(for: recovery)
-      state = .loaded(ProjectModel(project: project, store: ProjectStore(root: url)))
+      let backup = AppInfo.emergencyBackup
+      if let backup { project = await EmergencyBackupRecovery.run(backup, project: project, root: url) }
+      state = .loaded(ProjectModel(project: project, store: ProjectStore(root: url), backup: backup))
     } catch let error as ProjectError {
       state = .failed(error.userMessage)
     } catch {

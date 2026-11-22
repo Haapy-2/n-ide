@@ -52,6 +52,27 @@ extension SystemDialogs {
     return exportUnsaved(manuscripts)
   }
 
+  enum BackupChoice {
+    case restore, export, discard
+  }
+
+  /// 작품을 열었는데 지난번에 작품 폴더에 쓰지 못한 원고가 작품 밖 백업에 남아 있다.
+  static func offerBackupRestore(episodeNames: [String]) -> BackupChoice {
+    let alert = NSAlert()
+    alert.alertStyle = .warning
+    alert.messageText = "저장하지 못한 원고가 있어요"
+    let list = episodeNames.prefix(5).joined(separator: ", ") + (episodeNames.count > 5 ? " 외 \(episodeNames.count - 5)개" : "")
+    alert.informativeText = "지난번에 작품 폴더에 쓰지 못한 원고가 남아 있어요: \(list).\n되살리면 지금 파일의 글은 스냅샷 ‘복원 전’으로 남겨 두어 비교하거나 되돌릴 수 있어요."
+    alert.addButton(withTitle: "되살리기")
+    alert.addButton(withTitle: "다른 곳에 내보내기…")
+    alert.addButton(withTitle: "휴지통으로 버리기")
+    switch alert.runModal() {
+    case .alertFirstButtonReturn: return .restore
+    case .alertSecondButtonReturn: return .export
+    default: return .discard
+    }
+  }
+
   /// 폴더를 골라 원고를 회차마다 .md로 내보낸다. 내보냈으면 true. 실패하면 이유를 보여 주고 false.
   static func exportUnsaved(_ manuscripts: [(title: String, text: String)]) -> Bool {
     let panel = NSOpenPanel()

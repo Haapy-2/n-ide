@@ -37,7 +37,8 @@ final class ProjectModel {
     autosaveDelay: Duration = .seconds(1),
     countDelay: Duration = .milliseconds(200),
     countSaveDelay: Duration = .seconds(3),
-    moveToTrash: @escaping @Sendable (URL) throws -> URL = ProjectModel.systemTrash
+    moveToTrash: @escaping @Sendable (URL) throws -> URL = ProjectModel.systemTrash,
+    backup: EmergencyBackup? = nil
   ) {
     // 앱 밖에서 고쳐 흩어진 묶음은 열 때 바로잡는다(회차는 그대로, 순서만 모음). 다음 저장 때 파일에도 들어간다.
     var project = project
@@ -59,6 +60,8 @@ final class ProjectModel {
     }
     autosaver.finishProjectWork = { [weak self] in await self?.finishProjectSaves() }
     autosaver.episodeTitle = { [weak self] id in self?.project.episodes.first { $0.id == id }?.title ?? "" }
+    autosaver.projectTitle = { [weak self] in self?.project.title ?? "" }
+    autosaver.backup = backup
   }
 
   var episodes: [EpisodeMeta] { project.episodes }

@@ -65,6 +65,40 @@ final class EpisodeAutosaverTests: XCTestCase {
     XCTAssertTrue(textView.string.hasPrefix(saved))
   }
 
+  func testFailedSaveIsBackedUpOutsideProjectUntilSaved() async throws {
+    let backup = EmergencyBackup(folder: folder.appending(path: "Backups"))
+    autosaver.backup = backup
+    autosaver.projectTitle = { "작품" }
+    autosaver.episodeTitle = { _ in "1화" }
+    let episodes = store.layout.episodesFolder.path(percentEncoded: false)
+    try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: episodes)
+    type(" 지켜야 할 문장")
+
+    await autosaver.flush()
+    await autosaver.waitForBackups()
+
+    let saved = backup.entries(for: [episode])
+    XCTAssertEqual(saved.map(\.text), ["첫 문장 지켜야 할 문장"], "작품 폴더에 못 쓴 원고는 밖에 따로 둔다")
+    XCTAssertEqual(saved.first?.episodeTitle, "1화")
+    XCTAssertEqual(saved.first?.projectTitle, "작품")
+
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: episodes)
+    await autosaver.flush()
+    await autosaver.waitForBackups()
+
+    XCTAssertEqual(try store.readEpisode(episode), "첫 문장 지켜야 할 문장")
+    XCTAssertTrue(backup.entries(for: [episode]).isEmpty, "저장되면 백업을 지운다")
+  }
+
+  func testNoBackupWhenSavingSucceeds() async throws {
+    let backup = EmergencyBackup(folder: folder.appending(path: "Backups"))
+    autosaver.backup = backup
+    type(" 잘 저장됨")
+    await autosaver.flush()
+    await autosaver.waitForBackups()
+    XCTAssertFalse(FileManager.default.fileExists(atPath: backup.folder.path(percentEncoded: false)))
+  }
+
   func testFlushSavesImmediately() async throws {
     type(" 바로 저장")
     await autosaver.flush()
