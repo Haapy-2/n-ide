@@ -16,6 +16,8 @@ final class ProjectModel {
   @ObservationIgnored let autosaver: EpisodeAutosaver
   @ObservationIgnored let counter: CharacterCounter
   @ObservationIgnored private var projectChange = 0
+  /// 휴지통으로 옮기는 중인 회차. 목록에서 빠지기 전이라도 전체 바꾸기가 쓰지 않게 한다.
+  @ObservationIgnored private var leaving: Set<EpisodeID> = []
   /// 아직 안 끝난 `project.json` 저장 수
   @ObservationIgnored private var projectSaves = 0
   /// 회차별 글자 수(화면용). `project` 안에 두면 글자 수 하나가 바뀔 때마다 `project`를 읽는 화면 전체
@@ -61,7 +63,11 @@ final class ProjectModel {
     autosaver.finishProjectWork = { [weak self] in await self?.finishProjectSaves() }
     autosaver.episodeTitle = { [weak self] id in self?.project.episodes.first { $0.id == id }?.title ?? "" }
     autosaver.projectTitle = { [weak self] in self?.project.title ?? "" }
-    autosaver.isListed = { [weak self] id in self?.project.episodes.contains { $0.id == id } ?? false }
+    // init 안이라 `project`만 쓰면 매개변수(연 때의 목록)를 가리킨다. 지금 목록은 `self.project`.
+    autosaver.isListed = { [weak self] id in
+      guard let self, !self.leaving.contains(id) else { return false }
+      return self.project.episodes.contains { $0.id == id }
+    }
     autosaver.backup = backup
   }
 
@@ -269,6 +275,10 @@ final class ProjectModel {
 
   private func moveToTrash(_ record: TrashRecord) async throws {
     let id = record.episode.id
+    // 저장을 기다리고 파일을 옮기는 동안에도 회차는 목록에 남아 있다. 그 틈에 전체 바꾸기가 쓰기 시작하면
+    // 옮긴 자리에 본문 파일이 새로 생기므로, 먼저 "떠나는 중"으로 표시해 새 쓰기를 막는다(이미 시작한 쓰기는 flush가 기다린다).
+    leaving.insert(id)
+    defer { leaving.remove(id) }
     // 지우기 전에 고친 내용을 저장해 둔다. 휴지통에서 꺼냈을 때 마지막 내용이 들어 있도록.
     await autosaver.flush()
     // 그래도 저장하지 못했으면 옮기지 않는다. 옮기면 휴지통에는 옛 본문만 가고 메모리의 마지막 원고는 버려진다.
