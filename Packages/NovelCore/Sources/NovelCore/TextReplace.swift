@@ -50,6 +50,32 @@ public enum TextReplace {
   }
 }
 
+/// 글 한 자리 고치기: 이 범위(UTF-16)를 이 말로. 편집기는 여러 개를 실행 취소 한 단위로 한꺼번에 고친다.
+public struct TextChange: Equatable, Sendable {
+  public let range: NSRange
+  public let text: String
+
+  public init(range: NSRange, text: String) {
+    self.range = range
+    self.text = text
+  }
+
+  /// 고칠 자리들(앞에서부터, 겹치지 않음)을 고친 글. 앞에서부터 이어 붙여 한 번에 만든다(뒤에서부터 끼워 넣으면 자리마다 뒤쪽 글을 민다).
+  public static func applying(_ changes: [TextChange], to text: String) -> String {
+    guard !changes.isEmpty else { return text }
+    let source = text as NSString
+    let result = NSMutableString(capacity: source.length)
+    var copied = 0
+    for change in changes {
+      result.append(source.substring(with: NSRange(location: copied, length: change.range.location - copied)))
+      result.append(change.text)
+      copied = change.range.location + change.range.length
+    }
+    result.append(source.substring(from: copied))
+    return result as String
+  }
+}
+
 /// 작품 전체 바꾸기를 하기 전에 끝까지 센 결과(확인 창의 숫자). 실행은 회차마다 바꾸는 순간의 글에서 다시 찾으므로
 /// 본문은 들고 있지 않는다(500화를 세는 동안 사본이 쌓이지 않게).
 public struct ReplacementPlan: Equatable, Sendable {

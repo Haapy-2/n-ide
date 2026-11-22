@@ -18,13 +18,15 @@ public enum SnapshotKind: String, Sendable, CaseIterable {
   case replace
   /// 작품 전체 바꾸기 직후의 본문. `replace`와 짝으로 그 바꾸기가 무엇을 바꿨는지 남는다.
   case replaced
+  /// 전체 바꾸기를 되돌리기(또는 다시 바꾸기) 직전의 본문. 다시 바꾸기가 이것으로 되돌린 자리를 알아낸다.
+  case revert
 
   /// 보관 개수를 넘으면 지워도 되는 종류. 지울 수 있는 것을 하나씩 적는 허용 목록이라,
   /// 나중에 종류가 늘어도 여기에 적지 않으면 지워지지 않는다.
   public var isPrunable: Bool {
     switch self {
     case .auto, .leave: true
-    case .manual, .restore, .conflict, .external, .replace, .replaced: false
+    case .manual, .restore, .conflict, .external, .replace, .replaced, .revert: false
     }
   }
 }
