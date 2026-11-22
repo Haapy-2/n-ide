@@ -28,7 +28,7 @@ APP="$DERIVED/Build/Products/Release/NovelEditor.app/Contents/MacOS/NovelEditor"
 # 한 번이 10초를 넘기면 멈춘 것으로 보고 끄고 다음으로 넘어간다(전에는 멈추면 perf.sh가 끝나지 않았다). 멈춘 횟수는 표 아래에 적는다.
 : >"$LOGS/perf-launch.log"
 for _ in 1 2 3 4 5 6; do
-  NOVEL_PERF_OPEN="$DUMMY" NOVEL_PERF_LAUNCH=1 "$APP" >"$LOGS/perf-launch-run.log" 2>/dev/null &
+  NOVEL_PERF_OPEN="$DUMMY" NOVEL_PERF_LAUNCH=1 NOVEL_PERF_MEASURE=1 "$APP" >"$LOGS/perf-launch-run.log" 2>/dev/null &
   pid=$!
   for _ in $(seq 100); do kill -0 "$pid" 2>/dev/null || break; sleep 0.1; done
   if kill -0 "$pid" 2>/dev/null; then
@@ -43,7 +43,7 @@ rm -f "$LOGS/perf-launch-run.log"
 # 대기 메모리: 5,000자 회차를 연 채로 30초 둔 뒤 실제 사용량(phys_footprint).
 # 창 크기는 앱이 1100×760으로 고정한다(LaunchProbe.windowContentSize). 그래픽 버퍼가 창 넓이에 비례하기 때문.
 # macOS 창 복원을 끈다: 지난번에 열려 있던 창이 함께 뜨면 값이 77 ↔ 89MB로 흔들렸다.
-NOVEL_PERF_OPEN="$DUMMY" "$APP" -ApplePersistenceIgnoreState YES >/dev/null 2>&1 &
+NOVEL_PERF_OPEN="$DUMMY" NOVEL_PERF_MEASURE=1 "$APP" -ApplePersistenceIgnoreState YES >/dev/null 2>&1 &
 pid=$!
 sleep 30
 footprint -p "$pid" >"$LOGS/perf-memory.log" 2>&1 || true

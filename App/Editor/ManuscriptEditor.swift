@@ -74,19 +74,56 @@ struct ManuscriptEditor: NSViewRepresentable {
     textView.reveal(reveal)
   }
 
+  /// 떠나는 회차의 자리를 기억하고, 새 회차는 기억한 자리로 연다(PLAN 17장 3번). 화면 위치는 창에 붙어 폭이 잡힌 뒤
+  /// 한 차례 뒤에 맞춘다(처음 만들 때는 아직 폭이 없어 줄 위치가 다르다). 검색 결과로 가기가 있으면 그것이 이긴다.
   private func apply(_ content: Content, to textView: ManuscriptTextView, coordinator: Coordinator) {
+    coordinator.rememberPlace()
     coordinator.appliedToken = content.token
+    coordinator.episodeID = content.episodeID
     textView.replaceAllText(with: content.text)
+    let revealing = reveal.map { $0.episodeID == content.episodeID && $0.token != coordinator.appliedRevealToken } ?? false
+    if !revealing, let place = EpisodeViewStates.shared.state(for: content.episodeID) {
+      textView.restoreViewState(place)
+      let token = content.token
+      DispatchQueue.main.async { [weak textView, weak coordinator] in
+        guard let textView, let coordinator, coordinator.appliedToken == token else { return }
+        textView.restoreViewState(place)
+        coordinator.rememberPlace()
+      }
+    }
+    coordinator.rememberPlace()
     // 이미 창에 붙어 있으면(회차 전환) 지금 초점을 준다. 아직이면(처음 만들 때) viewDidMoveToWindow가 맡는다.
     if let window = textView.window { coordinator.attach(to: window) }
   }
 
   func makeCoordinator() -> Coordinator { Coordinator() }
 
+  static func dismantleNSView(_ scrollView: NSScrollView, coordinator: Coordinator) {
+    coordinator.rememberPlace()
+  }
+
   final class Coordinator: NSObject, NSTextViewDelegate {
     weak var textView: ManuscriptTextView?
     var parent: ManuscriptEditor?
     var appliedToken: UUID?
+    var episodeID: EpisodeID?
+    private var terminateObserver: NSObjectProtocol?
+
+    override init() {
+      super.init()
+      // 앱을 끌 때는 창이 비활성화되지 않을 수 있어 따로 받는다.
+      terminateObserver = NotificationCenter.default.addObserver(
+        forName: NSApplication.willTerminateNotification, object: nil, queue: .main
+      ) { [weak self] _ in
+        MainActor.assumeIsolated { self?.rememberPlace() }
+      }
+    }
+
+    /// 지금 회차의 커서와 화면 위치를 이 맥에 기억한다.
+    func rememberPlace() {
+      guard let episodeID, let textView else { return }
+      EpisodeViewStates.shared.record(textView.viewState(), for: episodeID)
+    }
     var appliedRevealToken: UUID?
     private var resignObserver: NSObjectProtocol?
     private var becomeKeyObserver: NSObjectProtocol?
@@ -126,11 +163,15 @@ struct ManuscriptEditor: NSViewRepresentable {
       resignObserver = NotificationCenter.default.addObserver(
         forName: NSWindow.didResignKeyNotification, object: window, queue: .main
       ) { [weak self] _ in
-        MainActor.assumeIsolated { self?.parent?.onFocusLost() }
+        MainActor.assumeIsolated {
+          self?.rememberPlace()
+          self?.parent?.onFocusLost()
+        }
       }
     }
 
     isolated deinit {
+      if let terminateObserver { NotificationCenter.default.removeObserver(terminateObserver) }
       if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
       if let becomeKeyObserver { NotificationCenter.default.removeObserver(becomeKeyObserver) }
     }

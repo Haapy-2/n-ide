@@ -4,7 +4,13 @@ import Foundation
 /// 성능 측정용 갈고리 (Scripts/perf.sh 전용). 환경 변수가 없으면 아무 일도 하지 않는다.
 /// - NOVEL_PERF_OPEN=<작품 경로>: 작품 선택 창 대신 그 작품을 바로 연다.
 /// - NOVEL_PERF_LAUNCH=1: 편집기가 처음 키 입력을 받을 수 있게 되면 프로세스 시작부터 걸린 시간을 찍고 끝낸다.
+/// - NOVEL_PERF_MEASURE=1: 측정 실행. 이 맥에 남는 기억(회차 자리)을 읽지도 쓰지도 않아, 지난번 측정이 다음 측정을 바꾸지 않게 한다.
 enum LaunchProbe {
+  static var isMeasuring: Bool {
+    ProcessInfo.processInfo.environment["NOVEL_PERF_MEASURE"] == "1"
+      || ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+  }
+
   static var projectToOpen: URL? {
     ProcessInfo.processInfo.environment["NOVEL_PERF_OPEN"].map { URL(filePath: $0, directoryHint: .isDirectory) }
   }

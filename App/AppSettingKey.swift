@@ -56,4 +56,6 @@ enum AppSettingKey {
   static let caretColorDark = "caretColorDark"
   /// 사이드바에서 접어 둔 회차 묶음(GroupID를 쉼표로 이음). 이 맥에만 기억한다.
   static let collapsedEpisodeGroups = "collapsedEpisodeGroups"
+  /// 회차마다 마지막 커서·화면 맨 위 글자 위치와 연 시각(`EpisodeViewStates`). 이 맥에만 기억한다.
+  static let episodeViewStates = "episodeViewStates"
 }

@@ -48,7 +48,8 @@ struct WorkspaceView: View {
   init(model: ProjectModel) {
     self.model = model
     previewProject = nil
-    _selection = State(initialValue: model.episodes.first?.id)
+    let ids = model.episodes.map(\.id)
+    _selection = State(initialValue: EpisodeViewStates.shared.lastOpened(among: ids) ?? ids.first)
   }
 
   init(previewProject: ProjectFile) {

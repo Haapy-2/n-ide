@@ -395,6 +395,41 @@ final class ManuscriptTextView: NSTextView {
     }
   }
 
+  // MARK: - 회차 자리
+
+  /// 지금 커서와 화면 맨 위 줄의 첫 글자.
+  func viewState() -> EpisodeViewState {
+    EpisodeViewState(caret: selectedRange().location, top: topVisibleCharacter(), openedAt: Date())
+  }
+
+  /// 커서와 화면을 기억한 자리로. 그사이 본문이 짧아졌으면 끝으로 맞춘다.
+  func restoreViewState(_ state: EpisodeViewState) {
+    let length = (string as NSString).length
+    setSelectedRange(NSRange(location: min(max(state.caret, 0), length), length: 0))
+    scrollToCharacter(min(max(state.top, 0), length))
+  }
+
+  private func topVisibleCharacter() -> Int {
+    guard let layoutManager, let textContainer, layoutManager.numberOfGlyphs > 0 else { return 0 }
+    let point = NSPoint(x: 0, y: max(visibleRect.minY - textContainerOrigin.y, 0) + 1)
+    let glyph = layoutManager.glyphIndex(for: point, in: textContainer)
+    return layoutManager.characterIndexForGlyph(at: glyph)
+  }
+
+  /// 그 글자가 든 줄이 화면 맨 위에 오게. 그 앞까지는 배치를 끝내야 줄 위치를 알 수 있다
+  /// (회차를 막 바꾼 직후는 아직 배치 전이다).
+  private func scrollToCharacter(_ index: Int) {
+    guard let layoutManager, let clip = enclosingScrollView?.contentView, index > 0 else {
+      scroll(.zero)
+      return
+    }
+    let glyph = layoutManager.glyphIndexForCharacter(at: min(index, (string as NSString).length - 1))
+    layoutManager.ensureLayout(forGlyphRange: NSRange(location: 0, length: glyph + 1))
+    let line = layoutManager.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
+    clip.scroll(to: NSPoint(x: clip.bounds.origin.x, y: max(0, line.minY + textContainerOrigin.y)))
+    enclosingScrollView?.reflectScrolledClipView(clip)
+  }
+
   // MARK: - 폭과 여백
 
   /// NSTextView는 텍스트 칸 오른쪽 끝보다 오른쪽 점을 자기 것으로 보지 않아, 오른쪽 여백 클릭이 뒤의 clip view로 가서
