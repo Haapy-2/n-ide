@@ -306,6 +306,186 @@ final class EpisodeAutosaver {
     textView.regainFocusAfterPanel()
   }
 
+  // MARK: - 전체 바꾸기 (PLAN 14장 2번)
+
+  /// 무엇을 무엇으로 바꾸는지. 한 번의 바꾸기에서 회차마다 같은 것을 넘긴다.
+  struct Replacement: Sendable {
+    let query: String
+    let replacement: String
+    let caseSensitive: Bool
+    /// 스냅샷 시각. 모든 회차가 같은 시각을 가져 한 번의 바꾸기로 알아볼 수 있다.
+    let date: Date
+    /// 스냅샷 메모 앞부분. 뒤에 `· 바꾸기 전 · 12곳`이 붙는다.
+    let memo: String
+  }
+
+  enum ReplaceOutcome: Equatable {
+    /// 바꿨다. 열리지 않은 회차를 끝내 쓰지 못했으면 평소 저장 실패처럼 메모리에 붙잡고 상태 줄이 알린다.
+    /// `characters`는 바꾼 글의 글자 수. 열린 회차는 편집기의 글자 수 세기가 맡아 nil.
+    case replaced(count: Int, characters: CharacterCount?, before: Snapshot?, after: Snapshot?)
+    /// 지금 글에는 바꿀 곳이 없다.
+    case nothing
+    /// 외부 변경 충돌을 아직 고르지 않았다.
+    case conflict
+    /// 바꾸기 전 스냅샷을 남기지 못했다.
+    case snapshotFailed
+    /// 본문을 읽지 못했다.
+    case unreadable
+    /// 읽고 쓰는 사이에 앱 밖에서 거듭 바뀌었다.
+    case keptChanging
+  }
+
+  /// 회차 하나를 바꾼다. 센 때의 글이 아니라 바꾸는 순간의 지금 글에서 다시 찾는다(그사이 고쳤어도 건너뛰지 않는다).
+  /// 지금 글을 `바꾸기 전` 스냅샷으로 남긴 뒤에만 바꾸고, 바꾼 글을 `바꾼 뒤`로 남긴다.
+  /// 열린 회차는 조합이 끝난 뒤 편집기에서 찾은 자리만, 나머지는 저장 줄로 조건부로 쓰고 엇갈리면 다시 읽어 3번까지.
+  func replace(_ id: EpisodeID, _ replacement: Replacement) async -> ReplaceOutcome {
+    var before: (text: String, snapshot: Snapshot?)?
+    for _ in 0..<3 {
+      if let outcome = await replaceAttempt(id, replacement, before: &before) { return outcome }
+    }
+    return .keptChanging
+  }
+
+  /// 한 번 해 본다. 그사이 상태가 바뀌어 다시 해야 하면 nil.
+  private func replaceAttempt(
+    _ id: EpisodeID, _ replacement: Replacement, before: inout (text: String, snapshot: Snapshot?)?
+  ) async -> ReplaceOutcome? {
+    if id == episodeID, textView != nil { return await replaceOpen(id, replacement, before: &before) }
+    // 쓰는 중인 저장이 있으면 끝나기를 기다린다. 그 저장이 끝난 뒤의 글에서 바꿔야 순서가 맞는다.
+    while id != episodeID, inFlight[id] != nil, let task = running.values.first {
+      await task.value
+    }
+    if id == episodeID { return nil }
+    if conflicts[id] != nil { return .conflict }
+    let pending = pendingText(for: id)
+    let store = store
+    let source: (text: String, version: DiskVersion?)
+    if let pending {
+      source = (pending, nil)
+    } else {
+      guard let read = try? await Task.detached(operation: { try store.readEpisodeVersion(id) }).value else {
+        return .unreadable
+      }
+      source = (read.text, read)
+    }
+    let (query, word, caseSensitive, text) = (replacement.query, replacement.replacement, replacement.caseSensitive, source.text)
+    let computed = await Task.detached {
+      TextReplace.replacing(query, with: word, in: text, caseSensitive: caseSensitive)
+        .map { (text: $0.text, count: $0.count, characters: CharacterCount(counting: $0.text)) }
+    }.value
+    guard let computed else { return .nothing }
+    let beforeSnapshot: Snapshot?
+    do {
+      beforeSnapshot = try await snapshotBefore(id, source.text, count: computed.count, replacement, &before)
+    } catch {
+      return .snapshotFailed
+    }
+    // 기다리는 사이 열렸거나, 충돌이 생겼거나, 메모리의 글이 바뀌었으면 처음부터 다시.
+    guard id != episodeID, conflicts[id] == nil, inFlight[id] == nil, pendingText(for: id) == pending else { return nil }
+    guard await writeReplacement(id, text: computed.text, readVersion: source.version) else { return nil }
+    let after = try? await snapshots.takeReplace(
+      id, kind: .replaced, text: computed.text, memo: "\(replacement.memo) · 바꾼 뒤 · \(computed.count)곳",
+      at: replacement.date)
+    return .replaced(count: computed.count, characters: computed.characters, before: beforeSnapshot, after: after)
+  }
+
+  /// 열린 회차: 지금 글을 남긴 뒤, 한글 조합이 끝난 그 순간 지금 글에서 찾은 자리만 바꾼다.
+  /// 조합을 끊지 않으려고 기다린다. 찾기와 바꾸기 사이에 await가 없어 그 틈에 입력이 끼어들지 못한다.
+  /// 남긴 스냅샷과 바꾼 순간 사이에 친 글자는 스냅샷에 없지만 ⌘Z 한 번이면 바꾸기 직전으로 정확히 돌아간다.
+  private func replaceOpen(
+    _ id: EpisodeID, _ replacement: Replacement, before: inout (text: String, snapshot: Snapshot?)?
+  ) async -> ReplaceOutcome? {
+    guard conflicts[id] == nil else { return .conflict }
+    guard let text = textView?.string else { return nil }
+    let count = TextReplace.count(of: replacement.query, in: text, caseSensitive: replacement.caseSensitive)
+    guard count > 0 else { return .nothing }
+    let beforeSnapshot: Snapshot?
+    do {
+      beforeSnapshot = try await snapshotBefore(id, text, count: count, replacement, &before)
+    } catch {
+      return .snapshotFailed
+    }
+    while true {
+      guard id == episodeID, let textView else { return nil }
+      if conflicts[id] != nil { return .conflict }
+      if !textView.hasMarkedText() {
+        let ranges = TextReplace.ranges(
+          of: replacement.query, in: textView.string, caseSensitive: replacement.caseSensitive)
+        guard !ranges.isEmpty,
+          textView.replaceOccurrences(ranges, with: replacement.replacement, actionName: "전체 바꾸기")
+        else { return .nothing }
+        noteChange(id)
+        let after = try? await snapshots.takeReplace(
+          id, kind: .replaced, text: textView.string, memo: "\(replacement.memo) · 바꾼 뒤 · \(ranges.count)곳",
+          at: replacement.date)
+        return .replaced(count: ranges.count, characters: nil, before: beforeSnapshot, after: after)
+      }
+      try? await Task.sleep(for: .milliseconds(50))
+    }
+  }
+
+  /// `바꾸기 전` 스냅샷. 다시 해 보는 중에 같은 글이면 또 찍지 않는다.
+  private func snapshotBefore(
+    _ id: EpisodeID, _ text: String, count: Int, _ replacement: Replacement,
+    _ before: inout (text: String, snapshot: Snapshot?)?
+  ) async throws -> Snapshot? {
+    if let before, before.text == text { return before.snapshot }
+    let snapshot = try await snapshots.takeReplace(
+      id, kind: .replace, text: text, memo: "\(replacement.memo) · 바꾸기 전 · \(count)곳", at: replacement.date)
+    before = (text, snapshot)
+    return snapshot
+  }
+
+  /// 바꾼 글을 저장 줄로 쓴다. 파일에서 읽었으면 그때의 상태, 메모리의 글이면 디스크 기준과 비교해 조건부로 쓴다.
+  /// 그사이 앱 밖에서 바뀌어 쓰지 않았으면 false(다시 읽어 바꾼다).
+  private func writeReplacement(_ id: EpisodeID, text: String, readVersion: DiskVersion?) async -> Bool {
+    changes[id, default: 0] += 1
+    let job = SaveJob(id: id, change: changes[id, default: 0], text: text)
+    inFlight[id] = job
+    let key = UUID()
+    let write = Task { await commitReplacement(job, readVersion: readVersion) }
+    running[key] = Task {
+      _ = await write.value
+      running[key] = nil
+    }
+    return await write.value
+  }
+
+  private func commitReplacement(_ job: SaveJob, readVersion: DiskVersion?) async -> Bool {
+    let store = store
+    let disk = disk
+    defer {
+      if inFlight[job.id]?.text == job.text { inFlight[job.id] = nil }
+      releaseBaselineIfIdle(job.id)
+    }
+    do {
+      let result = try await queue.save(.episode(job.id), change: job.change, writeReturning: {
+        let result = try store.writeEpisode(job.text, id: job.id, ifUnchangedSince: readVersion ?? disk[job.id])
+        if case .written(let version) = result { disk[job.id] = version }
+        return result
+      }, didWrite: { if case .written = $0 { true } else { false } })
+      guard case .written = result else {
+        // 바꾼 글은 버린다. 이 번호를 저장한 것으로 쳐야 고친 적 없는 회차가 "저장 안 됨"으로 남지 않는다.
+        savedChanges[job.id] = max(savedChanges[job.id, default: 0], job.change)
+        return false
+      }
+      savedChanges[job.id] = max(savedChanges[job.id, default: 0], job.change)
+      if let failed = unsaved[job.id], failed.change <= job.change { unsaved[job.id] = nil }
+      if let backed = backedUp[job.id], backed <= job.change { removeBackup(job.id) }
+      settleStatus()
+    } catch {
+      // 다음 저장 시도도 읽은 때의 파일과 비교하게 기준을 남긴다.
+      if disk[job.id] == nil, let readVersion { disk[job.id] = readVersion }
+      if (unsaved[job.id]?.change ?? 0) <= job.change {
+        unsaved[job.id] = job
+        backUp(job)
+        lastFailure = Failure(error, isBackedUp: backup != nil)
+      }
+      settleStatus()
+    }
+    return true
+  }
+
   /// 지금 본문을 그 자리에서 복사해 저장을 시작만 한다(창 비활성). 끝나기는 기다리지 않는다.
   /// `Task` 안에서 부르면 창 닫기 처리가 끝난 뒤에야 돌아, 그사이 편집기(약한 참조)가 사라지면 본문을 못 읽는다.
   func startSave() {

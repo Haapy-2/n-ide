@@ -213,6 +213,60 @@ final class ManuscriptTextView: NSTextView {
     return true
   }
 
+  /// 찾은 자리만 실행 취소 한 단위로 바꾼다(전체 바꾸기). 본문을 통째로 갈지 않아서 커서는 같은 글자 자리에 남고
+  /// 화면 맨 위 글줄도 그대로다(위쪽에서 줄 수가 바뀌어도). 바꿨으면 true.
+  /// 조합 중이면 손대지 않고 false: 조합을 끊지 않으려는 것이라, 부르는 쪽이 조합이 끝난 뒤 다시 부른다.
+  func replaceOccurrences(_ ranges: [NSRange], with replacement: String, actionName: String) -> Bool {
+    guard !ranges.isEmpty, !hasMarkedText(), let textStorage else { return false }
+    let selection = selectedRange()
+    let top = topVisibleCharacter()
+    let topOffset = visibleRect.minY - lineTop(of: top)
+    let undo = episodeUndoManager
+    undo.beginUndoGrouping()
+    defer { undo.endUndoGrouping() }
+    let values = ranges.map { NSValue(range: $0) }
+    guard shouldChangeText(inRanges: values, replacementStrings: Array(repeating: replacement, count: ranges.count)) else {
+      return false
+    }
+    let inserted = NSAttributedString(string: replacement, attributes: style.textAttributes)
+    textStorage.beginEditing()
+    for range in ranges.reversed() { textStorage.replaceCharacters(in: range, with: inserted) }
+    textStorage.endEditing()
+    didChangeText()
+    undo.setActionName(actionName)
+
+    let length = replacement.utf16.count
+    // 바꾼 자리 앞의 글자는 그대로, 뒤의 글자는 늘고 준 만큼 민다. 바꾼 자리 안이면 바꾼 말 끝으로.
+    func moved(_ location: Int) -> Int {
+      var shift = 0
+      for range in ranges {
+        if range.upperBound <= location {
+          shift += length - range.length
+        } else if range.location < location {
+          return range.location + shift + length
+        } else {
+          break
+        }
+      }
+      return location + shift
+    }
+    let start = moved(selection.location)
+    setSelectedRange(NSRange(location: start, length: max(0, moved(selection.upperBound) - start)))
+    if let clip = enclosingScrollView?.contentView {
+      clip.scroll(to: NSPoint(x: clip.bounds.origin.x, y: max(0, lineTop(of: moved(top)) + topOffset)))
+      enclosingScrollView?.reflectScrolledClipView(clip)
+    }
+    return true
+  }
+
+  /// 글자가 놓인 줄의 위 끝(편집기 좌표)
+  private func lineTop(of index: Int) -> CGFloat {
+    guard let layoutManager, layoutManager.numberOfGlyphs > 0 else { return 0 }
+    let glyph = layoutManager.glyphIndexForCharacter(at: min(index, (string as NSString).length - 1))
+    layoutManager.ensureLayout(forGlyphRange: NSRange(location: 0, length: glyph + 1))
+    return layoutManager.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil).minY + textContainerOrigin.y
+  }
+
   /// 앱 밖에서 바뀐 본문으로 갈아 끼운다. 회차 전환과 달리 커서와 스크롤 위치를 되도록 그대로 둔다.
   /// 실행 취소 기록은 비운다: 옛 본문 기준의 기록을 새 본문에 적용하면 엉뚱한 곳이 바뀐다.
   func reloadText(with text: String) {

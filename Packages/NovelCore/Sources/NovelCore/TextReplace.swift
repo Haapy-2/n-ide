@@ -23,6 +23,16 @@ public enum TextReplace {
     return (result as String, count)
   }
 
+  /// 찾은 자리(UTF-16), 앞에서부터. 편집기에서 찾은 자리만 바꿀 때 쓴다.
+  public static func ranges(of query: String, in text: String, caseSensitive: Bool) -> [NSRange] {
+    var ranges: [NSRange] = []
+    TextSearch.forEachHit(of: query, in: text as NSString, caseSensitive: caseSensitive) { hit, _, _ in
+      ranges.append(hit)
+      return true
+    }
+    return ranges
+  }
+
   /// 찾은 곳 수. 바꾼 본문을 만들지 않는다.
   public static func count(of query: String, in text: String, caseSensitive: Bool) -> Int {
     var count = 0

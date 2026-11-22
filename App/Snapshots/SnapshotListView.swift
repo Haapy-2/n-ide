@@ -136,6 +136,7 @@ struct SnapshotListView: View {
     case .conflict: "충돌"
     case .external: "바깥"
     case .replace: "바꾸기 전"
+    case .replaced: "바꾼 뒤"
     }
   }
 }

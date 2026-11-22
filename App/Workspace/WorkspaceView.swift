@@ -35,6 +35,8 @@ struct WorkspaceView: View {
   @State private var stopAskingUndo = false
   /// 작품 전체 검색. 처음 열 때 만들고, 패널을 닫아도 문구와 결과는 남긴다(다시 열면 이어서).
   @State private var search: ProjectSearch?
+  /// 작품 전체 바꾸기. 검색과 함께 만든다.
+  @State private var replace: ProjectReplace?
   @State private var showingSearch = false
   /// ⇧⌘F를 누를 때마다 늘려 입력 칸에 초점을 준다.
   @State private var searchFocusRequest = 0
@@ -183,12 +185,16 @@ struct WorkspaceView: View {
   /// 사이드바 자리: 회차 목록, 또는 검색 패널(⇧⌘F).
   @ViewBuilder
   private var sidebar: some View {
-    if showingSearch, let search {
+    if showingSearch, let search, let replace {
       SearchPanel(
-        search: search, episodes: project.episodes, focusRequest: searchFocusRequest,
+        search: search, replace: replace, episodes: project.episodes, focusRequest: searchFocusRequest,
         onReveal: { target in
           selection = target.episodeID
           reveal = target
+        },
+        onReplaced: { report in
+          toasts.show(ProjectReplace.summary(of: report))
+          search.refresh()
         },
         onClose: { showingSearch = false })
     } else {
@@ -256,6 +262,9 @@ struct WorkspaceView: View {
       let autosaver = model.autosaver
       search = ProjectSearch(
         store: model.store, episodeIDs: { model.episodes.map(\.id) }, texts: { autosaver.searchTexts() })
+      replace = ProjectReplace(
+        store: model.store, autosaver: autosaver, episodeIDs: { model.episodes.map(\.id) },
+        recordCount: { model.recordCount($0, for: $1) })
     }
     showingSearch = true
     searchFocusRequest += 1

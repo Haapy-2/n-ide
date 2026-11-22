@@ -5,10 +5,13 @@ import SwiftUI
 /// 결과 한 줄 = 줄 번호 + 줄 미리 보기(일치한 곳만 accent 바탕). 누르면 그 회차의 그 자리로 간다.
 struct SearchPanel: View {
   let search: ProjectSearch
+  let replace: ProjectReplace
   let episodes: [EpisodeMeta]
   /// 바뀔 때마다 입력 칸에 초점을 준다(⇧⌘F를 다시 눌렀을 때).
   let focusRequest: Int
   let onReveal: (TextReveal) -> Void
+  /// 전체 바꾸기가 끝났다(토스트, 다시 찾기).
+  let onReplaced: (ProjectReplace.Report) -> Void
   let onClose: () -> Void
   @FocusState private var fieldFocused: Bool
   @State private var trafficLightOffset: CGFloat?
@@ -19,6 +22,7 @@ struct SearchPanel: View {
 
   var body: some View {
     @Bindable var search = search
+    @Bindable var replace = replace
     VStack(alignment: .leading, spacing: 0) {
       HStack {
         Text("검색")
@@ -55,7 +59,22 @@ struct SearchPanel: View {
       }
       .padding(.leading, contentInset - 4)
       .padding(.trailing, 10)
-      .padding(.vertical, 8)
+      .padding(.top, 8)
+
+      HStack(spacing: 6) {
+        TextField("바꿀 말", text: $replace.replacement)
+          .textFieldStyle(.roundedBorder)
+          .onExitCommand(perform: onClose)
+          .help("비우면 찾은 말을 지워요")
+        Button("모두 바꾸기") {
+          Task { await replace.prepare(query: search.query, caseSensitive: search.caseSensitive) }
+        }
+        .disabled(!canReplace)
+      }
+      .padding(.leading, contentInset - 4)
+      .padding(.trailing, 10)
+      .padding(.top, 6)
+      .padding(.bottom, 8)
 
       if let status {
         Text(status)
@@ -97,6 +116,29 @@ struct SearchPanel: View {
     .onChange(of: focusRequest, initial: true) { fieldFocused = true }
     .onAppear { search.refresh() }
     .onDisappear { search.cancel() }
+    .alert(replace.pending?.title ?? "", isPresented: isConfirmingReplace, presenting: replace.pending) { pending in
+      Button("모두 바꾸기") {
+        Task {
+          guard let report = await replace.confirm(pending) else { return }
+          onReplaced(report)
+        }
+      }
+      Button("취소", role: .cancel) { replace.cancel() }
+    } message: { pending in
+      Text(pending.message)
+    }
+  }
+
+  /// 지금 결과가 지금 입력한 문구로 찾은 것이고 찾은 곳이 있을 때만. 세거나 바꾸는 중에는 막는다.
+  private var canReplace: Bool {
+    guard !replace.isWorking, let result = search.result, result.matchCount > 0,
+      search.resultQuery == search.query, search.resultCaseSensitive == search.caseSensitive
+    else { return false }
+    return TextReplace.canReplace(search.query, with: replace.replacement)
+  }
+
+  private var isConfirmingReplace: Binding<Bool> {
+    Binding(get: { replace.pending != nil }, set: { if !$0 { replace.cancel() } })
   }
 
   private func header(for found: ProjectSearchResult.Episode) -> some View {

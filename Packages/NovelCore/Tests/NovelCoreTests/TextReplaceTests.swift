@@ -10,6 +10,18 @@ struct TextReplaceTests {
     #expect(result?.count == 3)
   }
 
+  /// 찾은 자리를 차례로 바꾸면 `replacing`과 같은 본문이 된다(편집기가 찾은 자리만 바꿀 때와 파일에 쓸 때가 같게).
+  @Test func rangesMatchWhatReplacingChanges() {
+    let text = "Sword 민준 " + "민준".decomposedStringWithCanonicalMapping + "\n민준👍"
+    let ranges = TextReplace.ranges(of: "민준", in: text, caseSensitive: false)
+    let edited = NSMutableString(string: text)
+    for range in ranges.reversed() { edited.replaceCharacters(in: range, with: "도윤") }
+
+    #expect(ranges.count == 3)
+    #expect(edited as String == TextReplace.replacing("민준", with: "도윤", in: text, caseSensitive: false)?.text)
+    #expect(TextReplace.ranges(of: "없음", in: text, caseSensitive: false).isEmpty)
+  }
+
   @Test func emptyReplacementDeletes() {
     #expect(TextReplace.replacing("아주 ", with: "", in: "아주 아주 큰", caseSensitive: false)?.text == "큰")
   }
@@ -106,6 +118,8 @@ struct TextReplaceTests {
 
   @Test func replaceSnapshotsAreNeverPruned() {
     #expect(!SnapshotKind.replace.isPrunable)
+    #expect(!SnapshotKind.replaced.isPrunable)
     #expect(SnapshotKind(rawValue: "replace") == .replace)
+    #expect(SnapshotKind(rawValue: "replaced") == .replaced)
   }
 }
