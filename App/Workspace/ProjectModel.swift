@@ -61,6 +61,7 @@ final class ProjectModel {
     autosaver.finishProjectWork = { [weak self] in await self?.finishProjectSaves() }
     autosaver.episodeTitle = { [weak self] id in self?.project.episodes.first { $0.id == id }?.title ?? "" }
     autosaver.projectTitle = { [weak self] in self?.project.title ?? "" }
+    autosaver.isListed = { [weak self] id in self?.project.episodes.contains { $0.id == id } ?? false }
     autosaver.backup = backup
   }
 

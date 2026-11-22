@@ -107,6 +107,8 @@ final class EpisodeAutosaver {
 
   /// 회차 제목. 저장하지 못한 원고를 다른 곳으로 내보낼 때 파일 이름으로 쓴다. `ProjectModel`이 건다.
   @ObservationIgnored var episodeTitle: (EpisodeID) -> String = { _ in "" }
+  /// 회차가 지금 목록에 있는지. 휴지통으로 간 회차에 늦게 쓰면 지운 본문 파일이 되살아나므로 전체 바꾸기가 쓰기 직전에 본다.
+  @ObservationIgnored var isListed: (EpisodeID) -> Bool = { _ in true }
   @ObservationIgnored var projectTitle: () -> String = { "" }
 
   /// 저장에 끝내 실패한 원고를 작품 밖에 따로 두는 곳. 없으면(테스트 기본값) 백업하지 않는다.
@@ -382,6 +384,9 @@ final class EpisodeAutosaver {
     }
     // 기다리는 사이 열렸거나, 충돌이 생겼거나, 메모리의 글이 바뀌었으면 처음부터 다시.
     guard id != episodeID, conflicts[id] == nil, inFlight[id] == nil, pendingText(for: id) == pending else { return nil }
+    // 스냅샷을 쓰는 사이 휴지통으로 갔으면 쓰지 않는다. 쓰기는 여기서 바로 시작되어(`running`), 그 뒤의 휴지통 보내기는
+    // 저장을 기다렸다가 바꾼 본문째 옮긴다.
+    guard isListed(id) else { return .nothing }
     guard await writeReplacement(id, text: computed.text, readVersion: source.version) else { return nil }
     let after = try? await snapshots.takeReplace(
       id, kind: .replaced, text: computed.text, memo: "\(replacement.memo) · 바꾼 뒤 · \(computed.count)곳",

@@ -96,9 +96,6 @@ struct TextReplaceTests {
     #expect(plan.episodes.map(\.count) == [1_500, 2])
     #expect(plan.count == 1_502)
     #expect(plan.unreadable == [missing])
-    #expect(plan.episodes[1].text == "편집기의 검 검")
-    #expect(plan.episodes[1].version == nil)
-    #expect(plan.episodes[0].version?.text == String(repeating: "검 ", count: 1_500))
   }
 
   @Test func planStopsWhenCancelled() async throws {

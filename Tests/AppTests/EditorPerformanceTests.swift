@@ -238,6 +238,28 @@ final class EditorPerformanceTests: XCTestCase {
     report("restore_100k_ms", samples)
   }
 
+  /// 전체 바꾸기: 더미 500화의 사본에서 "그는" → "그녀석은"(미결정 20, 목표 2초). 회차마다 바꾸기 전 스냅샷 → 본문 쓰기 →
+  /// 바꾼 뒤 스냅샷. 확인 창 뒤 실행만 잰다(세기는 확인 창 전). 사본이라 다른 측정의 더미는 그대로다.
+  func testReplaceAll500() async throws {
+    let copy = store.layout.root.deletingLastPathComponent().appending(path: "replace-\(UUID().uuidString).novel")
+    try FileManager.default.copyItem(at: store.layout.root, to: copy)
+    defer { try? FileManager.default.removeItem(at: copy) }
+    let scratch = ProjectStore(root: copy)
+    let model = ProjectModel(project: try scratch.loadProject(), store: scratch, autosaveDelay: .seconds(60))
+    let replace = ProjectReplace(
+      store: scratch, autosaver: model.autosaver, episodeIDs: { model.episodes.map(\.id) },
+      recordCount: { model.recordCount($0, for: $1) })
+    replace.replacement = "그녀석은"
+    await replace.prepare(query: "그는", caseSensitive: false)
+    let pending = try XCTUnwrap(replace.pending)
+    let start = ContinuousClock.now
+    let report = await replace.confirm(pending)
+    let elapsed = ContinuousClock.now - start
+    XCTAssertEqual(report?.replaced.count, pending.plan.episodes.count)
+    print("NOVEL_PERF replace_all_episodes \(pending.plan.episodes.count)")
+    self.report("replace_all_500_ms", [milliseconds(elapsed)])
+  }
+
   private func makeEditorWindow() -> (NSWindow, ManuscriptTextView) {
     let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 760),
                           styleMask: [.titled, .resizable], backing: .buffered, defer: false)

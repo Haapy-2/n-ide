@@ -261,6 +261,16 @@ final class ReplaceTests: XCTestCase {
       "지운 회차의 본문 파일을 되살리지 않는다")
   }
 
+  /// 바꾸는 도중(스냅샷을 쓰는 사이) 휴지통으로 간 회차에는 쓰지 않는다. 쓰면 지운 회차 파일이 되살아난다.
+  func testDoesNotWriteEpisodeThatLeftTheList() async throws {
+    autosaver.isListed = { [closed] in $0 != closed }
+    let outcome = await autosaver.replace(
+      closed, .init(query: "민준", replacement: "도윤", caseSensitive: false, date: Date(), memo: "메모"))
+
+    XCTAssertEqual(outcome, .nothing)
+    XCTAssertEqual(try store.readEpisode(closed), "민준과 민준")
+  }
+
   func testSnapshotFailureLeavesEpisodeUnchanged() async throws {
     let snapshotFolder = store.layout.snapshotFolder(closed)
     try FileManager.default.createDirectory(at: snapshotFolder, withIntermediateDirectories: true)

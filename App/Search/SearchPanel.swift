@@ -27,6 +27,8 @@ struct SearchPanel: View {
   var body: some View {
     @Bindable var search = search
     @Bindable var replace = replace
+    // 회차 번호를 줄마다 목록 전체에서 찾지 않게 한 번 만든다(500회차 × 결과 묶음 500개면 바꿀 말을 칠 때마다 25만 번 비교).
+    let positions = Dictionary(episodes.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first })
     VStack(alignment: .leading, spacing: 0) {
       HStack {
         Text("검색")
@@ -98,7 +100,8 @@ struct SearchPanel: View {
                 onShowReplaced(entry)
               } label: {
                 ReplacedEpisodeRow(
-                  number: number(of: entry.id), title: title(of: entry.id), count: entry.count, inset: contentInset,
+                  number: number(entry.id, positions), title: title(entry.id, positions), count: entry.count,
+                  inset: contentInset,
                   isPicked: pickedReplaced == entry.id)
               }
               .buttonStyle(.plain)
@@ -132,7 +135,7 @@ struct SearchPanel: View {
                   .listRowBackground(Color.clear)
               }
             } header: {
-              header(for: found)
+              header(for: found, positions)
             }
           }
         }
@@ -183,16 +186,16 @@ struct SearchPanel: View {
     Binding(get: { replace.pending != nil }, set: { if !$0 { replace.cancel() } })
   }
 
-  private func number(of id: EpisodeID) -> String {
-    episodes.firstIndex { $0.id == id }.map { "\($0 + 1)화" } ?? ""
+  private func number(_ id: EpisodeID, _ positions: [EpisodeID: Int]) -> String {
+    positions[id].map { "\($0 + 1)화" } ?? ""
   }
 
-  private func title(of id: EpisodeID) -> String {
-    episodes.first { $0.id == id }?.title ?? ""
+  private func title(_ id: EpisodeID, _ positions: [EpisodeID: Int]) -> String {
+    positions[id].map { episodes[$0].title } ?? ""
   }
 
-  private func header(for found: ProjectSearchResult.Episode) -> some View {
-    let index = episodes.firstIndex { $0.id == found.id }
+  private func header(for found: ProjectSearchResult.Episode, _ positions: [EpisodeID: Int]) -> some View {
+    let index = positions[found.id]
     let title = index.map { episodes[$0].title } ?? ""
     return HStack(spacing: 6) {
       Text(index.map { "\($0 + 1)화" } ?? "")

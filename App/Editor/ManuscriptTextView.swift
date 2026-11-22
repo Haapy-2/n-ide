@@ -205,6 +205,7 @@ final class ManuscriptTextView: NSTextView {
     defer { undo.endUndoGrouping() }
     // shouldChangeText가 실행 취소 기록을 남기고, didChangeText가 바뀜 알림(자동 저장·글자 수)을 보낸다.
     guard shouldChangeText(in: full, replacementString: text) else { return false }
+    forgetInputInProgress()
     textStorage?.replaceCharacters(in: full, with: NSAttributedString(string: text, attributes: style.textAttributes))
     didChangeText()
     undo.setActionName(actionName)
@@ -228,6 +229,7 @@ final class ManuscriptTextView: NSTextView {
     guard shouldChangeText(inRanges: values, replacementStrings: Array(repeating: replacement, count: ranges.count)) else {
       return false
     }
+    forgetInputInProgress()
     let inserted = NSAttributedString(string: replacement, attributes: style.textAttributes)
     textStorage.beginEditing()
     for range in ranges.reversed() { textStorage.replaceCharacters(in: range, with: inserted) }
@@ -257,6 +259,15 @@ final class ManuscriptTextView: NSTextView {
       enclosingScrollView?.reflectScrolledClipView(clip)
     }
     return true
+  }
+
+  /// 앱이 본문을 직접 고치기 전에: 입력기가 "표시된 글자 없이" 이어 가던 글자를 놓게 한다.
+  /// 이 방식은 조합 중에도 `hasMarkedText`가 false라, 고친 뒤 입력기가 옛 자리를 `replacementRange`로 고쳐 쓰거나
+  /// 한 글자 기록(`currentInput`)이 어긋난 범위로 늘어나 ⌘Z가 엉뚱한 글자를 지울 수 있다.
+  private func forgetInputInProgress() {
+    guard currentInput != nil else { return }
+    currentInput = nil
+    inputContext?.discardMarkedText()
   }
 
   /// 글자가 놓인 줄의 위 끝(편집기 좌표)

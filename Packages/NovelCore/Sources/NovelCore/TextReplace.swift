@@ -50,15 +50,12 @@ public enum TextReplace {
   }
 }
 
-/// 작품 전체 바꾸기를 하기 전에 끝까지 센 결과. 실행은 이 글을 기준으로 해서, 센 것과 바꾸는 것이 어긋나지 않게 한다.
+/// 작품 전체 바꾸기를 하기 전에 끝까지 센 결과(확인 창의 숫자). 실행은 회차마다 바꾸는 순간의 글에서 다시 찾으므로
+/// 본문은 들고 있지 않는다(500화를 세는 동안 사본이 쌓이지 않게).
 public struct ReplacementPlan: Equatable, Sendable {
   public struct Episode: Equatable, Sendable {
     public let id: EpisodeID
     public let count: Int
-    /// 센 본문
-    public let text: String
-    /// 파일에서 읽었으면 그때의 파일 상태(쓸 때 앱 밖에서 바뀌었는지 확인). 넘겨받은 글이면 nil.
-    public let version: DiskVersion?
   }
 
   /// 바꿀 곳이 있는 회차만, 회차 순서대로
@@ -80,15 +77,11 @@ extension ProjectStore {
     for id in ids {
       try Task.checkCancellation()
       let text: String
-      let version: DiskVersion?
       if let given = texts[id] {
         text = given
-        version = nil
       } else {
         do {
-          let read = try readEpisodeVersion(id)
-          text = read.text
-          version = read
+          text = try readEpisode(id)
         } catch {
           plan.unreadable.append(id)
           continue
@@ -96,7 +89,7 @@ extension ProjectStore {
       }
       let count = TextReplace.count(of: query, in: text, caseSensitive: caseSensitive)
       guard count > 0 else { continue }
-      plan.episodes.append(.init(id: id, count: count, text: text, version: version))
+      plan.episodes.append(.init(id: id, count: count))
     }
     return plan
   }
