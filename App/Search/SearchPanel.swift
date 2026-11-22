@@ -9,6 +9,8 @@ struct SearchPanel: View {
   let episodes: [EpisodeMeta]
   /// 바뀔 때마다 입력 칸에 초점을 준다(⇧⌘F를 다시 눌렀을 때).
   let focusRequest: Int
+  /// 줄 안쪽 왼쪽 여백(nil이면 아직 안 잼). 패널을 닫았다 열어도 다시 재지 않게 작업 공간이 들고 있다(EpisodeList와 같은 까닭).
+  @Binding var measuredInset: CGFloat?
   let onReveal: (TextReveal) -> Void
   /// 전체 바꾸기가 끝났다(토스트, 다시 찾기).
   let onReplaced: (ProjectReplace.Report) -> Void
@@ -16,13 +18,12 @@ struct SearchPanel: View {
   let onShowReplaced: (ProjectReplace.Report.Episode) -> Void
   let onClose: () -> Void
   @FocusState private var fieldFocused: Bool
-  @State private var trafficLightOffset: CGFloat?
   /// 마지막으로 누른 결과(회색 칸)
   @State private var picked: PickedMatch?
   /// 바꾼 회차 목록에서 마지막으로 누른 회차
   @State private var pickedReplaced: EpisodeID?
 
-  private var contentInset: CGFloat { TrafficLightOffsetReader.contentInset(for: trafficLightOffset) }
+  private var contentInset: CGFloat { measuredInset ?? TrafficLightOffsetReader.contentInset(for: nil) }
 
   var body: some View {
     @Bindable var search = search
@@ -48,7 +49,7 @@ struct SearchPanel: View {
       .padding(.leading, contentInset)
       .padding(.trailing, 12)
       .padding(.top, 4)
-      .background(TrafficLightOffsetReader { trafficLightOffset = $0 })
+      .background(TrafficLightOffsetReader { measuredInset = TrafficLightOffsetReader.contentInset(for: $0) })
 
       HStack(spacing: 6) {
         TextField("작품 전체에서 찾기", text: $search.query)
@@ -142,6 +143,8 @@ struct SearchPanel: View {
       }
       .environment(\.defaultMinListRowHeight, 0)
     }
+    // 창에서 처음 열 때는 잴 때까지(한 번 그린 뒤) 숨긴다. 기본 여백으로 먼저 보이면 곧바로 옆으로 튄다.
+    .opacity(measuredInset == nil ? 0 : 1)
     .onChange(of: search.query) {
       replace.clearFinished()
       pickedReplaced = nil

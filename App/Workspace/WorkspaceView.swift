@@ -40,6 +40,9 @@ struct WorkspaceView: View {
   /// 바꾼 회차 목록에서 고른 회차. 편집기에 그 회차 본문이 올라간 뒤 스냅샷 판을 연다.
   @State private var snapshotRequest: SnapshotRequest?
   @State private var showingSearch = false
+  /// 사이드바 두 패널의 잰 왼쪽 여백. 패널이 바뀌어도 남아야 해서 여기 둔다(EpisodeList.measuredInset).
+  @State private var listInset: CGFloat?
+  @State private var searchInset: CGFloat?
   /// ⇧⌘F를 누를 때마다 늘려 입력 칸에 초점을 준다.
   @State private var searchFocusRequest = 0
   /// 검색 결과로 가기. 편집기가 그 회차의 본문을 올린 뒤 처리한다.
@@ -191,6 +194,7 @@ struct WorkspaceView: View {
     if showingSearch, let search, let replace {
       SearchPanel(
         search: search, replace: replace, episodes: project.episodes, focusRequest: searchFocusRequest,
+        measuredInset: $searchInset,
         onReveal: { target in
           selection = target.episodeID
           reveal = target
@@ -210,6 +214,7 @@ struct WorkspaceView: View {
         groups: project.groups,
         selection: $selection,
         marked: $marked,
+        measuredInset: $listInset,
         onRename: model == nil ? nil : { beginRename($0) },
         onTrash: model == nil ? nil : { trashing = $0 },
         onSetGoal: model == nil ? nil : { beginSetGoal($0) },

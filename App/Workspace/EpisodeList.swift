@@ -13,6 +13,10 @@ struct EpisodeList: View {
   @Binding var selection: EpisodeID?
   /// 여러 개 고른 회차(⌘클릭·⇧클릭). 묶기에 쓴다. 편집기는 `selection` 하나만 연다.
   @Binding var marked: Set<EpisodeID>
+  /// 줄 안쪽 왼쪽 여백. "회차" 제목·번호·제목이 모두 이 값을 써서 창 닫기 버튼과 같은 선에서 시작한다.
+  /// 실행 중에 재며(nil이면 아직 안 잼), 작업 공간이 들고 있다: 목록이 검색 패널과 바뀔 때마다 새로 재면
+  /// 잰 값이 올 때까지 한 번 기본값으로 그려져 글자가 옆으로 튄다.
+  @Binding var measuredInset: CGFloat?
   /// nil이면(미리보기) 메뉴와 드래그가 없다.
   var onRename: ((EpisodeID) -> Void)? = nil
   var onTrash: ((EpisodeID) -> Void)? = nil
@@ -34,10 +38,7 @@ struct EpisodeList: View {
   @AppStorage(AppSettingKey.sidebarShowsCharacterCount) private var showsCount = true
   @AppStorage(AppSettingKey.collapsedEpisodeGroups) private var collapsedText = ""
 
-  /// 줄 왼쪽 끝 → 창 닫기 버튼 왼쪽 끝 거리. 실행 중에 잰다(TrafficLightOffsetReader).
-  @State private var trafficLightOffset: CGFloat?
-  /// 줄 안쪽 왼쪽 여백. "회차" 제목·번호·제목이 모두 이 값을 써서 창 닫기 버튼과 같은 선에서 시작한다.
-  private var contentInset: CGFloat { TrafficLightOffsetReader.contentInset(for: trafficLightOffset) }
+  private var contentInset: CGFloat { measuredInset ?? TrafficLightOffsetReader.contentInset(for: nil) }
   /// 줄 좌우 여백 0: 회색 선택 칸이 줄 끝까지 차서, 글자를 버튼 선에 맞춰도 칸이 잘리지 않는다.
   private static let rowInsets = EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0)
   var body: some View {
@@ -51,7 +52,7 @@ struct EpisodeList: View {
         .padding(.bottom, 2)
         .frame(maxWidth: .infinity, alignment: .leading)
         // 줄 왼쪽 끝에서 잰다. 여백이 바뀌어도 줄 끝은 그대로라 값이 흔들리지 않는다.
-        .background(TrafficLightOffsetReader { trafficLightOffset = $0 })
+        .background(TrafficLightOffsetReader { measuredInset = TrafficLightOffsetReader.contentInset(for: $0) })
         .listRowInsets(Self.rowInsets)
         .listRowBackground(Color.clear)
         .accessibilityAddTraits(.isHeader)

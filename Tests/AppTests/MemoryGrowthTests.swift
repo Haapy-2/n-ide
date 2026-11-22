@@ -92,7 +92,7 @@ private struct SwitchHost: View {
 
   var body: some View {
     NavigationSplitView {
-      EpisodeList(episodes: model.project.episodes, selection: $selection.id, marked: .constant([]), countBox: { model.countBox(for: $0) })
+      EpisodeList(episodes: model.project.episodes, selection: $selection.id, marked: .constant([]), measuredInset: .constant(nil), countBox: { model.countBox(for: $0) })
         .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 340)  // 작업 공간과 같은 폭
     } detail: {
       if let id = selection.id {
