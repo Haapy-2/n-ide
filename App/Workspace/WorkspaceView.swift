@@ -625,8 +625,14 @@ private struct UndoConfirmationDialog: ViewModifier {
   @Binding var stopAsking: Bool
   let perform: (WorkspaceView.PendingUndo) -> Void
 
+  /// 확인 창을 빈 뒷배경에 단다. `dialogSuppressionToggle`은 환경값이라 작업 공간 전체에 걸면
+  /// 그 안의 다른 확인 창(전체 바꾸기, 회차 이름 등)에도 "다시 묻지 않기"가 붙는다.
   func body(content: Content) -> some View {
-    content
+    content.background { dialogHost }
+  }
+
+  private var dialogHost: some View {
+    Color.clear
       .confirmationDialog(
         pending?.title ?? "",
         isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } }),
