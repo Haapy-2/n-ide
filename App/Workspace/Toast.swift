@@ -14,6 +14,10 @@ struct Toast: Identifiable {
   /// 회색 단색 SF Symbol 이름.
   var systemImage = "checkmark"
   var action: Action?
+  /// 두 번째 글자 버튼(전체 바꾸기 뒤 `바꾼 곳 보기 · 되돌리기`)
+  var secondAction: Action?
+  /// nil이면 설정의 알림 유지 시간. 되돌리기 버튼이 있는 큰 작업은 길게 둔다.
+  var duration: Duration?
 }
 
 /// 창 하나에 하나. 한 번에 하나만 보이고, 새 알림은 이전 것을 바로 바꾼다(쌓이지 않음).
@@ -40,8 +44,12 @@ final class ToastCenter {
     return .milliseconds(Int((seconds * 1_000).rounded()))
   }
 
-  func show(_ message: String, systemImage: String = "checkmark", action: Toast.Action? = nil) {
-    current = Toast(message: message, systemImage: systemImage, action: action)
+  func show(
+    _ message: String, systemImage: String = "checkmark", action: Toast.Action? = nil,
+    secondAction: Toast.Action? = nil, duration: Duration? = nil
+  ) {
+    current = Toast(
+      message: message, systemImage: systemImage, action: action, secondAction: secondAction, duration: duration)
     scheduleDismiss()
   }
 
@@ -51,8 +59,8 @@ final class ToastCenter {
     current = nil
   }
 
-  func performAction() {
-    let action = current?.action
+  func performAction(second: Bool = false) {
+    let action = second ? current?.secondAction : current?.action
     dismiss()
     action?.perform()
   }
@@ -67,7 +75,7 @@ final class ToastCenter {
     dismissTask?.cancel()
     dismissTask = nil
     guard !isHovering, let id = current?.id else { return }
-    let duration = fixedDuration ?? Self.storedDuration()
+    let duration = fixedDuration ?? current?.duration ?? Self.storedDuration()
     dismissTask = Task {
       try? await Task.sleep(for: duration)
       guard !Task.isCancelled, current?.id == id else { return }
@@ -85,7 +93,8 @@ struct ToastOverlay: View {
   var body: some View {
     ZStack {
       if let toast = center.current {
-        ToastView(toast: toast, onAction: center.performAction)
+        ToastView(
+          toast: toast, onAction: { center.performAction() }, onSecondAction: { center.performAction(second: true) })
           .onHover { center.setHovering($0) }
           .id(toast.id)
           .transition(.opacity.combined(with: .offset(y: -6)))
@@ -105,6 +114,7 @@ struct ToastView: View {
 
   let toast: Toast
   var onAction: () -> Void = {}
+  var onSecondAction: () -> Void = {}
 
   var body: some View {
     HStack(spacing: 6) {
@@ -114,6 +124,12 @@ struct ToastView: View {
       if let action = toast.action {
         Text("·")
         Button(action.title, action: onAction)
+          .buttonStyle(.plain)
+          .foregroundStyle(Color.ink)
+      }
+      if let action = toast.secondAction {
+        Text("·")
+        Button(action.title, action: onSecondAction)
           .buttonStyle(.plain)
           .foregroundStyle(Color.ink)
       }

@@ -262,6 +262,19 @@ final class EditorPerformanceTests: XCTestCase {
     XCTAssertEqual(report?.replaced.count, pending.plan.episodes.count)
     print("NOVEL_PERF replace_all_episodes \(pending.plan.episodes.count)")
     self.report("replace_all_500_ms", [milliseconds(elapsed)])
+
+    // 되돌리기 창 열기(회차마다 바꾸기 전 스냅샷과 지금 글을 읽어 다시 감지)와 모두 되돌리기.
+    let detectStart = ContinuousClock.now
+    let found = await replace.latestUndoable()
+    let detected = ContinuousClock.now - detectStart
+    let undoable = try XCTUnwrap(found)
+    XCTAssertEqual(undoable.candidates.count, pending.plan.episodes.count)
+    self.report("revert_detect_500_ms", [milliseconds(detected)])
+    let revertStart = ContinuousClock.now
+    let reverted = await replace.revert(undoable.record, Set(undoable.candidates.map(\.id)))
+    let revertElapsed = ContinuousClock.now - revertStart
+    XCTAssertEqual(reverted.episodes, pending.plan.episodes.count)
+    self.report("revert_all_500_ms", [milliseconds(revertElapsed)])
   }
 
   private func makeEditorWindow() -> (NSWindow, ManuscriptTextView) {

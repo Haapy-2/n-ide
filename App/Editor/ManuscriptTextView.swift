@@ -214,38 +214,38 @@ final class ManuscriptTextView: NSTextView {
     return true
   }
 
-  /// 찾은 자리만 실행 취소 한 단위로 바꾼다(전체 바꾸기). 본문을 통째로 갈지 않아서 커서는 같은 글자 자리에 남고
-  /// 화면 맨 위 글줄도 그대로다(위쪽에서 줄 수가 바뀌어도). 바꿨으면 true.
+  /// 고칠 자리만 실행 취소 한 단위로 고친다(전체 바꾸기·되돌리기). 본문을 통째로 갈지 않아서 커서는 같은 글자 자리에 남고
+  /// 화면 맨 위 글줄도 그대로다(위쪽에서 줄 수가 바뀌어도). 자리는 앞에서부터, 겹치지 않아야 한다. 고쳤으면 true.
   /// 조합 중이면 손대지 않고 false: 조합을 끊지 않으려는 것이라, 부르는 쪽이 조합이 끝난 뒤 다시 부른다.
-  func replaceOccurrences(_ ranges: [NSRange], with replacement: String, actionName: String) -> Bool {
-    guard !ranges.isEmpty, !hasMarkedText(), let textStorage else { return false }
+  func replaceOccurrences(_ changes: [TextChange], actionName: String) -> Bool {
+    guard !changes.isEmpty, !hasMarkedText(), let textStorage else { return false }
     let selection = selectedRange()
     let top = topVisibleCharacter()
     let topOffset = visibleRect.minY - lineTop(of: top)
     let undo = episodeUndoManager
     undo.beginUndoGrouping()
     defer { undo.endUndoGrouping() }
-    let values = ranges.map { NSValue(range: $0) }
-    guard shouldChangeText(inRanges: values, replacementStrings: Array(repeating: replacement, count: ranges.count)) else {
-      return false
-    }
+    let values = changes.map { NSValue(range: $0.range) }
+    guard shouldChangeText(inRanges: values, replacementStrings: changes.map(\.text)) else { return false }
     forgetInputInProgress()
-    let inserted = NSAttributedString(string: replacement, attributes: style.textAttributes)
     textStorage.beginEditing()
-    for range in ranges.reversed() { textStorage.replaceCharacters(in: range, with: inserted) }
+    for change in changes.reversed() {
+      textStorage.replaceCharacters(
+        in: change.range, with: NSAttributedString(string: change.text, attributes: style.textAttributes))
+    }
     textStorage.endEditing()
     didChangeText()
     undo.setActionName(actionName)
 
-    let length = replacement.utf16.count
-    // 바꾼 자리 앞의 글자는 그대로, 뒤의 글자는 늘고 준 만큼 민다. 바꾼 자리 안이면 바꾼 말 끝으로.
+    // 고친 자리 앞의 글자는 그대로, 뒤의 글자는 늘고 준 만큼 민다. 고친 자리 안이면 새 말 끝으로.
     func moved(_ location: Int) -> Int {
       var shift = 0
-      for range in ranges {
-        if range.upperBound <= location {
-          shift += length - range.length
-        } else if range.location < location {
-          return range.location + shift + length
+      for change in changes {
+        let length = (change.text as NSString).length
+        if change.range.upperBound <= location {
+          shift += length - change.range.length
+        } else if change.range.location < location {
+          return change.range.location + shift + length
         } else {
           break
         }

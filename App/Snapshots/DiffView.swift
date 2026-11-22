@@ -7,12 +7,14 @@ import SwiftUI
 struct DiffView: View {
   let diff: TextDiff
   let pastTitle: String
+  let presentTitle: String
   @State private var expanded: Set<Int> = []
   private var editorSettings = EditorStyleSettings()
 
-  init(diff: TextDiff, pastTitle: String) {
+  init(diff: TextDiff, pastTitle: String, presentTitle: String = "현재") {
     self.diff = diff
     self.pastTitle = pastTitle
+    self.presentTitle = presentTitle
   }
 
   var body: some View {
@@ -24,7 +26,7 @@ struct DiffView: View {
     VStack(spacing: 0) {
       HStack(spacing: 0) {
         header(pastTitle)
-        header("현재")
+        header(presentTitle)
       }
       if !diff.hasChanges || diff.isLineOnly {
         Text(diff.hasChanges ? "글이 길어 줄 단위로만 비교했어요." : "지금과 같아요.")

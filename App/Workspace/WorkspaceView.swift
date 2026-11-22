@@ -37,6 +37,8 @@ struct WorkspaceView: View {
   @State private var search: ProjectSearch?
   /// 작품 전체 바꾸기. 검색과 함께 만든다.
   @State private var replace: ProjectReplace?
+  /// 열려 있는 전체 바꾸기 되돌리기 창. nil이면 닫힘.
+  @State private var revertSession: RevertSession?
   /// 바꾼 회차 목록에서 고른 회차. 편집기에 그 회차 본문이 올라간 뒤 스냅샷 판을 연다.
   @State private var snapshotRequest: SnapshotRequest?
   @State private var showingSearch = false
@@ -157,6 +159,24 @@ struct WorkspaceView: View {
     } message: {
       Text(alertMessage ?? model?.errorMessage ?? "")
     }
+    .sheet(item: $revertSession) { session in
+      RevertSheet(
+        session: session, episodes: project.episodes, onCancel: { revertSession = nil },
+        onRevert: { ids in
+          revertSession = nil
+          performRevert(session.undoable.record, ids)
+        })
+    }
+    // 편집기 ⌘Z로 열린 회차의 전체 바꾸기만 되돌렸으면 다른 회차도 되돌릴 수 있다고 알린다.
+    .onReceive(NotificationCenter.default.publisher(for: .NSUndoManagerDidUndoChange)) { note in
+      guard let manager = note.object as? UndoManager, let model, model.autosaver.ownsEditorUndo(manager),
+        manager.redoActionName == ProjectReplace.actionName, let replace, let last = replace.history.last
+      else { return }
+      toasts.show(
+        "이 회차만 되돌렸어요", systemImage: "arrow.uturn.backward",
+        action: last.entries.count > 1 ? .init(title: "모든 회차 되돌리기") { beginRevert() } : nil,
+        duration: .seconds(5))
+    }
     // 판이 보고 있던 회차에서 벗어나면(메뉴·단축키로 회차를 옮기거나 휴지통으로 보냄) 판을 닫는다.
     .onChange(of: selection) {
       if snapshotBrowser?.episodeID != selection { closeSnapshots() }
@@ -203,7 +223,10 @@ struct WorkspaceView: View {
           let first = replace.finished?.replaced.first
           toasts.show(
             ProjectReplace.summary(of: report),
-            action: first.map { entry in .init(title: "바꾼 곳 보기") { showReplaced(entry) } })
+            action: first.map { entry in .init(title: "바꾼 곳 보기") { showReplaced(entry) } },
+            secondAction: report.count > 0 ? .init(title: "되돌리기") { beginRevert() } : nil,
+            duration: report.count > 0 ? .seconds(5) : nil)
+          if report.count > 0 { registerReplaceUndo(replace) }
           search.refresh()
         },
         onShowReplaced: { showReplaced($0) },
@@ -315,6 +338,7 @@ struct WorkspaceView: View {
       takeSnapshot: selection == nil || snapshotBrowser != nil ? nil : { takeSnapshot() },
       showSnapshots: selection == nil || snapshotBrowser != nil ? nil : { showSnapshots() },
       showSearch: { openSearch() },
+      revertReplace: replace?.history.isEmpty == false ? { beginRevert() } : nil,
       groupMarked: selection == nil ? nil : { beginGrouping(marked.isEmpty ? Set([selection].compactMap { $0 }) : marked) },
       ungroupSelected: selection.flatMap { id in project.episodes.first { $0.id == id }?.group }.map { group in
         { Task { await model?.ungroup(group, undoManager: undoManager) } }
@@ -397,6 +421,69 @@ struct WorkspaceView: View {
     let browser = SnapshotBrowser(store: model.store, episodeID: id, currentText: editor.text, preferredID: preferredID)
     snapshotBrowser = browser
     Task { await browser.load() }
+  }
+
+  // MARK: - 전체 바꾸기 되돌리기 (PLAN 14장 5번)
+
+  /// 되돌리기 창을 연다(토스트, 편집 메뉴, 사이드바·검색 패널의 ⌘Z). 한 회차만 바꾼 작업은 창 없이 바로 되돌린다.
+  private func beginRevert() {
+    guard let replace, revertSession == nil else { return }
+    Task {
+      guard let found = await replace.latestUndoable() else {
+        toasts.show("되돌릴 곳이 없어요", systemImage: "arrow.uturn.backward")
+        return
+      }
+      if found.record.entries.count == 1 {
+        performRevert(found.record, Set(found.candidates.map(\.id)))
+      } else {
+        revertSession = RevertSession(found, replace: replace)
+      }
+    }
+  }
+
+  private func performRevert(_ record: ProjectReplace.Record, _ ids: Set<EpisodeID>) {
+    guard let replace else { return }
+    Task {
+      let report = await replace.revert(record, ids)
+      toasts.show(
+        ProjectReplace.summary(of: report, redo: false), systemImage: "arrow.uturn.backward",
+        action: replace.reverted == nil ? nil : .init(title: "다시 바꾸기") { redoReplace() },
+        duration: .seconds(5))
+      search?.refresh()
+    }
+  }
+
+  private func redoReplace() {
+    guard let replace else { return }
+    Task {
+      guard let report = await replace.redo() else { return }
+      toasts.show(ProjectReplace.summary(of: report, redo: true))
+      search?.refresh()
+    }
+  }
+
+  /// 창의 실행 취소 기록에도 남긴다: 사이드바·검색 패널의 ⌘Z가 회차 작업과 순서대로 되돌리기 창을 연다.
+  /// 창을 연 뒤에는 다시 실행 자리에 다시 바꾸기가 남는다(되돌린 회차가 없으면 아무것도 하지 않는다).
+  private func registerReplaceUndo(_ replace: ProjectReplace) {
+    guard let undoManager else { return }
+    undoManager.registerUndo(withTarget: replace) { replace in
+      MainActor.assumeIsolated {
+        beginRevert()
+        registerReplaceRedo(replace)
+      }
+    }
+    undoManager.setActionName(ProjectReplace.actionName)
+  }
+
+  private func registerReplaceRedo(_ replace: ProjectReplace) {
+    guard let undoManager else { return }
+    undoManager.registerUndo(withTarget: replace) { replace in
+      MainActor.assumeIsolated {
+        redoReplace()
+        registerReplaceUndo(replace)
+      }
+    }
+    undoManager.setActionName(ProjectReplace.actionName)
   }
 
   /// 바꾼 회차 목록(또는 토스트의 "바꾼 곳 보기"): 그 회차로 옮기고 스냅샷 판을 `바꾸기 전`을 골라 둔 채 연다.
@@ -503,7 +590,8 @@ struct WorkspaceView: View {
   private func requestUndo(isRedo: Bool) {
     guard let undoManager, isRedo ? undoManager.canRedo : undoManager.canUndo else { return }
     let pending = PendingUndo(isRedo: isRedo, actionName: isRedo ? undoManager.redoActionName : undoManager.undoActionName)
-    if UndoConfirmation.isPaused() {
+    // 전체 바꾸기는 되돌리기 창이 확인을 대신한다.
+    if UndoConfirmation.isPaused() || pending.actionName == ProjectReplace.actionName {
       performUndo(pending)
     } else {
       stopAskingUndo = false

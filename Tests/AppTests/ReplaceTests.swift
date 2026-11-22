@@ -264,8 +264,8 @@ final class ReplaceTests: XCTestCase {
   /// 바꾸는 도중(스냅샷을 쓰는 사이) 휴지통으로 간 회차에는 쓰지 않는다. 쓰면 지운 회차 파일이 되살아난다.
   func testDoesNotWriteEpisodeThatLeftTheList() async throws {
     autosaver.isListed = { [closed] in $0 != closed }
-    let outcome = await autosaver.replace(
-      closed, .init(query: "민준", replacement: "도윤", caseSensitive: false, date: Date(), memo: "메모"))
+    let outcome = await autosaver.rewrite(
+      closed, .replace(query: "민준", replacement: "도윤", caseSensitive: false, date: Date(), memo: "메모"))
 
     XCTAssertEqual(outcome, .nothing)
     XCTAssertEqual(try store.readEpisode(closed), "민준과 민준")
@@ -324,5 +324,129 @@ final class ReplaceTests: XCTestCase {
     XCTAssertEqual(
       after.substring(with: NSRange(location: textView.viewState().top, length: 14)),
       topLine.replacingOccurrences(of: "민준", with: "도윤이라는 사람").prefix(14).description, "화면 맨 위 줄 그대로")
+  }
+
+  // MARK: - 되돌리기·다시 바꾸기 (PLAN 14장 5번)
+
+  private func latest() async throws -> ProjectReplace.Undoable {
+    let found = await replace.latestUndoable()
+    return try XCTUnwrap(found)
+  }
+
+  /// 편집기에서 지금 커서 자리가 아닌 곳을 고친다(작가가 그 뒤에 고친 것).
+  private func edit(_ range: NSRange, to text: String) {
+    textView.insertText(text, replacementRange: range)
+    autosaver.textDidChange()
+  }
+
+  /// 모두 되돌리면 바꾼 자리만 돌아가고, 바꾼 뒤에 쓴 글은 남는다. 열린 회차는 ⌘Z 한 번으로 되돌리기 직전으로.
+  func testRevertAllRestoresReplacedPlacesOnly() async throws {
+    // 테스트에는 이벤트가 없어 입력 묶음이 닫히지 않는다(바꾸기·입력·되돌리기가 한 묶음이 된다). 묶음을 직접 닫는다.
+    let undo = try XCTUnwrap(textView.undoManager)
+    undo.groupsByEvent = false
+    _ = try await replaceAll("민준", "도윤")
+    undo.beginUndoGrouping()
+    type(" 그리고 도윤")
+    undo.endUndoGrouping()
+    let undoable = try await latest()
+    XCTAssertEqual(undoable.candidates.map(\.id), [open, closed])
+
+    let report = await replace.revert(undoable.record, [open, closed])
+
+    XCTAssertEqual(report.episodes, 2, "\(report)")
+    XCTAssertEqual(report.count, 3)
+    XCTAssertEqual(textView.string, "민준이 웃었다 그리고 도윤", "새로 쓴 도윤은 그대로")
+    XCTAssertEqual(try store.readEpisode(closed), "민준과 민준")
+    let snapshot = try XCTUnwrap(try store.snapshots(of: closed).last)
+    XCTAssertEqual(snapshot.kind, .revert, "되돌리기 전 글을 먼저 남긴다")
+    XCTAssertEqual(try store.readSnapshot(snapshot), "도윤과 도윤")
+    let memo = try XCTUnwrap(store.readMemo(snapshot))
+    XCTAssertTrue(memo.hasSuffix("되돌림 · 2곳"), memo)
+    XCTAssertNotNil(memo.range(of: #"\(\d+월 \d+일 \d\d:\d\d\)"#, options: .regularExpression), "바꾼 때: \(memo)")
+    let latest = await replace.latestUndoable()
+    XCTAssertNil(latest, "되돌릴 곳이 남지 않는다")
+
+    textView.undoManager?.undo()
+    XCTAssertEqual(textView.string, "도윤이 웃었다 그리고 도윤", "⌘Z 한 번으로 되돌리기 직전")
+  }
+
+  /// 고르지 않은 회차는 건드리지 않고, 다음에 창을 열면 그 회차만 보인다.
+  func testRevertOnlyCheckedEpisodes() async throws {
+    _ = try await replaceAll("민준", "도윤")
+
+    _ = await replace.revert(try await latest().record, [closed])
+
+    XCTAssertEqual(textView.string, "도윤이 웃었다")
+    XCTAssertEqual(try store.readEpisode(closed), "민준과 민준")
+    let next = try await latest()
+    XCTAssertEqual(next.candidates.map(\.id), [open])
+    XCTAssertEqual(next.excluded, 1, "이미 되돌린 회차")
+  }
+
+  /// 편집기 ⌘Z로 열린 회차만 되돌렸으면 창에는 나머지 회차만.
+  func testEditorUndoLeavesOtherEpisodesInWindow() async throws {
+    _ = try await replaceAll("민준", "도윤")
+
+    textView.undoManager?.undo()
+
+    XCTAssertEqual(textView.string, "민준이 웃었다")
+    XCTAssertEqual(textView.undoManager?.redoActionName, ProjectReplace.actionName, "토스트가 이 이름으로 알아본다")
+    let next = try await latest()
+    XCTAssertEqual(next.candidates.map(\.id), [closed])
+  }
+
+  /// 바꾼 뒤 고친 자리는 그대로 두고 센다. 다시 바꾸기는 되돌린 자리만 같은 말로.
+  func testEditedPlaceIsKeptAndRedoReplacesOnlyReverted() async throws {
+    _ = try await replaceAll("민준", "도윤")
+    show(closed)
+    edit(NSRange(location: 4, length: 2), to: "도현")
+    let undoable = try await latest()
+    XCTAssertEqual(undoable.candidates.first { $0.id == closed }, .init(id: closed, count: 1, kept: 1))
+
+    let report = await replace.revert(undoable.record, [open, closed])
+
+    XCTAssertEqual(report.kept, 1)
+    XCTAssertEqual(textView.string, "민준과 도현")
+    XCTAssertEqual(try store.readEpisode(open), "민준이 웃었다")
+
+    let redo = await replace.redo()
+    let redone = try XCTUnwrap(redo)
+
+    XCTAssertEqual(redone.count, 2)
+    XCTAssertEqual(textView.string, "도윤과 도현")
+    XCTAssertEqual(try store.readEpisode(open), "도윤이 웃었다")
+    XCTAssertNil(replace.reverted, "다시 바꾸기는 한 번만")
+  }
+
+  /// 조합 중에 되돌리면 조합이 끝난 뒤 되돌리고, 조합하던 글자는 그대로 들어간다.
+  func testRevertWaitsForComposition() async throws {
+    _ = try await replaceAll("민준", "도윤")
+    textView.setSelectedRange(NSRange(location: textView.string.utf16.count, length: 0))
+    textView.setMarkedText("ㅎ", selectedRange: NSRange(location: 1, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
+    let record = try await latest().record
+
+    let running = Task { await replace.revert(record, [open, closed]) }
+    try await Task.sleep(for: .milliseconds(300))
+    XCTAssertTrue(textView.hasMarkedText(), "조합을 끊지 않는다")
+    XCTAssertEqual(textView.string, "도윤이 웃었다ㅎ")
+
+    textView.insertText("하", replacementRange: NSRange(location: NSNotFound, length: 0))
+    _ = await running.value
+
+    XCTAssertEqual(textView.string, "민준이 웃었다하")
+  }
+
+  /// 표시된 글자 없이 조합을 잇는 입력기는 조합 중인지 알려 주지 않는다. 입력이 멈춘 뒤에 고쳐 글자가 쪼개지지 않게 한다.
+  func testOpenEpisodeWaitsForTypingPause() async throws {
+    let pending = try await prepare("민준", "도윤")
+    type("가")
+
+    let running = Task { try await run(pending) }
+    try await Task.sleep(for: .milliseconds(200))
+    XCTAssertEqual(textView.string, "민준이 웃었다가", "입력 직후에는 열린 회차를 고치지 않는다")
+    XCTAssertEqual(try store.readEpisode(closed), "도윤과 도윤", "다른 회차는 먼저 끝난다")
+
+    _ = try await running.value
+    XCTAssertEqual(textView.string, "도윤이 웃었다가")
   }
 }

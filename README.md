@@ -33,7 +33,7 @@ App/                 앱 소스: 화면(SwiftUI)과 편집기(AppKit)
   Project/           작품 만들기·열기, 최근 작품 목록, 비상 백업 되살리기
   Perf/              성능 측정용 갈고리 (perf.sh 전용)
   Snapshots/         스냅샷 판, 과거↔현재 두 칸 비교
-  Search/            작품 전체 검색 패널(⇧⌘F)
+  Search/            작품 전체 검색 패널(⇧⌘F), 전체 바꾸기, 되돌리기 창
   Shortcuts/         단축키 표(기본값), 사용자가 바꾼 단축키
   Theme/             색 토큰 이름, 줄 선택·마우스 올림 칸
   Resources/         글꼴(Fonts/), 색 값(Colors.xcassets)
