@@ -30,7 +30,7 @@ App/                 앱 소스: 화면(SwiftUI)과 편집기(AppKit)
   Workspace/         작업 공간 창 (사이드바, 편집 영역)
   Settings/          설정 창 (⌘,)
   Editor/            원고 편집기 (NSTextView)
-  Project/           작품 만들기·열기, 최근 작품 목록
+  Project/           작품 만들기·열기, 최근 작품 목록, 비상 백업 되살리기
   Perf/              성능 측정용 갈고리 (perf.sh 전용)
   Snapshots/         스냅샷 판, 과거↔현재 두 칸 비교
   Search/            작품 전체 검색 패널(⇧⌘F)
