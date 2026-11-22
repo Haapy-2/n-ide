@@ -622,7 +622,8 @@ struct WorkspaceView: View {
   /// 안 내보내면 앱을 끌 때 다시 물을 수 있게 저장기를 붙잡아 둔다(창과 함께 사라지면 원고도 사라진다).
   private static func rescueUnsaved(_ model: ProjectModel) {
     let autosaver = model.autosaver
-    guard autosaver.hasUnsavedChanges else { return }
+    // 충돌 스냅샷에 그대로 남은 회차는 내보낼 원고가 아니다(종료 때와 같은 기준).
+    guard autosaver.hasUnprotectedChanges else { return }
     // 작품 모델은 창과 함께 사라지므로 제목을 지금 붙잡아 둔다.
     let titles = Dictionary(model.episodes.map { ($0.id, $0.title) }, uniquingKeysWith: { first, _ in first })
     autosaver.episodeTitle = { titles[$0] ?? "" }

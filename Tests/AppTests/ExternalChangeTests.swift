@@ -99,6 +99,66 @@ final class ExternalChangeTests: XCTestCase {
     XCTAssertTrue(autosaver.hasUnsavedChanges, "고를 때까지 종료하면 경고가 떠야 한다")
   }
 
+  // MARK: - 충돌을 고르지 않은 채 끌 때 (PLAN 미결정 27)
+
+  /// 앱 쪽 글이 충돌 스냅샷에 그대로 있으면 "저장 못 한 원고"가 아니다: 다시 시도·내보내기 대상에서 빠지고 따로 센다.
+  func testConflictKeptInSnapshotIsNotUnprotected() async throws {
+    type(" 앱에서 쓴 문장")
+    try externalWrite("다른 편집기에서 고친 문장")
+    await autosaver.checkExternalChange()
+    _ = try await readyConflict()
+
+    XCTAssertTrue(autosaver.hasWorkBeforeQuit, "종료 때 알려야 한다")
+    XCTAssertFalse(autosaver.hasUnprotectedChanges)
+    XCTAssertEqual(autosaver.conflictsKeptInSnapshots, 1)
+    XCTAssertTrue(autosaver.unsavedManuscripts().isEmpty, "내보낼 원고가 아니다")
+  }
+
+  /// 끄면서 한 저장이 외부 변경을 막 찾은 경우(⌘Q를 자동 저장 1초 안에 누름): 마무리가 충돌 스냅샷까지 기다려,
+  /// 종료 판단이 "내보낼 원고"가 아니라 "지켜진 충돌"로 본다.
+  func testConflictFoundWhileFinishingIsKeptBeforeQuitDecision() async throws {
+    type(" 앱에서 쓴 문장")
+    try externalWrite("다른 편집기에서 고친 문장")
+
+    await autosaver.finish()
+
+    XCTAssertEqual(autosaver.conflictsKeptInSnapshots, 1)
+    XCTAssertFalse(autosaver.hasUnprotectedChanges)
+    XCTAssertEqual(try store.readEpisode(episode), "다른 편집기에서 고친 문장", "바깥 글을 덮지 않는다")
+  }
+
+  /// 충돌 뒤에 더 쓴 글은 스냅샷에 없으므로 지켜야 할 원고다.
+  func testTypingAfterConflictIsUnprotected() async throws {
+    type(" 앱에서 쓴 문장")
+    try externalWrite("다른 편집기에서 고친 문장")
+    await autosaver.checkExternalChange()
+    _ = try await readyConflict()
+
+    type(" 더 쓴 문장")
+
+    XCTAssertTrue(autosaver.hasUnprotectedChanges)
+    XCTAssertEqual(autosaver.conflictsKeptInSnapshots, 0)
+  }
+
+  /// 충돌 스냅샷마저 남기지 못했으면 앱 쪽 글은 메모리에만 있다. 내보내기를 권해야 하고, 백업이 있다고 말하면 안 된다.
+  func testConflictWithoutSnapshotIsUnprotectedAndNotBackedUp() async throws {
+    let snapshots = store.layout.snapshotFolder(episode)
+    try FileManager.default.createDirectory(at: snapshots, withIntermediateDirectories: true)
+    try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: snapshots.path(percentEncoded: false))
+    defer {
+      try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: snapshots.path(percentEncoded: false))
+    }
+    type(" 앱에서 쓴 문장")
+    try externalWrite("다른 편집기에서 고친 문장")
+    await autosaver.checkExternalChange()
+    let conflict = try await readyConflict()
+
+    XCTAssertNil(conflict.snapshot)
+    XCTAssertTrue(autosaver.hasUnprotectedChanges)
+    XCTAssertEqual(autosaver.unsavedManuscripts().map(\.text), ["첫 문장 앱에서 쓴 문장"])
+    XCTAssertFalse(autosaver.unprotectedAreBackedUp)
+  }
+
   func testSaveRightBeforeWritingDetectsExternalChange() async throws {
     type(" 앱에서 쓴 문장")
     try externalWrite("다른 편집기에서 고친 문장")

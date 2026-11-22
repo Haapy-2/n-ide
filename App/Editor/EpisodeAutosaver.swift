@@ -43,6 +43,8 @@ final class EpisodeAutosaver {
     let episodeID: EpisodeID
     /// 디스크의 지금 상태(앱 밖에서 바뀐 내용).
     let disk: DiskVersion
+    /// 충돌이 났을 때의 변경 번호. 그 뒤에 더 고쳤으면 스냅샷에 없는 글이 있다.
+    let change: Int
     /// 앱 쪽 본문을 남긴 스냅샷. 남기는 중이면 nil.
     var snapshot: URL?
     /// 스냅샷 쓰기를 마쳤는지(실패 포함). 마친 뒤에 묻는다.
@@ -114,10 +116,30 @@ final class EpisodeAutosaver {
   @ObservationIgnored var hasProjectWork: () -> Bool = { false }
   @ObservationIgnored var finishProjectWork: () async -> Void = {}
 
-  /// 저장 안 된 변경이 있는지 (지금 회차 또는 저장에 실패한 회차).
+  /// 저장 안 된 변경이 있는지 (지금 회차 또는 저장에 실패한 회차, 외부 변경 충돌을 고르지 않은 회차).
   var hasUnsavedChanges: Bool {
     if let episodeID, isDirty(episodeID) { return true }
     return !unsaved.isEmpty || !running.isEmpty
+  }
+
+  /// 저장 안 된 변경 중 어디에도 남지 않은 것이 있는지. 다시 시도·내보내기는 이것만 다룬다.
+  /// 충돌 회차의 앱 쪽 글은 `conflict` 스냅샷에 그대로 있으면 지켜진 것으로 본다(저장을 다시 해도 충돌은 풀리지 않는다).
+  var hasUnprotectedChanges: Bool {
+    if let episodeID, isDirty(episodeID), !isKeptInSnapshot(episodeID) { return true }
+    return unsaved.keys.contains { !isKeptInSnapshot($0) } || !running.isEmpty
+  }
+
+  /// 고르지 않은 충돌 중 앱 쪽 글이 스냅샷에 그대로 남은 회차 수. 종료 때 따로 알린다.
+  var conflictsKeptInSnapshots: Int { conflicts.keys.filter(isKeptInSnapshot).count }
+
+  /// 지켜지지 않은 원고가 모두 작품 밖 백업에 있는지(종료 경고 문구). 충돌 회차는 백업하지 않는다.
+  var unprotectedAreBackedUp: Bool {
+    backup != nil && !unsaved.keys.contains { conflicts[$0] != nil && !isKeptInSnapshot($0) }
+  }
+
+  private func isKeptInSnapshot(_ id: EpisodeID) -> Bool {
+    guard let conflict = conflicts[id], conflict.snapshot != nil else { return false }
+    return changes[id, default: 0] == conflict.change
   }
 
   /// 회차 제목. 저장하지 못한 원고를 다른 곳으로 내보낼 때 파일 이름으로 쓴다. `ProjectModel`이 건다.
@@ -134,8 +156,10 @@ final class EpisodeAutosaver {
   @ObservationIgnored private var backupTail: Task<Void, Never>?
 
   /// 끝내 저장하지 못해 메모리에만 있는 원고(창 닫기·앱 종료 때 다른 곳으로 내보내려고).
+  /// 충돌 스냅샷에 그대로 남은 회차는 뺀다(내보낼 필요가 없다).
   func unsavedManuscripts() -> [(title: String, text: String)] {
-    unsaved.values.sorted { $0.id.rawValue < $1.id.rawValue }.map { (episodeTitle($0.id), $0.text) }
+    unsaved.values.filter { !isKeptInSnapshot($0.id) }.sorted { $0.id.rawValue < $1.id.rawValue }
+      .map { (episodeTitle($0.id), $0.text) }
   }
 
   /// 아직 디스크에 썼다고 확인되지 않은 원고: 저장에 실패했거나, 쓰는 중이거나, 열린 회차에서 저장 전인 글.
@@ -148,9 +172,12 @@ final class EpisodeAutosaver {
   }
 
   /// 사용자가 다른 곳으로 내보냈다. 메모리의 원고를 놓아 더는 "저장 안 됨"으로 세지 않는다.
+  /// 충돌 스냅샷에 남은 회차는 내보내지 않았으므로 그대로 둔다(나중에 충돌을 고를 때 앱 쪽 글이 필요하다).
   func markRescued() {
-    for id in unsaved.keys { savedChanges[id] = max(savedChanges[id, default: 0], changes[id, default: 0]) }
-    unsaved.removeAll()
+    for id in unsaved.keys where !isKeptInSnapshot(id) {
+      savedChanges[id] = max(savedChanges[id, default: 0], changes[id, default: 0])
+      unsaved[id] = nil
+    }
     if case .failed = status { settleStatus() }
   }
 
@@ -220,6 +247,9 @@ final class EpisodeAutosaver {
     await flush()
     await backupTail?.value
     await snapshots.waitForWrites()
+    // 바로 위 저장이 외부 변경 충돌을 막 냈으면 앱 쪽 글을 스냅샷에 다 남기기를 기다린다.
+    // 남았는지에 따라 종료 경고(지켜진 충돌 / 내보낼 원고)가 갈린다.
+    while conflicts.values.contains(where: { !$0.isReady }) { try? await Task.sleep(for: .milliseconds(20)) }
     await finishProjectWork()
   }
 
@@ -619,7 +649,7 @@ final class EpisodeAutosaver {
     // 지금 보고 있는 회차면 저장 작업에 복사해 둔 것보다 화면의 본문이 더 새것이다.
     let text = (id == episodeID ? textView?.string : nil) ?? appText
     unsaved[id] = SaveJob(id: id, change: changes[id, default: 0], text: text)
-    conflicts[id] = Conflict(episodeID: id, disk: diskVersion)
+    conflicts[id] = Conflict(episodeID: id, disk: diskVersion, change: changes[id, default: 0])
     let store = store
     Task {
       let snapshot = try? await Task.detached { try store.writeSnapshot(text, episode: id, kind: .conflict)?.url }.value

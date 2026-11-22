@@ -62,9 +62,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       case .exported: return true
       case .finished: break
       }
-      let unsaved = autosavers.filter(\.hasUnsavedChanges)
+      let unsaved = autosavers.filter(\.hasUnprotectedChanges)
       if unsaved.isEmpty {
-        guard autosavers.contains(where: { $0.hasProjectWork() }) else { return true }
+        guard autosavers.contains(where: { $0.hasProjectWork() }) else { return confirmQuitWithConflicts(autosavers) }
         // 원고는 다 저장됐고 회차 목록(project.json)만 못 썼다. 내보낼 원고가 없으니 끌지만 묻는다.
         let alert = NSAlert()
         alert.alertStyle = .critical
@@ -75,11 +75,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.addButton(withTitle: "취소")
         switch alert.runModal() {
         case .alertFirstButtonReturn: continue
-        case .alertSecondButtonReturn: return true
+        case .alertSecondButtonReturn: return confirmQuitWithConflicts(autosavers)
         default: return false
         }
       }
-      let backedUp = unsaved.allSatisfy { $0.backup != nil }
+      let backedUp = unsaved.allSatisfy(\.unprotectedAreBackedUp)
       let alert = NSAlert()
       alert.alertStyle = .critical
       alert.messageText = "저장하지 못한 원고가 있어요"
@@ -104,6 +104,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return false
       }
     }
+  }
+
+  /// 외부 변경 충돌을 고르지 않은 회차가 있으면 따로 알린다. 앱 쪽 글은 `conflict` 스냅샷에 있어 잃지 않지만,
+  /// 끄면 다음에 열 때 바깥에서 바뀐 글이 보이므로 그 사실과 되살릴 곳을 말하고 끌지 묻는다. 다시 시도는 두지 않는다(저장으로 풀리지 않는다).
+  private func confirmQuitWithConflicts(_ autosavers: [EpisodeAutosaver]) -> Bool {
+    let count = autosavers.reduce(0) { $0 + $1.conflictsKeptInSnapshots }
+    guard count > 0 else { return true }
+    let alert = NSAlert()
+    alert.messageText = "바깥에서 바뀐 회차 \(count)개를 아직 고르지 않았어요"
+    alert.informativeText = "이 앱에서 쓴 글은 \"충돌\" 스냅샷으로 남아 있어요. 그래도 끄면 다음에 열 때 바깥에서 바뀐 글이 보이고, 이 앱에서 쓴 글은 스냅샷 판에서 되살릴 수 있어요."
+    alert.addButton(withTitle: "취소")
+    alert.addButton(withTitle: "그래도 종료")
+    return alert.runModal() == .alertSecondButtonReturn
   }
 
   enum FinishOutcome {
