@@ -161,7 +161,7 @@ final class EpisodeSnapshotter {
           text, id, kind, memo: memo, skipIfSame: skipIfSame, retention: retention, date: date, fullSync: fullSync)
       } catch {
         // 못 찍었으면(디스크가 꽉 찼을 때 등) "고친 회차"로 되돌린다. 아직 그 회차를 보고 있으면 다음 간격이나 떠날 때 다시 찍는다.
-        if kind.isPrunable { edited.insert(id) }
+        if kind.capturesEdits { edited.insert(id) }
         throw error
       }
     }
@@ -176,10 +176,10 @@ final class EpisodeSnapshotter {
   ) async throws -> Snapshot? {
     let store = store
     return try await Task.detached {
-      // 자동·떠날 때만 마지막과 같으면 건너뛴다. 직접·복원 전은 사용자가 그 순간을 남기려는 것이라 늘 찍는다
+      // 자동·떠날 때만 마지막과 같으면 건너뛴다. 직접·복원 전·이름 변경은 그 순간을 기록하려는 것이라 늘 찍는다
       // (저장하면서 찍는 직접 찍기만 예외로 건너뛴다).
       let snapshot = try store.writeSnapshot(
-        text, episode: id, kind: kind, memo: memo, at: date, skipIfSameAsLatest: kind.isPrunable || skipIfSame,
+        text, episode: id, kind: kind, memo: memo, at: date, skipIfSameAsLatest: kind.capturesEdits || skipIfSame,
         fullSync: fullSync)
       // 정리가 실패해도 방금 찍은 것은 남았으니 실패로 치지 않는다. 다음에 찍을 때 다시 정리한다.
       if kind.isPrunable { _ = try? store.pruneSnapshots(of: id, keeping: retention) }

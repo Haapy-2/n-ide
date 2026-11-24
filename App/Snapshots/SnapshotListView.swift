@@ -138,6 +138,7 @@ struct SnapshotListView: View {
     case .replace: "바꾸기 전"
     case .replaced: "바꾼 뒤"
     case .revert: "되돌리기 전"
+    case .rename: "이름 변경"
     }
   }
 }

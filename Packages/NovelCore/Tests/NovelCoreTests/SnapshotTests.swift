@@ -204,6 +204,44 @@ struct SnapshotTests {
     #expect(store.readMemo(kept) == "남길 것")
   }
 
+  @Test func renameCountsAndGoesEvenWithMemoUnlessKept() throws {
+    let folder = try TestFolder()
+    defer { folder.remove() }
+    let (store, id) = try makeStore(folder)
+    let oldest = try #require(
+      try store.writeSnapshot("본문", episode: id, kind: .rename, memo: "'1화' → '프롤로그'", title: "1화", at: time(0)))
+    let kept = try #require(
+      try store.writeSnapshot("본문", episode: id, kind: .rename, memo: "남길 것", title: "프롤로그", at: time(1)))
+    try store.keep(kept)
+    try store.writeSnapshot("고침", episode: id, kind: .auto, at: time(2))
+    try store.writeSnapshot("본문", episode: id, kind: .rename, memo: "새 것", title: "", at: time(3))
+
+    #expect(store.readTitle(oldest) == "1화")
+    let removed = try store.pruneSnapshots(of: id, keeping: 2)
+
+    #expect(removed.map(\.id) == [oldest.id], "메모가 있어도 이름 변경은 보관 개수에 세고 지운다")
+    #expect(try folder.fileNames(in: store.layout.snapshotFolder(id)) == [
+      "20261111-090001-rename.keep", "20261111-090001-rename.md", "20261111-090001-rename.memo",
+      "20261111-090001-rename.title", "20261111-090002-auto.md",
+      "20261111-090003-rename.md", "20261111-090003-rename.memo", "20261111-090003-rename.title",
+    ], "지운 것은 메모·제목 파일까지 함께, 지킨 것은 그대로")
+    #expect(try store.snapshots(of: id).last.map { store.readTitle($0) } == "", "빈 제목도 남긴다")
+    #expect(store.isKept(kept))
+  }
+
+  @Test func memoKeepsOnlyNonRenameKinds() throws {
+    let folder = try TestFolder()
+    defer { folder.remove() }
+    let (store, id) = try makeStore(folder)
+    let auto = try #require(try store.writeSnapshot("가", episode: id, kind: .auto, memo: "메모", at: time(0)))
+    let rename = try #require(try store.writeSnapshot("가", episode: id, kind: .rename, memo: "메모", at: time(1)))
+    #expect(store.isKept(auto))
+    #expect(!store.isKept(rename))
+    try store.keep(auto)
+    try store.writeMemo("", for: auto)
+    #expect(!store.isKept(auto), "이름 변경이 아닌 것은 메모만 본다")
+  }
+
   @Test func pruneLeavesOtherEpisodesAlone() throws {
     let folder = try TestFolder()
     defer { folder.remove() }
