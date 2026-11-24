@@ -449,4 +449,27 @@ final class ReplaceTests: XCTestCase {
     _ = try await running.value
     XCTAssertEqual(textView.string, "도윤이 웃었다가")
   }
+
+  /// 열린 회차를 바꾸려고 기다리는 사이에 친 찾는 말도 바뀌므로, `바꾸기 전`은 기다린 뒤 실제로 고친 글이어야 그 자리까지 되돌린다.
+  func testWordTypedWhileWaitingIsInBeforeSnapshotAndReverts() async throws {
+    let pending = try await prepare("민준", "도윤")
+    type("가")
+
+    let running = Task { try await run(pending) }
+    try await Task.sleep(for: .milliseconds(200))
+    type(" 민준")
+    let report = try await running.value
+
+    XCTAssertEqual(textView.string, "도윤이 웃었다가 도윤")
+    let entry = try XCTUnwrap(report.replaced.first { $0.id == open })
+    XCTAssertEqual(entry.count, 2)
+    let before = try XCTUnwrap(entry.before)
+    XCTAssertEqual(try store.readSnapshot(before), "민준이 웃었다가 민준", "기다리는 사이 친 글까지")
+    XCTAssertEqual(store.readMemo(before)?.hasSuffix("바꾸기 전 · 2곳"), true)
+
+    let reverted = await replace.revert(try await latest().record, [open, closed])
+
+    XCTAssertEqual(reverted.count, 4, "\(reverted)")
+    XCTAssertEqual(textView.string, "민준이 웃었다가 민준")
+  }
 }

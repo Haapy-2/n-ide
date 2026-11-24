@@ -478,23 +478,16 @@ final class EpisodeAutosaver {
     return .done(count: computed.count, kept: computed.kept, characters: computed.characters, before: beforeSnapshot)
   }
 
-  /// 열린 회차: 지금 글을 남긴 뒤, 한글 조합이 끝난 그 순간 지금 글에서 고칠 자리만 고친다.
-  /// 고칠 자리는 메인 스레드 밖에서 정하고, 고치기 직전에 편집기 글이 그 글 그대로인지 본다(사이에 await가 없어
-  /// 그 틈에 입력이 끼어들지 못한다). 그사이 글이 바뀌었으면 바뀐 글로 다시 정한다.
-  /// 남긴 스냅샷과 고친 순간 사이에 친 글자는 스냅샷에 없지만 ⌘Z 한 번이면 고치기 직전으로 정확히 돌아간다.
+  /// 열린 회차: 한글 조합과 입력이 멈추면 지금 글에서 고칠 자리를 정하고 그 글을 남긴 뒤, 편집기 글이 아직 그 글
+  /// 그대로일 때 고칠 자리만 고친다. 정하고 남기는 사이(await)에 글이 바뀌면 바뀐 글로 다시 정하고 다시 남긴다.
+  /// 그래서 `바꾸기 전`은 늘 실제로 고친 바로 그 글이다. 기다리는 사이 새로 친 찾는 말도 바뀌는데, 스냅샷에 없으면
+  /// 되돌리기가 그 자리를 찾지 못한다. 마지막 비교와 고치기 사이에는 await가 없어 입력이 끼어들지 못한다.
   private func rewriteOpen(
     _ id: EpisodeID, _ job: Rewrite, before: inout (text: String, snapshot: Snapshot?)?
   ) async -> RewriteOutcome? {
-    guard conflicts[id] == nil else { return .conflict }
-    guard var basis = textView?.string else { return nil }
-    guard var found = await Self.changes(job, in: basis) else { return .unreadable }
-    guard !found.changes.isEmpty else { return .nothing }
-    let beforeSnapshot: Snapshot?
-    do {
-      beforeSnapshot = try await snapshotBefore(id, basis, count: found.changes.count, kept: found.kept, job, &before)
-    } catch {
-      return .snapshotFailed
-    }
+    var basis: String?
+    var found: (changes: [TextChange], kept: Int) = ([], 0)
+    var beforeSnapshot: Snapshot?
     while true {
       guard id == episodeID, let textView else { return nil }
       if conflicts[id] != nil { return .conflict }
@@ -502,14 +495,21 @@ final class EpisodeAutosaver {
         try? await Task.sleep(for: .milliseconds(50))
         continue
       }
+      let current = textView.string
       // 글자 그대로 비교한다(String ==는 자모로 풀어 쓴 글도 같다고 봐서 UTF-16 자리가 어긋날 수 있다).
-      guard textView.string.utf16.elementsEqual(basis.utf16) else {
-        basis = textView.string
-        guard let again = await Self.changes(job, in: basis) else { return .unreadable }
+      guard let basis, current.utf16.elementsEqual(basis.utf16) else {
+        basis = current
+        guard let again = await Self.changes(job, in: current) else { return .unreadable }
+        guard !again.changes.isEmpty else { return .nothing }
         found = again
+        do {
+          beforeSnapshot = try await snapshotBefore(id, current, count: found.changes.count, kept: found.kept, job, &before)
+        } catch {
+          return .snapshotFailed
+        }
         continue
       }
-      guard !found.changes.isEmpty, textView.replaceOccurrences(found.changes, actionName: job.actionName) else {
+      guard textView.replaceOccurrences(found.changes, actionName: job.actionName) else {
         return .nothing
       }
       noteChange(id)
@@ -531,7 +531,7 @@ final class EpisodeAutosaver {
     _ id: EpisodeID, _ text: String, count: Int, kept: Int, _ job: Rewrite,
     _ before: inout (text: String, snapshot: Snapshot?)?
   ) async throws -> Snapshot? {
-    if let before, before.text == text { return before.snapshot }
+    if let before, before.text.utf16.elementsEqual(text.utf16) { return before.snapshot }
     let snapshot = try await snapshots.takeReplace(
       id, kind: job.beforeKind, text: text, memo: job.beforeMemo(count, kept), at: job.date)
     before = (text, snapshot)
