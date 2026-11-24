@@ -554,7 +554,7 @@ struct WorkspaceView: View {
   private func commitRename() {
     guard let model, let id = renaming else { return }
     renaming = nil
-    Task { await model.rename(id, to: renameText, undoManager: undoManager) }
+    Task { await model.renameEpisodes([id: renameText], reason: .single, undoManager: undoManager) }
   }
 
   private func beginSetGoal(_ id: EpisodeID) {

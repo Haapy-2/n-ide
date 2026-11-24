@@ -110,15 +110,75 @@ final class ProjectModel {
     return id
   }
 
-  /// 이름 변경. `undoManager`를 주면 ⌘Z로 되돌릴 수 있다.
-  func rename(_ id: EpisodeID, to title: String, undoManager: UndoManager? = nil) async {
-    guard let index = project.episodes.firstIndex(where: { $0.id == id }) else { return }
-    let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard project.episodes[index].title != trimmed else { return }
-    var episodes = project.episodes
-    episodes[index].title = trimmed
-    await replaceEpisodes(with: episodes, actionName: "이름 변경", undoManager: undoManager).value
+  /// 이름을 바꾼 까닭. 이름 변경 스냅샷 메모에 붙는다(되돌리기·다시 실행은 `UndoManager`를 보고 따로 붙인다).
+  enum RenameReason {
+    case single
+    case batch
+    case restore
   }
+
+  struct RenameOutcome: Equatable {
+    var renamed = 0
+    /// 이름은 바꿨지만 스냅샷을 남기지 못한 회차 수
+    var unsnapshotted = 0
+  }
+
+  /// 이름 변경(한 회차·여러 회차·스냅샷 복원). 앞뒤 공백을 자르고, 실제로 바뀌는 회차만 바꾼다.
+  /// 바뀌는 회차마다 그때 본문과 바뀌기 전 제목을 `rename` 스냅샷으로 남긴다. `undoManager`를 주면 ⌘Z 한 번에
+  /// 모두 되돌아가고, 되돌리기·다시 실행도 이름이 바뀌는 것이라 스냅샷을 남긴다.
+  @discardableResult
+  func renameEpisodes(
+    _ titles: [EpisodeID: String], reason: RenameReason, undoManager: UndoManager? = nil
+  ) async -> RenameOutcome {
+    await applyRenames(titles, reason: reason, undoManager: undoManager).value
+  }
+
+  /// 목록 바꾸기와 되돌리기 등록은 그 자리에서(동기로) 한다. 되돌리기 처리 안에서 다시 불려 다시 실행이 쌓인다.
+  private func applyRenames(
+    _ titles: [EpisodeID: String], reason: RenameReason, undoManager: UndoManager?
+  ) -> Task<RenameOutcome, Never> {
+    var episodes = project.episodes
+    var changes: [(id: EpisodeID, old: String, new: String)] = []
+    for index in episodes.indices {
+      guard let title = titles[episodes[index].id] else { continue }
+      let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard trimmed != episodes[index].title else { continue }
+      changes.append((episodes[index].id, episodes[index].title, trimmed))
+      episodes[index].title = trimmed
+    }
+    guard !changes.isEmpty else { return Task { RenameOutcome() } }
+    let tail: String? =
+      if undoManager?.isUndoing == true { "되돌림" }
+      else if undoManager?.isRedoing == true { "다시 실행" }
+      else {
+        switch reason {
+        case .single: nil
+        case .batch: "\(changes.count)개 회차 함께"
+        case .restore: "스냅샷 복원"
+        }
+      }
+    let previous = Dictionary(changes.map { ($0.id, $0.old) }, uniquingKeysWith: { first, _ in first })
+    undoManager?.registerUndo(withTarget: self) { model in
+      MainActor.assumeIsolated { _ = model.applyRenames(previous, reason: reason, undoManager: undoManager) }
+    }
+    undoManager?.setActionName(changes.count > 1 ? "여러 회차 이름 변경" : "이름 변경")
+    let save = replaceEpisodes(with: episodes, actionName: "", undoManager: nil)
+    let date = Date()
+    let snapshots = changes.map { change in
+      let memo = "\(Self.quoted(change.old)) → \(Self.quoted(change.new))" + (tail.map { " · \($0)" } ?? "")
+      return autosaver.snapshotRename(change.id, title: change.old, memo: memo, at: date)
+    }
+    return Task {
+      var failed = 0
+      for snapshot in snapshots {
+        if (try? await snapshot.value) == nil { failed += 1 }
+      }
+      await save.value
+      return RenameOutcome(renamed: changes.count, unsnapshotted: failed)
+    }
+  }
+
+  private static func quoted(_ title: String) -> String { title.isEmpty ? "(제목 없음)" : "'\(title)'" }
 
   /// 회차 목표 글자 수. `undoManager`를 주면 ⌘Z로 되돌릴 수 있다.
   func setGoal(_ id: EpisodeID, to goal: Int, undoManager: UndoManager? = nil) async {

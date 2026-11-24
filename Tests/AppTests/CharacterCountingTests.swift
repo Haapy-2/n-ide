@@ -139,7 +139,7 @@ final class CharacterCountingTests: XCTestCase {
     let undo = UndoManager()
     undo.groupsByEvent = false
     undo.beginUndoGrouping()
-    await model.rename(id, to: "새 제목", undoManager: undo)
+    await model.renameEpisodes([id: "새 제목"], reason: .single, undoManager: undo)
     undo.endUndoGrouping()
     model.recordCount(CharacterCount(withSpaces: 100, withoutSpaces: 90), for: id)
 

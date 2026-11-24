@@ -229,6 +229,21 @@ struct SnapshotTests {
     #expect(store.isKept(kept))
   }
 
+  /// 같은 초에 여러 개 찍다가 앞 번호가 정리돼도, 다음 것은 빈 번호가 아니라 뒤 번호를 받아 가장 새 것으로 남는다.
+  @Test func sameSecondNeverReusesPrunedNumber() throws {
+    let folder = try TestFolder()
+    defer { folder.remove() }
+    let (store, id) = try makeStore(folder)
+    for index in 0..<3 { try store.writeSnapshot("\(index)", episode: id, kind: .rename, at: time(0)) }
+    try store.pruneSnapshots(of: id, keeping: 1)
+    #expect(try names(store, id) == ["20261111-090000-rename-3.md"])
+
+    try store.writeSnapshot("새", episode: id, kind: .rename, at: time(0))
+    try store.pruneSnapshots(of: id, keeping: 1)
+
+    #expect(try store.snapshots(of: id).map { try store.readSnapshot($0) } == ["새"])
+  }
+
   @Test func memoKeepsOnlyNonRenameKinds() throws {
     let folder = try TestFolder()
     defer { folder.remove() }

@@ -271,6 +271,13 @@ final class EpisodeAutosaver {
     return try await snapshots.takeManual(id, text: text, skipIfUnchanged: skipIfUnchanged)
   }
 
+  /// 이름이 바뀐 회차의 `rename` 스냅샷. 열린 회차는 편집기 글, 저장하지 못했거나 쓰는 중인 글은 그 글,
+  /// 나머지는 쓰는 차례에 파일을 읽는다(디스크의 글이 그 회차의 지금 글이라서).
+  func snapshotRename(_ id: EpisodeID, title: String, memo: String, at date: Date) -> Task<Snapshot?, any Error> {
+    let text = id == episodeID ? textView?.string ?? pendingText(for: id) : pendingText(for: id)
+    return snapshots.takeRename(id, text: text, title: title, memo: memo, at: date)
+  }
+
   /// 떠 있는 판(⇧⌘S)을 열 때: 편집기의 조합을 끝내고 초점을 내려놓은 뒤 지금 본문을 한 번 복사해 준다.
   /// 편집기가 없으면 nil. `hadFocus`는 닫을 때 `endPanel`에 그대로 돌려준다.
   func beginPanel() -> (text: String, hadFocus: Bool)? {

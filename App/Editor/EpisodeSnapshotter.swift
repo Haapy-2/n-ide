@@ -13,7 +13,7 @@ final class EpisodeSnapshotter {
   struct Settings: Equatable {
     var autoEnabled = true
     var interval: Duration = .seconds(30 * 60)
-    /// `auto`·`leave`를 회차마다 몇 개까지 남길지
+    /// `auto`·`leave`·`rename`을 회차마다 몇 개까지 남길지
     var retention = 50
 
     static let intervalChoices = [5, 10, 15, 30, 60]
@@ -79,6 +79,16 @@ final class EpisodeSnapshotter {
   /// 되돌리기 직전 지금 본문을 `restore`로 남긴다. 같은 내용이어도 늘 찍는다: 메모로 "언제 무엇으로 되돌렸나"를 남기려고.
   func takeRestore(_ id: EpisodeID, text: String, memo: String) async throws -> Snapshot? {
     try await enqueue(text, id, .restore, memo: memo).value
+  }
+
+  /// 이름이 바뀔 때(`rename`). 같은 글이어도 늘 찍고, 바뀌기 전 제목을 함께 남긴 뒤 보관 개수로 정리한다.
+  /// `text`가 nil이면 쓰는 차례에 파일을 읽는다: 500화를 한 번에 바꿔도 본문을 메모리에 모아 두지 않는다.
+  /// 장치 캐시는 비우지 않는다: 기록용이고, 같은 때 저장하는 `project.json`의 F_FULLFSYNC가 함께 내려 준다.
+  @discardableResult
+  func takeRename(_ id: EpisodeID, text: String?, title: String, memo: String, at date: Date) -> Task<Snapshot?, any Error> {
+    let store = store
+    let body: @Sendable () throws -> String = if let text { { text } } else { { try store.readEpisode(id) } }
+    return enqueue(body, id, .rename, memo: memo, title: title, date: date, fullSync: false)
   }
 
   /// 전체 바꾸기 직전(`replace`)·직후(`replaced`) 본문. 늘 찍고 보관 개수로 지우지 않는다.
@@ -148,8 +158,15 @@ final class EpisodeSnapshotter {
 
   @discardableResult
   private func enqueue(
-    _ text: String, _ id: EpisodeID, _ kind: SnapshotKind, memo: String? = nil, skipIfSame: Bool = false,
-    date: Date = Date(), fullSync: Bool = true
+    _ text: String, _ id: EpisodeID, _ kind: SnapshotKind, memo: String? = nil, skipIfSame: Bool = false
+  ) -> Task<Snapshot?, any Error> {
+    enqueue({ text }, id, kind, memo: memo, skipIfSame: skipIfSame)
+  }
+
+  @discardableResult
+  private func enqueue(
+    _ body: @escaping @Sendable () throws -> String, _ id: EpisodeID, _ kind: SnapshotKind, memo: String? = nil,
+    title: String? = nil, skipIfSame: Bool = false, date: Date = Date(), fullSync: Bool = true
   ) -> Task<Snapshot?, any Error> {
     let previous = tail
     let retention = settings.retention
@@ -158,7 +175,8 @@ final class EpisodeSnapshotter {
       defer { pending -= 1 }
       do {
         return try await write(
-          text, id, kind, memo: memo, skipIfSame: skipIfSame, retention: retention, date: date, fullSync: fullSync)
+          body, id, kind, memo: memo, title: title, skipIfSame: skipIfSame, retention: retention, date: date,
+          fullSync: fullSync)
       } catch {
         // 못 찍었으면(디스크가 꽉 찼을 때 등) "고친 회차"로 되돌린다. 아직 그 회차를 보고 있으면 다음 간격이나 떠날 때 다시 찍는다.
         if kind.capturesEdits { edited.insert(id) }
@@ -171,15 +189,17 @@ final class EpisodeSnapshotter {
   }
 
   private func write(
-    _ text: String, _ id: EpisodeID, _ kind: SnapshotKind, memo: String?, skipIfSame: Bool, retention: Int, date: Date,
-    fullSync: Bool
+    _ body: @escaping @Sendable () throws -> String, _ id: EpisodeID, _ kind: SnapshotKind, memo: String?,
+    title: String?, skipIfSame: Bool, retention: Int, date: Date, fullSync: Bool
   ) async throws -> Snapshot? {
     let store = store
     return try await Task.detached {
+      let text = try body()
       // 자동·떠날 때만 마지막과 같으면 건너뛴다. 직접·복원 전·이름 변경은 그 순간을 기록하려는 것이라 늘 찍는다
       // (저장하면서 찍는 직접 찍기만 예외로 건너뛴다).
       let snapshot = try store.writeSnapshot(
-        text, episode: id, kind: kind, memo: memo, at: date, skipIfSameAsLatest: kind.capturesEdits || skipIfSame,
+        text, episode: id, kind: kind, memo: memo, title: title, at: date,
+        skipIfSameAsLatest: kind.capturesEdits || skipIfSame,
         fullSync: fullSync)
       // 정리가 실패해도 방금 찍은 것은 남았으니 실패로 치지 않는다. 다음에 찍을 때 다시 정리한다.
       if kind.isPrunable { _ = try? store.pruneSnapshots(of: id, keeping: retention) }

@@ -71,7 +71,7 @@ final class ProjectModelTests: XCTestCase {
     let model = try makeModel()
     let id = try await model.addEpisode()
 
-    await model.rename(id, to: "  첫 만남 \n")
+    await model.renameEpisodes([id: "  첫 만남 \n"], reason: .single)
 
     XCTAssertEqual(model.episode(id)?.title, "첫 만남")
     XCTAssertEqual(try store.loadProject().episodes.first?.title, "첫 만남")
@@ -203,7 +203,7 @@ final class ProjectModelTests: XCTestCase {
     undo.groupsByEvent = false
 
     undo.beginUndoGrouping()
-    await model.rename(id, to: "새 제목", undoManager: undo)
+    await model.renameEpisodes([id: "새 제목"], reason: .single, undoManager: undo)
     undo.endUndoGrouping()
     undo.undo()
     try await Task.sleep(for: .milliseconds(100))
@@ -297,7 +297,7 @@ final class ProjectModelTests: XCTestCase {
     try FileManager.default.createDirectory(at: projectFile, withIntermediateDirectories: false)
     try Data().write(to: projectFile.appending(path: "막음"))
 
-    await model.rename(id, to: "바꾼 제목")
+    await model.renameEpisodes([id: "바꾼 제목"], reason: .single)
 
     XCTAssertNotNil(model.errorMessage)
     XCTAssertTrue(model.autosaver.hasProjectWork(), "실패한 저장이 끝낼 일로 남는다")
