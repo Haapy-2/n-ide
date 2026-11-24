@@ -19,6 +19,8 @@ struct EpisodeList: View {
   @Binding var measuredInset: CGFloat?
   /// nil이면(미리보기) 메뉴와 드래그가 없다.
   var onRename: ((EpisodeID) -> Void)? = nil
+  /// 여러 개 고른 회차 위의 우클릭 `N개 회차 이름 변경…`
+  var onBatchRename: ((Set<EpisodeID>) -> Void)? = nil
   var onTrash: ((EpisodeID) -> Void)? = nil
   var onSetGoal: ((EpisodeID) -> Void)? = nil
   var onAddAfter: ((EpisodeID) -> Void)? = nil
@@ -172,6 +174,9 @@ struct EpisodeList: View {
       let targets = marked.contains(episode.id) ? marked : [episode.id]
       Button("아래에 새 회차") { onAddAfter(episode.id) }
       Button("이름 변경…") { onRename(episode.id) }
+      if let onBatchRename, targets.count > 1 {
+        Button("\(targets.count)개 회차 이름 변경…") { onBatchRename(targets) }
+      }
       Button("목표 글자 수…") { onSetGoal(episode.id) }
       Divider()
       if let onGroup {

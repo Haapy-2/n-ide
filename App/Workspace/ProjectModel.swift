@@ -133,6 +133,17 @@ final class ProjectModel {
     await applyRenames(titles, reason: reason, undoManager: undoManager).value
   }
 
+  /// 여러 회차 이름 변경 창: 규칙을 지금 목록의 제목에 목록 순서대로 적용한다(창을 연 뒤 바뀐 제목도 반영).
+  @discardableResult
+  func renameEpisodes(
+    _ ids: Set<EpisodeID>, by rule: EpisodeTitleBatch.Rule, undoManager: UndoManager? = nil
+  ) async -> RenameOutcome {
+    let targets = project.episodes.filter { ids.contains($0.id) }
+    let titles = EpisodeTitleBatch.titles(targets.map(\.title), by: rule)
+    let renamed = Dictionary(zip(targets.map(\.id), titles), uniquingKeysWith: { first, _ in first })
+    return await renameEpisodes(renamed, reason: .batch, undoManager: undoManager)
+  }
+
   /// 목록 바꾸기와 되돌리기 등록은 그 자리에서(동기로) 한다. 되돌리기 처리 안에서 다시 불려 다시 실행이 쌓인다.
   private func applyRenames(
     _ titles: [EpisodeID: String], reason: RenameReason, undoManager: UndoManager?
@@ -153,7 +164,7 @@ final class ProjectModel {
       else {
         switch reason {
         case .single: nil
-        case .batch: "\(changes.count)개 회차 함께"
+        case .batch: changes.count > 1 ? "\(changes.count)개 회차 함께" : nil
         case .restore: "스냅샷 복원"
         }
       }
@@ -161,7 +172,7 @@ final class ProjectModel {
     undoManager?.registerUndo(withTarget: self) { model in
       MainActor.assumeIsolated { _ = model.applyRenames(previous, reason: reason, undoManager: undoManager) }
     }
-    undoManager?.setActionName(changes.count > 1 ? "여러 회차 이름 변경" : "이름 변경")
+    undoManager?.setActionName(Self.renameActionName(count: changes.count))
     let save = replaceEpisodes(with: episodes, actionName: "", undoManager: nil)
     let date = Date()
     let snapshots = changes.map { change in
@@ -177,6 +188,8 @@ final class ProjectModel {
       return RenameOutcome(renamed: changes.count, unsnapshotted: failed)
     }
   }
+
+  static func renameActionName(count: Int) -> String { count > 1 ? "여러 회차 이름 변경" : "이름 변경" }
 
   private static func quoted(_ title: String) -> String { title.isEmpty ? "(제목 없음)" : "'\(title)'" }
 

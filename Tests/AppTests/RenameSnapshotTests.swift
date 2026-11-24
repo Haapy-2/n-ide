@@ -57,6 +57,18 @@ final class RenameSnapshotTests: XCTestCase {
     XCTAssertEqual(try renames(ids[2]).map(\.memo), ["'다' → (제목 없음) · 2개 회차 함께"])
   }
 
+  /// 창의 규칙은 지금 목록 순서대로 적용한다(고른 순서와 상관없이 번호가 목록 순서를 따른다).
+  func testRuleAppliesInListOrder() async throws {
+    let (model, ids) = try await makeModel(titles: ["가", "나", "다", "라"])
+
+    let outcome = await model.renameEpisodes(
+      Set([ids[3], ids[0], ids[2]]), by: .numbered(name: "부", start: 1, numberFirst: true))
+
+    XCTAssertEqual(outcome.renamed, 3)
+    XCTAssertEqual(model.episodes.map(\.title), ["1 부", "나", "2 부", "3 부"])
+    XCTAssertEqual(try renames(ids[2]).map(\.memo), ["'다' → '2 부' · 3개 회차 함께"])
+  }
+
   /// ⌘Z 한 번에 모두 되돌아가고, 되돌리기·다시 실행도 이름이 바뀌는 것이라 회차마다 스냅샷을 남긴다.
   func testUndoAndRedoAlsoSnapshot() async throws {
     let (model, ids) = try await makeModel(titles: ["가", "나"])

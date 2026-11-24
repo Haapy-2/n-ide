@@ -17,6 +17,7 @@ struct WorkspaceView: View {
   @State private var groupTitle = ""
   @State private var renaming: EpisodeID?
   @State private var renameText = ""
+  @State private var batchRenaming: BatchRenameSheet.Request?
   @State private var trashing: EpisodeID?
   @State private var settingGoal: EpisodeID?
   @State private var goalText = ""
@@ -159,6 +160,14 @@ struct WorkspaceView: View {
     } message: {
       Text(alertMessage ?? model?.errorMessage ?? "")
     }
+    .sheet(item: $batchRenaming) { request in
+      BatchRenameSheet(
+        episodes: project.episodes, targetIDs: request.episodeIDs, onCancel: { batchRenaming = nil },
+        onRename: { rule in
+          batchRenaming = nil
+          renameBatch(request.episodeIDs, by: rule)
+        })
+    }
     .sheet(item: $revertSession) { session in
       RevertSheet(
         session: session, episodes: project.episodes, onCancel: { revertSession = nil },
@@ -239,6 +248,7 @@ struct WorkspaceView: View {
         marked: $marked,
         measuredInset: $listInset,
         onRename: model == nil ? nil : { beginRename($0) },
+        onBatchRename: model == nil ? nil : { batchRenaming = .init(episodeIDs: $0) },
         onTrash: model == nil ? nil : { trashing = $0 },
         onSetGoal: model == nil ? nil : { beginSetGoal($0) },
         onAddAfter: model == nil ? nil : { id in addEpisode(after: id) },
@@ -549,6 +559,23 @@ struct WorkspaceView: View {
   private func beginRename(_ id: EpisodeID) {
     renameText = model?.episode(id)?.title ?? ""
     renaming = id
+  }
+
+  private func renameBatch(_ ids: Set<EpisodeID>, by rule: EpisodeTitleBatch.Rule) {
+    guard let model else { return }
+    Task {
+      let outcome = await model.renameEpisodes(ids, by: rule, undoManager: undoManager)
+      guard outcome.renamed > 0 else { return }
+      var message = "\(outcome.renamed.formatted())개 회차 이름을 바꿨어요"
+      if outcome.unsnapshotted > 0 { message += " · \(outcome.unsnapshotted.formatted())개는 스냅샷을 못 남겼어요" }
+      // 그사이 다른 작업이 실행 취소 맨 위에 올라왔으면 그것을 되돌리지 않는다.
+      toasts.show(
+        message,
+        action: .init(title: "되돌리기") {
+          if undoManager?.undoActionName == ProjectModel.renameActionName(count: outcome.renamed) { undoManager?.undo() }
+        },
+        duration: .seconds(5))
+    }
   }
 
   private func commitRename() {
