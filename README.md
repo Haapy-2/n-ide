@@ -3,7 +3,20 @@
 한국어 웹소설을 쓰기 위한 macOS 네이티브 집필 에디터. 회차마다 `.md` 파일 하나로 저장하고,
 빠른 입력과 깨지지 않는 한글 조합, 잃어버리지 않는 원고를 가장 중요하게 여긴다.
 
-> 현재 상태: **5단계(편집기) 완료.** 진행 상황은 [docs/PROGRESS.md](docs/PROGRESS.md).
+> 현재 상태: **13-1단계(여러 회차 이름 바꾸기)까지 완료**, 다음은 13-2(⌘D 여러 커서). 진행 상황과 알려진 문제는 [docs/PROGRESS.md](docs/PROGRESS.md), 전체 단계는 [docs/PLAN.md](docs/PLAN.md).
+
+## 지금 되는 것
+
+- 회차를 골라 쓰기: NSTextView 편집기, 한글 조합을 깨지 않는 입력, 1초 뒤 자동 저장(원자적 쓰기, 저장 순서 보장)
+- 회차 관리: 추가, 이름 변경(여러 회차 한꺼번에 포함), 휴지통, 드래그로 순서 바꾸기, 묶음
+- 다른 편집기에서 회차 파일을 고치면 다시 불러오거나 어느 쪽을 쓸지 묻기
+- 글자 수(공백 포함·제외), 목표 진행률, 사이드바 글자 수
+- 설정 창: 글꼴, 크기, 줄·문단 간격, 본문 폭, 단축키 바꾸기
+- 스냅샷: 자동·수동, 과거↔현재 두 칸 비교, 복원과 복원 취소
+- 작품 전체 검색(⇧⌘F), 전체 바꾸기와 바꾼 자리만 되돌리기
+- 저장이 실패해도 비상 백업을 남기고 다음 실행 때 되살리기
+
+아직 없는 것: ⌘D 여러 커서, 집중 모드, 설정 노트 분할 화면, 내보내기(PLAN 13-2·14~16단계).
 
 ## 빌드와 실행
 
@@ -39,7 +52,7 @@ App/                 앱 소스: 화면(SwiftUI)과 편집기(AppKit)
   Resources/         글꼴(Fonts/), 색 값(Colors.xcassets)
 Packages/NovelCore/  공통 로직 패키지(모델, 저장, 검색, 글자 수, 스냅샷), 테스트, 더미 작품 생성기
 Tests/AppTests/      앱 쪽 테스트, 디자인 스냅샷
-Scripts/             build.sh, run.sh, test.sh, snapshots.sh, perf.sh (lib.sh는 공통 부분)
+Scripts/             build.sh, run.sh, test.sh, snapshots.sh, perf.sh, check-comments.sh(이력형 주석 검사), lib.sh(공통)
 .claude/skills/      verify-noveleditor/ = 에이전트가 실제 앱을 띄워 조작·증명하는 검증 스킬
 docs/                모든 문서 (log/ = 날짜별 작업 기록)
 build/               빌드 산출물과 임시 파일 (git 제외, 지워도 됨)
