@@ -34,6 +34,16 @@ struct SnapshotPanel: View {
     .onAppear { hasFocus = true }
     .onCommand(Selector(("undo:"))) {}
     .onCommand(Selector(("redo:"))) {}
+    .alert("이 스냅샷을 지킬까요?", isPresented: isAskingToKeep, presenting: browser.askingToKeep) { id in
+      Button("지키기") { browser.keep(id) }
+      Button("지키지 않기", role: .cancel) {}
+    } message: { _ in
+      Text("이름 변경 스냅샷은 메모가 있어도 보관 개수를 넘으면 오래된 것부터 지워져요. 지키면 개수에 세지 않고 지우지 않아요.")
+    }
+  }
+
+  private var isAskingToKeep: Binding<Bool> {
+    Binding(get: { browser.askingToKeep != nil }, set: { if !$0 { browser.askingToKeep = nil } })
   }
 
   private func panel(listWidth: CGFloat) -> some View {
@@ -77,6 +87,12 @@ struct SnapshotPanel: View {
             .lineLimit(2)
         }
         Spacer(minLength: 0)
+        if let title = browser.restoredTitle {
+          Text("제목도 되돌려요: \(title.isEmpty ? "제목 없음" : title)")
+            .font(.system(size: 12))
+            .foregroundStyle(Color.inkMuted)
+            .lineLimit(1)
+        }
         Button("이 버전으로 되돌리기", action: onRestore)
           .disabled(hasConflict || !browser.canRestore)
           .help(restoreHelp)

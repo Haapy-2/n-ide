@@ -48,6 +48,12 @@ struct SnapshotListView: View {
           .font(.system(size: 13).monospacedDigit())
           .foregroundStyle(Color.ink)
         Spacer(minLength: 8)
+        if item.snapshot.kind == .rename, item.isKept {
+          Image(systemName: "pin.fill")
+            .font(.system(size: 9))
+            .foregroundStyle(Color.inkMuted)
+            .accessibilityLabel("지킴")
+        }
         Text(Self.kindName(item.snapshot.kind))
           .font(.system(size: 11))
           .foregroundStyle(Color.inkMuted)

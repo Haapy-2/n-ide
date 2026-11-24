@@ -162,6 +162,53 @@ final class SnapshotPanelTests: XCTestCase {
     XCTAssertEqual(try store.snapshots(of: episode).count, 1)
   }
 
+  /// 이름 변경 스냅샷은 본문이 같아도 제목이 다르면 되돌릴 수 있고, 되돌리면 바뀌기 전 제목으로.
+  func testRenameSnapshotRestoresTitle() async throws {
+    try store.writeSnapshot("글", episode: episode, kind: .rename, memo: "'1화' → '프롤로그'", title: "1화")
+    let browser = SnapshotBrowser(store: store, episodeID: episode, currentText: "글", currentTitle: "프롤로그")
+    await browser.load()
+    try await waitUntil { if case .ready = browser.comparison { true } else { false } }
+    XCTAssertEqual(browser.restoredTitle, "1화")
+    XCTAssertTrue(browser.canRestore)
+
+    var renamed: [String] = []
+    let restored = await browser.restoreSelected(with: EpisodeAutosaver(store: store)) { renamed.append($0) }
+
+    XCTAssertTrue(restored)
+    XCTAssertEqual(renamed, ["1화"])
+  }
+
+  func testSameTitleAndTextHasNothingToRestore() async throws {
+    try store.writeSnapshot("글", episode: episode, kind: .rename, title: "프롤로그")
+    let browser = SnapshotBrowser(store: store, episodeID: episode, currentText: "글", currentTitle: "프롤로그")
+    await browser.load()
+    try await waitUntil { if case .ready = browser.comparison { true } else { false } }
+    XCTAssertNil(browser.restoredTitle)
+    XCTAssertFalse(browser.canRestore)
+  }
+
+  /// 이름 변경 스냅샷의 메모를 고치면 지킬지 묻고, 지키면 보관 개수로 지우지 않는다. 다른 종류는 묻지 않는다.
+  func testEditingRenameMemoAsksToKeep() async throws {
+    try store.writeSnapshot("글", episode: episode, kind: .auto, at: Date().addingTimeInterval(-60))
+    try store.writeSnapshot("글", episode: episode, kind: .rename, memo: "자동 메모", title: "1화")
+    let browser = SnapshotBrowser(store: store, episodeID: episode, currentText: "글")
+    await browser.load()
+    let rename = try XCTUnwrap(browser.items?.first { $0.snapshot.kind == .rename })
+    let auto = try XCTUnwrap(browser.items?.first { $0.snapshot.kind == .auto })
+
+    browser.updateMemo(auto.id, to: "자동에 단 메모")
+    try await waitUntil { browser.items?.first { $0.id == auto.id }?.memo == "자동에 단 메모" }
+    XCTAssertNil(browser.askingToKeep)
+
+    browser.updateMemo(rename.id, to: "이 이름은 남기기")
+    try await waitUntil { browser.askingToKeep == rename.id }
+    browser.keep(rename.id)
+    try await waitUntil { browser.items?.first { $0.id == rename.id }?.isKept == true }
+    XCTAssertTrue(store.isKept(rename.snapshot))
+    try store.pruneSnapshots(of: episode, keeping: 1)
+    XCTAssertTrue(try store.snapshots(of: episode).contains(rename.snapshot), "지킨 것은 정리하지 않는다")
+  }
+
   // MARK: - 이름
 
   func testDayTitles() {

@@ -160,8 +160,16 @@ extension ProjectStore {
   }
 
   /// 보관 개수로 지우지 않게 표시한다(이름 변경 스냅샷). 다른 종류는 메모로 지킨다.
-  public func keep(_ snapshot: Snapshot) throws {
+  /// 표시를 먼저 쓰고 본문이 아직 있는지 본다: 정리는 지우기 직전에 표시를 보므로, 그사이 이미 지워졌으면
+  /// 표시를 거두고 false.
+  @discardableResult
+  public func keep(_ snapshot: Snapshot) throws -> Bool {
     try AtomicFile.write(Data(), to: snapshot.keepURL)
+    guard Self.isRegularFile(snapshot.url) else {
+      try? FileManager.default.removeItem(at: snapshot.keepURL)
+      return false
+    }
+    return true
   }
 
   /// 보관 개수로 지우지 않는 것인지. 이름 변경은 `.keep`, 나머지는 메모가 그 표시다.

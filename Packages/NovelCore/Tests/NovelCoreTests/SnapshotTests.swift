@@ -244,6 +244,18 @@ struct SnapshotTests {
     #expect(try store.snapshots(of: id).map { try store.readSnapshot($0) } == ["새"])
   }
 
+  /// 지키기 직전에 정리로 지워졌으면 표시를 남기지 않는다(주인 없는 `.keep`이 다음 같은 이름을 지키지 않게).
+  @Test func keepFailsForPrunedSnapshot() throws {
+    let folder = try TestFolder()
+    defer { folder.remove() }
+    let (store, id) = try makeStore(folder)
+    let gone = try #require(try store.writeSnapshot("글", episode: id, kind: .rename, at: time(0)))
+    try FileManager.default.removeItem(at: gone.url)
+
+    #expect(try store.keep(gone) == false)
+    #expect(try folder.fileNames(in: store.layout.snapshotFolder(id)).isEmpty)
+  }
+
   @Test func memoKeepsOnlyNonRenameKinds() throws {
     let folder = try TestFolder()
     defer { folder.remove() }

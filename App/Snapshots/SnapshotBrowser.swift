@@ -10,6 +10,10 @@ final class SnapshotBrowser {
   struct Item: Identifiable, Equatable {
     let snapshot: Snapshot
     var memo: String?
+    /// 이름 변경 스냅샷의 바뀌기 전 제목. 되돌리면 제목도 이것으로.
+    var title: String?
+    /// 보관 개수로 지우지 않는 것인지(이름 변경 스냅샷만 따로 표시한다)
+    var isKept = false
     var id: String { snapshot.id }
   }
 
@@ -24,6 +28,8 @@ final class SnapshotBrowser {
   let episodeID: EpisodeID
   /// 판을 열 때 편집기에서 한 번 복사한 지금 본문. 판이 열려 있는 동안은 편집기에 초점이 없어 바뀌지 않는다.
   let currentText: String
+  /// 판을 열 때의 회차 제목
+  let currentTitle: String
   /// nil이면 아직 읽는 중
   private(set) var items: [Item]?
   private(set) var selectedID: String?
@@ -31,16 +37,21 @@ final class SnapshotBrowser {
   private(set) var errorMessage: String?
   /// 되돌리는 중(버튼을 두 번 누르지 않게)
   private(set) var isRestoring = false
+  /// 메모를 고친 이름 변경 스냅샷. 지킬지 묻는다.
+  var askingToKeep: String?
 
   @ObservationIgnored private let store: ProjectStore
   @ObservationIgnored private var job: Task<TextDiff, any Error>?
   /// 처음 고를 스냅샷(바꾼 회차 목록에서 열 때 `바꾸기 전`). 없거나 못 찾으면 가장 최근 것.
   @ObservationIgnored private let preferredID: String?
 
-  init(store: ProjectStore, episodeID: EpisodeID, currentText: String, preferredID: String? = nil) {
+  init(
+    store: ProjectStore, episodeID: EpisodeID, currentText: String, currentTitle: String = "", preferredID: String? = nil
+  ) {
     self.store = store
     self.episodeID = episodeID
     self.currentText = currentText
+    self.currentTitle = currentTitle
     self.preferredID = preferredID
   }
 
@@ -52,7 +63,9 @@ final class SnapshotBrowser {
     let id = episodeID
     do {
       let loaded = try await Task.detached(priority: .userInitiated) {
-        try store.snapshots(of: id).reversed().map { Item(snapshot: $0, memo: store.readMemo($0)) }
+        try store.snapshots(of: id).reversed().map {
+          Item(snapshot: $0, memo: store.readMemo($0), title: store.readTitle($0), isKept: store.isKept($0))
+        }
       }.value
       items = loaded
       if let first = loaded.first(where: { $0.id == preferredID }) ?? loaded.first { select(first.id) }
@@ -87,15 +100,25 @@ final class SnapshotBrowser {
     }
   }
 
-  /// 고른 스냅샷이 지금과 달라 되돌릴 수 있는지. 비교가 끝나야 안다.
+  /// 고른 스냅샷이 지금과 달라 되돌릴 수 있는지(본문, 또는 이름 변경 스냅샷의 제목). 비교가 끝나야 안다.
   var canRestore: Bool {
     guard !isRestoring, case .ready(let diff) = comparison else { return false }
-    return diff.hasChanges
+    return diff.hasChanges || restoredTitle != nil
   }
 
-  /// 고른 스냅샷으로 회차 전체를 되돌린다. 되돌렸으면 true(판을 닫는다). 실패하면 판에 이유를 띄운다.
-  func restoreSelected(with autosaver: EpisodeAutosaver) async -> Bool {
-    guard canRestore, let item = selected else { return false }
+  /// 되돌리면 바뀔 제목. 이름 변경 스냅샷이고 지금 제목과 다를 때만.
+  var restoredTitle: String? {
+    guard let title = selected?.title, title != currentTitle else { return nil }
+    return title
+  }
+
+  /// 고른 스냅샷으로 회차 전체를 되돌린다. 본문을 먼저 되돌리고(못 하면 제목도 그대로), 이름 변경 스냅샷이면 제목도.
+  /// 되돌렸으면 true(판을 닫는다). 실패하면 판에 이유를 띄운다.
+  func restoreSelected(
+    with autosaver: EpisodeAutosaver, renameTo rename: (String) async -> Void
+  ) async -> Bool {
+    guard canRestore, let item = selected, case .ready(let diff) = comparison else { return false }
+    let title = restoredTitle
     isRestoring = true
     defer { isRestoring = false }
     let store = store
@@ -103,8 +126,16 @@ final class SnapshotBrowser {
     let time = SnapshotListView.time(date)
     let memo = "\(date.formatted(.dateTime.month().day())) \(time) 버전으로 되돌림"
     do {
-      let text = try await Task.detached(priority: .userInitiated) { try store.readSnapshot(item.snapshot) }.value
-      return try await autosaver.restore(episodeID, to: text, memo: memo, notice: "\(time) 버전으로 되돌렸어요")
+      var restored = false
+      if diff.hasChanges {
+        let text = try await Task.detached(priority: .userInitiated) { try store.readSnapshot(item.snapshot) }.value
+        restored = try await autosaver.restore(episodeID, to: text, memo: memo, notice: "\(time) 버전으로 되돌렸어요")
+      }
+      if let title {
+        await rename(title)
+        restored = true
+      }
+      return restored
     } catch EpisodeAutosaver.RestoreError.conflict {
       errorMessage = "바깥에서 바뀐 내용을 먼저 골라 주세요."
     } catch {
@@ -131,8 +162,25 @@ final class SnapshotBrowser {
         if let index = items?.firstIndex(where: { $0.id == id }) {
           items?[index].memo = trimmed.isEmpty ? nil : trimmed
         }
+        // 이름 변경 스냅샷은 메모가 있어도 지워지므로, 메모를 고쳐 남기려는 뜻인지 묻는다.
+        if item.snapshot.kind == .rename, !item.isKept, !trimmed.isEmpty { askingToKeep = id }
       } catch {
         errorMessage = "메모를 남기지 못했어요."
+      }
+    }
+  }
+
+  /// 보관 개수로 지우지 않게 표시한다. 그사이 정리로 지워졌으면 표시도 남기지 않는다.
+  func keep(_ id: String) {
+    guard let item = items?.first(where: { $0.id == id }) else { return }
+    let store = store
+    Task {
+      do {
+        let kept = try await Task.detached { try store.keep(item.snapshot) }.value
+        if kept, let index = items?.firstIndex(where: { $0.id == id }) { items?[index].isKept = true }
+        if !kept { errorMessage = "이미 정리되어 지킬 수 없어요." }
+      } catch {
+        errorMessage = "지키기 표시를 남기지 못했어요."
       }
     }
   }

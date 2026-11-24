@@ -428,7 +428,9 @@ struct WorkspaceView: View {
   private func showSnapshots(preferring preferredID: String? = nil) {
     guard let model, let id = selection, snapshotBrowser == nil, let editor = model.autosaver.beginPanel() else { return }
     editorHadFocus = editor.hadFocus
-    let browser = SnapshotBrowser(store: model.store, episodeID: id, currentText: editor.text, preferredID: preferredID)
+    let browser = SnapshotBrowser(
+      store: model.store, episodeID: id, currentText: editor.text, currentTitle: model.episode(id)?.title ?? "",
+      preferredID: preferredID)
     snapshotBrowser = browser
     Task { await browser.load() }
   }
@@ -527,7 +529,11 @@ struct WorkspaceView: View {
   private func restoreSnapshot() {
     guard let model, let browser = snapshotBrowser else { return }
     Task {
-      guard await browser.restoreSelected(with: model.autosaver), snapshotBrowser === browser else { return }
+      let restored = await browser.restoreSelected(with: model.autosaver) { title in
+        await model.renameEpisodes([browser.episodeID: title], reason: .restore, undoManager: undoManager)
+        toasts.show("제목도 되돌렸어요", systemImage: "arrow.uturn.backward")
+      }
+      guard restored, snapshotBrowser === browser else { return }
       browser.cancel()
       snapshotBrowser = nil
       model.autosaver.endPanel(hadFocus: true)
