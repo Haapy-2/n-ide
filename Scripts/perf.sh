@@ -102,6 +102,9 @@ row("전체 바꾸기 500화 중 \"그는\" 있는 회차 모두", perf("replace
 # 목표는 SPEC에 없어 검색(500ms)·바꾸기(2초)와 같게 잡았다(PLAN 미결정 26).
 row("되돌리기 창 열기 500화 (다시 감지)", perf("revert_detect_500_ms", app), 500)
 row("모두 되돌리기 500화", perf("revert_all_500_ms", app), 2000)
+row("여러 회차 이름 변경 500화 (스냅샷까지)", perf("batch_rename_500_ms", app), 2000)
+# 그동안 메인 스레드가 가장 오래 막힌 시간. 누른 뒤 화면이 멈추지 않는지 본다(판 열기와 같은 100ms).
+row("여러 회차 이름 변경 500화 중 화면 멈춤", perf("batch_rename_500_main_gap_ms", app), 100)
 # 스냅샷으로 되돌리기: 본문 통째 바꾸기(메인 스레드). 회차 전환과 같은 50ms 기준.
 row("되돌리기 본문 바꾸기 (10만 자)", perf("restore_100k_ms", app), 50)
 runs = [float(v) for v in re.findall(r"launch_ms ([0-9.]+)", launch)]

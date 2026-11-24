@@ -277,6 +277,26 @@ final class EditorPerformanceTests: XCTestCase {
     self.report("revert_all_500_ms", [milliseconds(revertElapsed)])
   }
 
+  /// 여러 회차 이름 변경: 더미 500화 사본의 모든 회차를 `새 이름 + 번호`로. 회차마다 이름 변경 스냅샷(파일 읽기 →
+  /// 본문·제목·메모 쓰기 → 정리)까지 끝날 때까지와, 그동안 메인 스레드가 가장 오래 막힌 시간(화면이 멈춘 시간)을 잰다.
+  func testBatchRename500() async throws {
+    let copy = store.layout.root.deletingLastPathComponent().appending(path: "rename-\(UUID().uuidString).novel")
+    try FileManager.default.copyItem(at: store.layout.root, to: copy)
+    defer { try? FileManager.default.removeItem(at: copy) }
+    let scratch = ProjectStore(root: copy)
+    let model = ProjectModel(project: try scratch.loadProject(), store: scratch, autosaveDelay: .seconds(60))
+    let ids = Set(model.episodes.map(\.id))
+    let gaps = MainThreadGaps()
+    gaps.start()
+    let start = ContinuousClock.now
+    let outcome = await model.renameEpisodes(ids, by: .numbered(name: "회차", start: 1, numberFirst: false))
+    let elapsed = ContinuousClock.now - start
+    gaps.stop()
+    XCTAssertEqual(outcome, .init(renamed: ids.count, unsnapshotted: 0))
+    report("batch_rename_500_ms", [milliseconds(elapsed)])
+    report("batch_rename_500_main_gap_ms", [milliseconds(gaps.longest)])
+  }
+
   private func makeEditorWindow() -> (NSWindow, ManuscriptTextView) {
     let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 760),
                           styleMask: [.titled, .resizable], backing: .buffered, defer: false)
@@ -302,4 +322,25 @@ final class EditorPerformanceTests: XCTestCase {
   private func report(_ name: String, _ values: [Double]) {
     print("NOVEL_PERF \(name) " + values.map { String(format: "%.3f", $0) }.joined(separator: ","))
   }
+}
+
+/// 메인 스레드에서 1ms마다 깨어나, 깨어난 사이가 가장 길었던 시간을 잰다(그만큼 화면이 멈췄다).
+@MainActor
+private final class MainThreadGaps {
+  private(set) var longest: Duration = .zero
+  private var ticker: Task<Void, Never>?
+
+  func start() {
+    ticker = Task { @MainActor in
+      var last = ContinuousClock.now
+      while !Task.isCancelled {
+        try? await Task.sleep(for: .milliseconds(1))
+        let now = ContinuousClock.now
+        longest = max(longest, now - last)
+        last = now
+      }
+    }
+  }
+
+  func stop() { ticker?.cancel() }
 }
