@@ -47,6 +47,17 @@ final class ManuscriptTextView: NSTextView {
   /// 입력기가 지금 만들고 있는 한 글자의 되돌리기 기록.
   private var currentInput: InputUndoUnit?
 
+  /// 같은 말 여러 커서(⌘D, `MultiCursorEditing.swift`). nil이면 보통 편집기 그대로다.
+  var multiCursor: MultiCursorSession? {
+    didSet { currentInput = nil }
+  }
+  /// 여러 커서 코드가 본문·선택을 고치는 중. 이때 오는 선택·본문 바뀜은 여러 커서를 끝내지 않는다.
+  var isApplyingMultiCursor = false
+  /// 커서만 있던 자리에서 ⌘D로 고른 단어. 다음 ⌘D가 단어 전체로 찾을지 정한다.
+  var wordFromCaret: NSRange?
+  /// 맨 앞 커서의 깜빡임(다른 커서도 같이 켜고 끈다).
+  var extraCaretsOn = false
+
   /// 회차마다 따로 쓰는 실행 취소 기록. 회차를 바꾸면 비운다(PLAN.md 세부 기준).
   let episodeUndoManager = UndoManager()
 
@@ -118,10 +129,17 @@ final class ManuscriptTextView: NSTextView {
   override func drawBackground(in rect: NSRect) {
     super.drawBackground(in: rect)
     if showsLineNumbers { drawLineNumbers(in: rect) }
+    if multiCursor != nil { drawMultiCursorSelections(in: rect) }
+  }
+
+  override func draw(_ dirtyRect: NSRect) {
+    super.draw(dirtyRect)
+    if multiCursor != nil { drawMultiCursorCarets(in: dirtyRect) }
   }
 
   // 커서 모양은 `InsertionCaret.swift`. 끌 때(깜빡임)는 원래 칸 전체를 지워 흔적이 남지 않게 한다.
   override func drawInsertionPoint(in rect: NSRect, color: NSColor, turnedOn flag: Bool) {
+    if multiCursor != nil { syncExtraCarets(flag) }
     if flag {
       let caret = caretRect(in: rect)
       if let last = lastCaretRect, last != caret { eraseCaret(last) }
@@ -137,6 +155,7 @@ final class ManuscriptTextView: NSTextView {
   /// 창이 비활성화되거나 앱이 뒤로 가면 커서는 그려지지 않아야 한다. 남아 있는 칸을 지운다.
   @objc private func eraseCaretOnDeactivate(_ notification: Notification) {
     if let window = notification.object as? NSWindow, window !== self.window { return }
+    if multiCursor != nil { syncExtraCarets(false) }
     guard let last = lastCaretRect else { return }
     eraseCaret(last)
     lastCaretRect = nil
@@ -186,6 +205,7 @@ final class ManuscriptTextView: NSTextView {
     // 조합을 확정하고 입력기에도 끝났다고 알린다. unmarkText만 하면 입력기는 아직 조합 중이라 여겨,
     // 다음 키가 앞 회차의 자모와 합쳐져 새 본문에 들어갈 수 있다.
     finishComposition()
+    dropMultiCursor()
     textStorage?.setAttributedString(NSAttributedString(string: text, attributes: style.textAttributes))
     setSelectedRange(NSRange(location: 0, length: 0))
     episodeUndoManager.removeAllActions()
@@ -197,6 +217,7 @@ final class ManuscriptTextView: NSTextView {
   /// 바꿨으면 true. 커서는 같은 자리(본문이 짧아졌으면 끝)에 둔다.
   func replaceAllUndoably(with text: String, actionName: String) -> Bool {
     finishComposition()
+    endMultiCursor()
     let full = NSRange(location: 0, length: (string as NSString).length)
     guard string != text else { return false }
     let cursor = selectedRange().location
@@ -219,6 +240,7 @@ final class ManuscriptTextView: NSTextView {
   /// 조합 중이면 손대지 않고 false: 조합을 끊지 않으려는 것이라, 부르는 쪽이 조합이 끝난 뒤 다시 부른다.
   func replaceOccurrences(_ changes: [TextChange], actionName: String) -> Bool {
     guard !changes.isEmpty, !hasMarkedText(), let textStorage else { return false }
+    endMultiCursor()
     let selection = selectedRange()
     let top = topVisibleCharacter()
     let topOffset = visibleRect.minY - lineTop(of: top)
@@ -284,6 +306,7 @@ final class ManuscriptTextView: NSTextView {
     // 조합을 확정하고 입력기에도 끝났다고 알린다. unmarkText만 하면 입력기는 아직 조합 중이라 여겨,
     // 다음 키가 앞 회차의 자모와 합쳐져 새 본문에 들어갈 수 있다.
     finishComposition()
+    dropMultiCursor()
     let cursor = selectedRange().location
     let origin = enclosingScrollView?.contentView.bounds.origin ?? .zero
     textStorage?.setAttributedString(NSAttributedString(string: text, attributes: style.textAttributes))
@@ -313,6 +336,7 @@ final class ManuscriptTextView: NSTextView {
   /// 고치는 동안은 같은 기록의 범위만 늘린다. 되돌릴 때는 LIFO라 그 사이의 다른 변경이 먼저 되돌려져 범위가 맞는다.
   override func insertText(_ string: Any, replacementRange: NSRange) {
     let text = (string as? NSAttributedString)?.string ?? (string as? String) ?? ""
+    if multiCursor != nil, multiCursorInsertText(text, replacementRange: replacementRange) { return }
     guard !hasMarkedText() else {
       super.insertText(string, replacementRange: replacementRange)
       return
@@ -384,10 +408,63 @@ final class ManuscriptTextView: NSTextView {
   }
 
   /// 조합 중인 글자를 확정한다. 조합 중에 되돌리면 입력기와 텍스트 저장소가 서로 다른 글자를 가리켜 깨질 수 있다.
-  private func finishComposition() {
+  /// 여러 커서면 모든 자리의 조합을 확정한다(`unmarkText`).
+  func finishComposition() {
     guard hasMarkedText() else { return }
     unmarkText()
     inputContext?.discardMarkedText()
+  }
+
+  // MARK: - 여러 커서일 때 입력기와의 약속 (`MultiCursorEditing.swift`)
+
+  override func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
+    let text = (string as? NSAttributedString)?.string ?? (string as? String) ?? ""
+    if multiCursor != nil, multiCursorSetMarkedText(text, selectedRange: selectedRange, replacementRange: replacementRange) {
+      return
+    }
+    super.setMarkedText(string, selectedRange: selectedRange, replacementRange: replacementRange)
+  }
+
+  override func unmarkText() {
+    guard multiCursor == nil else { return multiCursorUnmark() }
+    super.unmarkText()
+  }
+
+  // 여러 커서의 조합 범위는 `NSTextView` 속 상태가 아니라 여기에 있다. 자동 저장·스타일 입히기 등이 이것으로 조합 중인지 본다.
+  // 우리가 선택을 옮기는 동안에는 조합이 없다고 답한다: 있다고 하면 `NSTextView`가 선택을 옮기며 조합을 끊는다.
+  override func hasMarkedText() -> Bool {
+    guard let session = multiCursor else { return super.hasMarkedText() }
+    return !isApplyingMultiCursor && session.marked != nil
+  }
+
+  override func markedRange() -> NSRange {
+    guard let session = multiCursor else { return super.markedRange() }
+    return session.marked?.first ?? NSRange(location: NSNotFound, length: 0)
+  }
+
+  override func doCommand(by selector: Selector) {
+    if multiCursor != nil, multiCursorDoCommand(selector) { return }
+    super.doCommand(by: selector)
+  }
+
+  // 여러 커서 코드가 아닌 길(클릭, 전체 선택, 붙여 넣기, 다른 되돌리기 기록)이 선택이나 본문을 바꾸면 다른 자리는 낡는다.
+  // 그 길이 바꾸기 전에 여러 커서를 버린다(PLAN 16장 D3). 본문·선택은 그 길이 정한다.
+  override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting: Bool) {
+    if !isApplyingMultiCursor {
+      dropMultiCursor()
+      wordFromCaret = nil
+    }
+    super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
+  }
+
+  override func shouldChangeText(inRanges affectedRanges: [NSValue], replacementStrings: [String]?) -> Bool {
+    if !isApplyingMultiCursor { dropMultiCursor() }
+    return super.shouldChangeText(inRanges: affectedRanges, replacementStrings: replacementStrings)
+  }
+
+  override func shouldChangeText(in affectedCharRange: NSRange, replacementString: String?) -> Bool {
+    if !isApplyingMultiCursor { dropMultiCursor() }
+    return super.shouldChangeText(in: affectedCharRange, replacementString: replacementString)
   }
 
   /// 떠 있는 판(⇧⌘S)을 열기 전: 조합을 끝내고 키보드 초점을 내려놓는다. 커서·선택은 그대로 남는다.
@@ -403,6 +480,7 @@ final class ManuscriptTextView: NSTextView {
   /// 검색 뒤 글이 바뀌어 그 자리에 문구가 없으면 가장 가까운 같은 문구로 간다. 문구가 아예 없으면 움직이지 않는다.
   func reveal(_ target: TextReveal) {
     finishComposition()
+    endMultiCursor()
     let text = string as NSString
     var range = NSRange(location: target.location, length: target.length)
     let options: NSString.CompareOptions = target.caseSensitive ? [] : [.caseInsensitive]

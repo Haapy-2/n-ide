@@ -23,6 +23,15 @@ public struct MultiCursor: Equatable, Sendable {
     self.wholeWord = wholeWord
   }
 
+  /// 되돌리기로 돌아온 자리들. 합친 뒤 둘 이상이어야 여러 커서다.
+  public init?(ranges: [NSRange], wholeWord: Bool) {
+    let merged = Self.merged(ranges)
+    guard merged.count > 1, merged.allSatisfy({ $0.location != NSNotFound && $0.location >= 0 }) else { return nil }
+    self.ranges = merged
+    newest = merged.count - 1
+    self.wholeWord = wholeWord
+  }
+
   public enum Addition: Equatable, Sendable {
     case added(NSRange)
     /// 더 찾을 곳이 없다(모두 골랐거나 처음부터 하나뿐).

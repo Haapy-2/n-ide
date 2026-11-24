@@ -8,6 +8,8 @@ enum ShortcutCommand: String, CaseIterable, Identifiable {
   case saveWithSnapshot
   case takeSnapshot, showSnapshots
   case searchProject
+  /// 같은 말 하나 더 고르기(⌘D, PLAN 16장). 편집기에 키보드 초점이 있을 때만 일한다.
+  case selectNextOccurrence
   case newEpisode, previousEpisode, nextEpisode, renameEpisode, trashEpisode, episodeGoal
   /// 회차 묶음. 기본 단축키 없음.
   case groupEpisodes, ungroupEpisodes
@@ -25,6 +27,7 @@ enum ShortcutCommand: String, CaseIterable, Identifiable {
     case .takeSnapshot: "스냅샷 찍기"
     case .showSnapshots: "스냅샷 보기…"
     case .searchProject: "작품 전체 검색"
+    case .selectNextOccurrence: "같은 말 하나 더 고르기"
     case .newEpisode: "새 회차"
     case .previousEpisode: "이전 회차"
     case .nextEpisode: "다음 회차"
@@ -40,7 +43,7 @@ enum ShortcutCommand: String, CaseIterable, Identifiable {
     switch self {
     case .newProject, .openOther, .switchProject, .saveNow, .saveWithSnapshot: .file
     case .takeSnapshot, .showSnapshots: .snapshot
-    case .searchProject: .edit
+    case .searchProject, .selectNextOccurrence: .edit
     case .newEpisode, .previousEpisode, .nextEpisode, .renameEpisode, .trashEpisode, .episodeGoal, .groupEpisodes, .ungroupEpisodes: .episode
     }
   }
@@ -57,6 +60,7 @@ enum ShortcutCommand: String, CaseIterable, Identifiable {
     case .takeSnapshot: KeyCombo("s", [.command, .control])
     case .showSnapshots: KeyCombo("s", [.command, .shift])
     case .searchProject: KeyCombo("f", [.command, .shift])
+    case .selectNextOccurrence: KeyCombo("d", [.command])
     case .newEpisode: KeyCombo("n", [.command])
     case .previousEpisode: KeyCombo(.upArrow, [.command, .option])
     case .nextEpisode: KeyCombo(.downArrow, [.command, .option])
