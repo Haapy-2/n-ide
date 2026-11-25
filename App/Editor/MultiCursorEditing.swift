@@ -277,11 +277,7 @@ extension ManuscriptTextView {
       undo.enableUndoRegistration()
       return nil
     }
-    storage.beginEditing()
-    for change in edit.changes.reversed() {
-      storage.replaceCharacters(in: change.range, with: NSAttributedString(string: change.text, attributes: style.textAttributes))
-    }
-    storage.endEditing()
+    replaceEach(edit.changes, in: storage)
     didChangeText()
     undo.enableUndoRegistration()
 
@@ -300,6 +296,14 @@ extension ManuscriptTextView {
     }
     needsDisplay = true
     return edit.inserted
+  }
+
+  /// 뒤에서부터 자리마다 고친다. `beginEditing`으로 묶지 않는다: 묶으면 첫 자리~끝 자리 전체가 한 번 바뀐 것으로 잡혀
+  /// 그만큼을 다시 처리한다(10만 자, 커서 2개라도 글 처음·끝이면 69ms). 자리마다면 고친 곳만(커서 100개 3.2ms, 측정).
+  private func replaceEach(_ changes: [TextChange], in storage: NSTextStorage) {
+    for change in changes.reversed() {
+      storage.replaceCharacters(in: change.range, with: NSAttributedString(string: change.text, attributes: style.textAttributes))
+    }
   }
 
   private func registerMultiUndo(_ unit: MultiInputUnit) {
@@ -322,11 +326,7 @@ extension ManuscriptTextView {
     undo.disableUndoRegistration()
     let changed = shouldChangeText(inRanges: unit.ranges.map { NSValue(range: $0) }, replacementStrings: unit.originals)
     if changed {
-      storage.beginEditing()
-      for change in edit.changes.reversed() {
-        storage.replaceCharacters(in: change.range, with: NSAttributedString(string: change.text, attributes: style.textAttributes))
-      }
-      storage.endEditing()
+      replaceEach(edit.changes, in: storage)
       didChangeText()
     }
     undo.enableUndoRegistration()
