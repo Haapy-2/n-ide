@@ -222,6 +222,41 @@ extension ManuscriptTextView {
     }
   }
 
+  // MARK: - 복사와 붙여 넣기 (16장 E7)
+
+  /// ⌘C: 고른 글을 줄바꿈으로 이어 복사(VS Code). 모두 빈 선택이면 아무것도 하지 않는다(커서 하나일 때와 같다).
+  func multiCursorCopy(to pasteboard: NSPasteboard) {
+    guard let session = multiCursor,
+      let text = MultiCursor.copiedText(session.cursor.ranges, in: string as NSString)
+    else { return }
+    pasteboard.clearContents()
+    pasteboard.setString(text, forType: .string)
+  }
+
+  /// ⌘X: 복사한 뒤 고른 글을 모든 자리에서 지운다(⌘Z 한 단위).
+  func multiCursorCut(to pasteboard: NSPasteboard) {
+    guard let session = multiCursor, session.cursor.ranges.contains(where: { $0.length > 0 }) else { return }
+    finishComposition()
+    multiCursorCopy(to: pasteboard)
+    let ranges = session.cursor.ranges
+    let targets = MultiCursor.deleteTargets(ranges, to: ranges.map(\.location))
+    guard let inserted = applyMultiCursor(targets, texts: targets.map { _ in "" }, extendingInput: false) else { return }
+    session.cursor.place(inserted)
+    selectPrimary()
+  }
+
+  /// ⌘V: 줄 수가 커서 수와 같으면 한 줄씩, 아니면 모든 자리에 같은 글(⌘Z 한 단위). 글이 아닌 것(그림)은 넣지 않는다.
+  func multiCursorPaste(from pasteboard: NSPasteboard) {
+    guard let session = multiCursor, let text = pasteboard.string(forType: .string) else { return }
+    finishComposition()
+    let ranges = session.cursor.ranges
+    let texts = MultiCursor.pasteTexts(text, count: ranges.count)
+    guard let inserted = applyMultiCursor(ranges, texts: texts, extendingInput: false) else { return }
+    session.cursor.place(inserted.map { NSRange(location: NSMaxRange($0), length: 0) })
+    selectPrimary()
+    scrollRangeToVisible(session.cursor.ranges[0])
+  }
+
   // MARK: - 고치기와 되돌리기
 
   /// 자리마다 한 번에 고친다. 메인 스레드에서 기다림 없이 끝난다(16장 D6). 고쳤으면 자리마다 새 글이 놓인 범위.

@@ -315,4 +315,63 @@ final class MultiCursorEditingTests: XCTestCase {
     let background = self.pixel(at: center) { rep in view.cacheDisplay(in: view.bounds, to: rep) }
     XCTAssertEqual(pixel, background, "맨 앞 커서가 지워진 그림에는 다른 자리 커서도 없어야 한다")
   }
+
+  // MARK: - 복사와 붙여 넣기
+
+  /// 사용자 클립보드를 건드리지 않게 테스트마다 따로 쓰는 붙여 넣기 판
+  private let board = NSPasteboard(name: NSPasteboard.Name("NovelEditorTests-\(UUID().uuidString)"))
+
+  func testCopyJoinsSelectionsAndPasteSpreadsThemBack() {
+    view.replaceAllText(with: "민준 가 도윤 나 서연")
+    view.multiCursor = MultiCursorSession(cursor: MultiCursor(
+      ranges: [NSRange(location: 0, length: 2), NSRange(location: 5, length: 2), NSRange(location: 10, length: 2)], wholeWord: false)!)
+
+    view.multiCursorCopy(to: board)
+    XCTAssertEqual(board.string(forType: .string), "민준\n도윤\n서연")
+
+    board.clearContents()
+    board.setString("하나\n둘\n셋\n", forType: .string)
+    key { view.multiCursorPaste(from: board) }
+    XCTAssertEqual(view.string, "하나 가 둘 나 셋", "끝 줄바꿈을 떼면 세 줄 = 커서 셋")
+    XCTAssertEqual(view.multiCursorRanges?.map(\.location), [2, 6, 10])
+
+    undo.undo()
+    XCTAssertEqual(view.string, "민준 가 도윤 나 서연", "⌘Z 한 번")
+  }
+
+  func testPasteSameTextEverywhereWhenLineCountDiffers() {
+    selectThree()
+    board.clearContents()
+    board.setString("가\n나", forType: .string)
+
+    key { view.multiCursorPaste(from: board) }
+
+    XCTAssertEqual(view.string, "가\n나 가 가\n나 나 가\n나")
+  }
+
+  func testCutRemovesEverySelectionAsOneUndo() {
+    selectThree()
+
+    key { view.multiCursorCut(to: board) }
+
+    XCTAssertEqual(board.string(forType: .string), "민준\n민준\n민준")
+    XCTAssertEqual(view.string, " 가  나 ")
+    XCTAssertEqual(view.multiCursorRanges?.map(\.location), [0, 3, 6])
+    undo.undo()
+    XCTAssertEqual(view.string, "민준 가 민준 나 민준")
+  }
+
+  func testCopyWithOnlyCaretsLeavesClipboardAlone() {
+    selectThree()
+    key { view.insertText("가", replacementRange: none) }
+    board.clearContents()
+    board.setString("그대로", forType: .string)
+
+    view.multiCursorCopy(to: board)
+    key { view.multiCursorCut(to: board) }
+
+    XCTAssertEqual(board.string(forType: .string), "그대로")
+    XCTAssertEqual(view.string, "가 가 가 나 가")
+  }
 }
+

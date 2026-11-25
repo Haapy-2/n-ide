@@ -192,8 +192,14 @@ extension ManuscriptTextView {
       target = visualLine(at: next)
     }
     guard target.length > 0, let row = caretLine(at: target.location) else { return (target.location, x) }
-    // 클릭과 같은 길로 고른다: 한 글자 가운데(자모를 따로 적은 한글 등)에 서지 않는다.
-    let head = characterIndexForInsertion(at: NSPoint(x: x + textContainerOrigin.x, y: row.midY + textContainerOrigin.y))
+    // `characterIndexForInsertion`(클릭과 같은 길)은 커서 1,000개에 33ms라(Debug 측정) 글자 칸으로 직접 고른다.
+    // 한 글자 가운데(자모를 따로 적은 한글 등)에 서지 않게 그 글자 앞뒤 중 가까운 쪽으로.
+    guard let layoutManager, let textContainer else { return (index, x) }
+    var fraction: CGFloat = 0
+    let glyph = layoutManager.glyphIndex(for: NSPoint(x: x, y: row.midY), in: textContainer, fractionOfDistanceThroughGlyph: &fraction)
+    let character = layoutManager.characterIndexForGlyph(at: glyph)
+    let composed = (string as NSString).rangeOfComposedCharacterSequence(at: min(character, length - 1))
+    let head = fraction > 0.5 ? NSMaxRange(composed) : composed.location
     return (min(max(head, target.location), lineContentEnd(target)), x)
   }
 }

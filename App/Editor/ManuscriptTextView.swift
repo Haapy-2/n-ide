@@ -454,6 +454,26 @@ final class ManuscriptTextView: NSTextView {
     super.doCommand(by: selector)
   }
 
+  override func copy(_ sender: Any?) {
+    guard multiCursor == nil else { return multiCursorCopy(to: .general) }
+    super.copy(sender)
+  }
+
+  override func cut(_ sender: Any?) {
+    guard multiCursor == nil else { return multiCursorCut(to: .general) }
+    super.cut(sender)
+  }
+
+  override func paste(_ sender: Any?) {
+    guard multiCursor == nil else { return multiCursorPaste(from: .general) }
+    super.paste(sender)
+  }
+
+  override func pasteAsPlainText(_ sender: Any?) {
+    guard multiCursor == nil else { return multiCursorPaste(from: .general) }
+    super.pasteAsPlainText(sender)
+  }
+
   // 여러 커서 코드가 아닌 길(클릭, 전체 선택, 붙여 넣기, 다른 되돌리기 기록)이 선택이나 본문을 바꾸면 다른 자리는 낡는다.
   // 그 길이 바꾸기 전에 여러 커서를 버린다(PLAN 16장 D3). 본문·선택은 그 길이 정한다.
   override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting: Bool) {
