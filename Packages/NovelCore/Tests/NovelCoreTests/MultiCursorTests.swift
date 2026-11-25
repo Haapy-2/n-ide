@@ -166,22 +166,24 @@ struct MultiCursorTests {
 
   // MARK: - 지우기
 
-  @Test func deleteBackwardTakesWholeCharacterOrSelection() {
-    let text = "가👍🏽 나다"
-    let emojiEnd = range(of: "👍🏽", in: text).location + range(of: "👍🏽", in: text).length
+  @Test func deleteTargetsTakeSelectionOrUpToStop() {
+    let text = "가👍🏽 나다" as NSString
+    let emoji = text.range(of: "👍🏽")
+    let ranges = [NSRange(location: 0, length: 0), NSRange(location: NSMaxRange(emoji), length: 0), NSRange(location: NSMaxRange(emoji) + 1, length: 2)]
 
-    let targets = MultiCursor.deleteBackwardTargets(
-      [NSRange(location: 0, length: 0), NSRange(location: emojiEnd, length: 0), NSRange(location: emojiEnd + 1, length: 2)],
-      in: text)
+    let targets = MultiCursor.deleteTargets(ranges, to: ranges.map { MultiCursor.characterStart(before: $0.location, in: text) })
 
-    #expect(targets == [NSRange(location: 0, length: 0), range(of: "👍🏽", in: text), NSRange(location: emojiEnd + 1, length: 2)])
+    #expect(targets == [NSRange(location: 0, length: 0), emoji, NSRange(location: NSMaxRange(emoji) + 1, length: 2)], "⌫: 맨 앞은 빈 범위, 이모지는 통째로, 선택은 그대로")
+    let forward = MultiCursor.deleteTargets([NSRange(location: 1, length: 0)], to: [MultiCursor.characterEnd(after: 1, in: text)])
+    #expect(forward == [emoji], "⌦도 같은 함수로")
   }
 
   /// 맞닿은 커서를 지우면 한 자리에서 만나 하나로 합쳐진다(E4).
   @Test func cursorsThatMeetMerge() throws {
     var cursor = try #require(MultiCursor(selection: NSRange(location: 0, length: 1), wholeWord: false))
     _ = cursor.addNext(in: "가가가")
-    let targets = MultiCursor.deleteBackwardTargets(cursor.ranges, in: "가가가")
+    let targets = MultiCursor.deleteTargets(
+      cursor.ranges, to: cursor.ranges.map { MultiCursor.characterStart(before: $0.location, in: "가가가") })
     let edit = try #require(MultiCursor.edit(targets, texts: targets.map { _ in "" }, textLength: 3))
 
     cursor.place(edit.inserted)
@@ -197,5 +199,82 @@ struct MultiCursorTests {
     ])
 
     #expect(merged == [NSRange(location: 0, length: 4), NSRange(location: 5, length: 0), NSRange(location: 7, length: 1)])
+  }
+
+  // MARK: - 움직이기 (E5)
+
+  private func twoCarets(_ first: Int, _ second: Int) throws -> MultiCursor {
+    try #require(MultiCursor(ranges: [NSRange(location: first, length: 0), NSRange(location: second, length: 0)], wholeWord: false))
+  }
+
+  /// ⇧로 늘리면 붙박인 끝은 그대로라, 반대로 움직이면 선택이 줄어든다.
+  @Test func extendingKeepsAnchorSoReverseShrinks() throws {
+    var cursor = try twoCarets(2, 10)
+
+    cursor.move(to: [4, 12], extending: true)
+    #expect(cursor.ranges == [NSRange(location: 2, length: 2), NSRange(location: 10, length: 2)])
+    cursor.move(to: [3, 11], extending: true)
+    #expect(cursor.ranges == [NSRange(location: 2, length: 1), NSRange(location: 10, length: 1)])
+    cursor.move(to: [1, 9], extending: true)
+    #expect(cursor.selections == [.init(anchor: 2, head: 1), .init(anchor: 10, head: 9)], "붙박인 끝을 넘으면 방향이 바뀐다")
+    cursor.move(to: [5, 13], extending: false)
+    #expect(cursor.ranges == [NSRange(location: 5, length: 0), NSRange(location: 13, length: 0)])
+  }
+
+  /// ⌘D로 고른 선택은 앞에서 뒤로: ⇧←는 끝을 당겨 줄인다.
+  @Test func findSelectionsAreForward() throws {
+    let text = "민준 가 민준"
+    var cursor = try #require(MultiCursor(selection: range(of: "민준", in: text), wholeWord: false))
+    _ = cursor.addNext(in: text)
+
+    #expect(cursor.selections == [.init(anchor: 0, head: 2), .init(anchor: 5, head: 7)])
+    cursor.move(to: cursor.selections.map { $0.head - 1 }, extending: true)
+    #expect(words(cursor, in: text) == ["민", "민"])
+  }
+
+  /// 움직여 만난 커서는 하나로, 겹친 선택은 첫 선택의 방향으로 합친다(E4).
+  @Test func movedCursorsThatMeetMerge() throws {
+    var carets = try twoCarets(3, 5)
+    carets.move(to: [0, 0], extending: false)
+    #expect(carets.ranges == [NSRange(location: 0, length: 0)])
+
+    var left = try twoCarets(3, 5)
+    left.move(to: [0, 2], extending: true)
+    #expect(left.selections == [.init(anchor: 5, head: 0)], "⇧←로 겹친 선택은 계속 왼쪽으로 늘어난다")
+
+    var right = try twoCarets(3, 5)
+    right.move(to: [6, 8], extending: true)
+    #expect(right.selections == [.init(anchor: 3, head: 8)])
+  }
+
+  @Test func characterAndParagraphBoundaries() {
+    let text = "가👍🏽\n둘째 줄\n" as NSString
+    let emoji = text.range(of: "👍🏽")
+    #expect(MultiCursor.characterEnd(after: 1, in: text) == NSMaxRange(emoji))
+    #expect(MultiCursor.characterStart(before: NSMaxRange(emoji), in: text) == 1)
+    #expect(MultiCursor.characterEnd(after: text.length, in: text) == text.length)
+    #expect(MultiCursor.characterStart(before: 0, in: text) == 0)
+    let second = text.range(of: "둘째").location
+    #expect(MultiCursor.paragraphStart(at: second + 3, in: text) == second)
+    #expect(MultiCursor.paragraphEnd(at: second, in: text) == text.range(of: "줄").location + 1, "줄바꿈 앞")
+    #expect(MultiCursor.paragraphEnd(at: 0, in: text) == NSMaxRange(emoji))
+  }
+
+  // MARK: - 복사와 붙여 넣기 (E7)
+
+  @Test func copyJoinsSelectionsWithNewlines() {
+    let text = "민준 가 도윤 나" as NSString
+    let ranges = [text.range(of: "민준"), NSRange(location: 3, length: 0), text.range(of: "도윤")]
+
+    #expect(MultiCursor.copiedText(ranges, in: text) == "민준\n도윤", "빈 선택은 뺀다")
+    #expect(MultiCursor.copiedText([NSRange(location: 1, length: 0)], in: text) == nil)
+  }
+
+  @Test func pasteSpreadsLinesOnlyWhenCountsMatch() {
+    #expect(MultiCursor.pasteTexts("가\n나\n다", count: 3) == ["가", "나", "다"])
+    #expect(MultiCursor.pasteTexts("가\n나\n다\n", count: 3) == ["가", "나", "다"], "끝 줄바꿈 하나는 뗀다")
+    #expect(MultiCursor.pasteTexts("가\r\n나\r\n", count: 2) == ["가", "나"])
+    #expect(MultiCursor.pasteTexts("가\n나", count: 3) == ["가\n나", "가\n나", "가\n나"], "수가 다르면 모든 자리에 같은 글")
+    #expect(MultiCursor.pasteTexts("가", count: 2) == ["가", "가"])
   }
 }

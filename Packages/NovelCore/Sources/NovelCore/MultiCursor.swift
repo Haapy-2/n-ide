@@ -9,7 +9,26 @@ public struct MultiCursor: Equatable, Sendable {
   /// 커서 수 한도(16장 P1). 넘으면 더 늘리지 않고 알린다.
   public static let limit = 1_000
 
-  public private(set) var ranges: [NSRange]
+  /// 한 자리의 선택. `anchor`는 ⇧로 늘릴 때 붙박인 끝, `head`는 움직이는 끝(커서가 깜빡이는 곳).
+  public struct Selection: Equatable, Sendable {
+    public var anchor: Int
+    public var head: Int
+
+    public init(anchor: Int, head: Int) {
+      self.anchor = anchor
+      self.head = head
+    }
+
+    /// 앞에서 뒤로 고른 선택(⌘D, 입력 뒤)
+    public init(_ range: NSRange) {
+      self.init(anchor: range.location, head: NSMaxRange(range))
+    }
+
+    public var range: NSRange { NSRange(location: min(anchor, head), length: abs(head - anchor)) }
+  }
+
+  public private(set) var selections: [Selection]
+  public var ranges: [NSRange] { selections.map(\.range) }
   /// 마지막으로 더한 자리(`ranges`의 번호). 다음 일치는 그 뒤에서 찾는다.
   public private(set) var newest: Int
   /// 커서만 있던 자리에서 시작했으면 단어 전체로만 찾는다(VS Code와 같다).
@@ -18,7 +37,7 @@ public struct MultiCursor: Equatable, Sendable {
   /// 첫 ⌘D의 선택. 빈 선택이면 nil: 커서 아래 단어 고르기는 편집기가 한다(글자 배치가 정하는 단어 경계).
   public init?(selection: NSRange, wholeWord: Bool) {
     guard selection.length > 0, selection.location != NSNotFound else { return nil }
-    ranges = [selection]
+    selections = [Selection(selection)]
     newest = 0
     self.wholeWord = wholeWord
   }
@@ -27,7 +46,7 @@ public struct MultiCursor: Equatable, Sendable {
   public init?(ranges: [NSRange], wholeWord: Bool) {
     let merged = Self.merged(ranges)
     guard merged.count > 1, merged.allSatisfy({ $0.location != NSNotFound && $0.location >= 0 }) else { return nil }
-    self.ranges = merged
+    selections = merged.map(Selection.init)
     newest = merged.count - 1
     self.wholeWord = wholeWord
   }
@@ -54,15 +73,40 @@ public struct MultiCursor: Equatable, Sendable {
       ?? firstMatch(of: query, in: text, from: 0, to: text.length)
     guard let found else { return .noMore }
     let index = ranges.firstIndex { $0.location > found.location } ?? ranges.count
-    ranges.insert(found, at: index)
+    selections.insert(Selection(found), at: index)
     newest = index
     return .added(found)
   }
 
   /// 고친 뒤의 자리로 바꾼다. 겹치거나 맞닿은 같은 자리는 하나로 합친다(지우다 커서가 만나면).
   public mutating func place(_ newRanges: [NSRange]) {
+    replaceSelections(newRanges.map(Selection.init))
+  }
+
+  /// 자리마다 움직이는 끝을 `heads[i]`로 옮긴다(앞에서부터 같은 순서). `extending`이면 붙박인 끝은 그대로(⇧),
+  /// 아니면 커서만 남는다. 만난 자리는 합친다: 하나만 남으면 부르는 쪽이 여러 커서를 끝낸다.
+  public mutating func move(to heads: [Int], extending: Bool) {
+    guard heads.count == selections.count else { return }
+    replaceSelections(zip(selections, heads).map { Selection(anchor: extending ? $0.anchor : $1, head: $1) })
+  }
+
+  /// 겹치는 선택과 같은 자리 커서는 하나로. 합친 선택의 방향은 그 묶음의 첫 선택을 따른다
+  /// (⇧←로 맞닿은 선택은 계속 왼쪽으로, ⇧→는 오른쪽으로 늘어나게).
+  private mutating func replaceSelections(_ new: [Selection]) {
     let newestLocation = ranges[newest].location
-    ranges = Self.merged(newRanges)
+    var result: [Selection] = []
+    for selection in new.sorted(by: { ($0.range.location, $0.range.length) < ($1.range.location, $1.range.length) }) {
+      let range = selection.range
+      guard let last = result.last, range.location < NSMaxRange(last.range) || range.location == last.range.location else {
+        result.append(selection)
+        continue
+      }
+      let union = NSUnionRange(last.range, range)
+      result[result.count - 1] = last.head < last.anchor
+        ? Selection(anchor: NSMaxRange(union), head: union.location)
+        : Selection(anchor: union.location, head: NSMaxRange(union))
+    }
+    selections = result
     newest = ranges.lastIndex { $0.location <= newestLocation } ?? 0
   }
 
@@ -150,16 +194,59 @@ public struct MultiCursor: Equatable, Sendable {
     return targets
   }
 
-  /// ⌫: 선택이 있으면 그 선택, 커서만 있으면 바로 앞 한 글자(이모지·결합 글자는 통째로), 맨 앞이면 빈 범위.
+  /// 지우기 키(⌫·⌦·⌥⌫·⌘⌫ 등): 선택이 있으면 그 선택, 커서만 있으면 커서와 `stops[i]` 사이(편집기가 키마다 정한 곳).
   /// 앞 자리의 지울 곳과 겹치면(맞닿은 커서) 하나로 합친다.
-  public static func deleteBackwardTargets(_ ranges: [NSRange], in text: String) -> [NSRange] {
-    let text = text as NSString
-    let targets = ranges.map { range -> NSRange in
+  public static func deleteTargets(_ ranges: [NSRange], to stops: [Int]) -> [NSRange] {
+    let targets = zip(ranges, stops).map { range, stop -> NSRange in
       guard range.length == 0 else { return range }
-      guard range.location > 0 else { return range }
-      return text.rangeOfComposedCharacterSequence(at: range.location - 1)
+      return NSRange(location: min(range.location, stop), length: abs(stop - range.location))
     }
     return merged(targets)
+  }
+
+  // MARK: - 글자·문단 경계 (화살표·지우기)
+
+  /// 한 글자 뒤(이모지·결합 글자·자모를 따로 적은 한글은 통째로). 끝이면 그대로.
+  public static func characterEnd(after index: Int, in text: NSString) -> Int {
+    guard index < text.length else { return text.length }
+    return NSMaxRange(text.rangeOfComposedCharacterSequence(at: index))
+  }
+
+  /// 한 글자 앞. 맨 앞이면 그대로.
+  public static func characterStart(before index: Int, in text: NSString) -> Int {
+    guard index > 0 else { return 0 }
+    return text.rangeOfComposedCharacterSequence(at: min(index, text.length) - 1).location
+  }
+
+  /// 문단 처음(⌃A, ⌥↑의 둘째 단계)
+  public static func paragraphStart(at index: Int, in text: NSString) -> Int {
+    text.paragraphRange(for: NSRange(location: min(index, text.length), length: 0)).location
+  }
+
+  /// 문단 끝, 줄바꿈 앞(⌃E, ⌥↓의 둘째 단계)
+  public static func paragraphEnd(at index: Int, in text: NSString) -> Int {
+    var end = 0
+    var contentsEnd = 0
+    text.getParagraphStart(nil, end: &end, contentsEnd: &contentsEnd, for: NSRange(location: min(index, text.length), length: 0))
+    return contentsEnd
+  }
+
+  // MARK: - 복사와 붙여 넣기 (E7)
+
+  /// ⌘C·⌘X: 고른 글을 앞에서부터 줄바꿈으로 잇는다(VS Code). 빈 선택은 빼고, 모두 비었으면 nil(복사하지 않음).
+  public static func copiedText(_ ranges: [NSRange], in text: NSString) -> String? {
+    let parts = ranges.filter { $0.length > 0 && NSMaxRange($0) <= text.length }.map { text.substring(with: $0) }
+    return parts.isEmpty ? nil : parts.joined(separator: "\n")
+  }
+
+  /// 붙여 넣을 글을 자리마다(VS Code `multiCursorPaste: spread`): 끝 줄바꿈 하나를 뗀 줄 수가 커서 수와 같으면
+  /// 한 줄씩, 아니면 모든 자리에 같은 글.
+  public static func pasteTexts(_ text: String, count: Int) -> [String] {
+    var trimmed = text
+    // "\r\n"은 Swift에서 한 글자라 `hasSuffix("\n")`로는 안 잡힌다.
+    if trimmed.hasSuffix("\r\n") || trimmed.hasSuffix("\n") || trimmed.hasSuffix("\r") { trimmed.removeLast() }
+    let lines = trimmed.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: CharacterSet(charactersIn: "\n\r"))
+    return lines.count == count ? lines : Array(repeating: text, count: count)
   }
 
   /// 앞에서부터 놓고, 겹치는 범위와 같은 자리의 빈 범위는 하나로 합친다.

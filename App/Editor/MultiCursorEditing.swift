@@ -8,6 +8,8 @@ final class MultiCursorSession {
   var marked: [NSRange]?
   /// 지금 만들고 있는 한 글자의 되돌리기 기록. 입력기가 그 글자를 고치는 동안은 같은 기록의 범위만 늘린다.
   var input: MultiInputUnit?
+  /// 위아래로 잇달아 움직이는 동안 자리마다 지킬 가로 위치(짧은 줄을 지나도 돌아오게). 다른 명령이 오면 잊는다.
+  var goalX: [CGFloat]?
 
   init(cursor: MultiCursor) {
     self.cursor = cursor
@@ -176,22 +178,20 @@ extension ManuscriptTextView {
     return MultiCursor.targets(forReplacement: replacementRange, around: anchors, textLength: (string as NSString).length)
   }
 
-  /// 키 명령(⌫·엔터·탭·Esc). 처리했으면 true. 아직 여러 커서로 하지 않는 명령은 여러 커서를 끝내고 false.
+  /// 키 명령(화살표·지우기·엔터·탭·Esc). 처리했으면 true. 아직 여러 커서로 하지 않는 명령은 여러 커서를 끝내고 false.
   func multiCursorDoCommand(_ selector: Selector) -> Bool {
     guard let session = multiCursor else { return false }
-    switch selector {
-    case #selector(deleteBackward(_:)):
-      let targets = MultiCursor.deleteBackwardTargets(session.cursor.ranges, in: string)
-      guard targets.contains(where: { $0.length > 0 }),
-        let inserted = applyMultiCursor(targets, texts: targets.map { _ in "" }, extendingInput: false)
-      else { return true }
-      session.cursor.place(inserted)
-      if session.cursor.ranges.count < 2 {
-        endMultiCursor()
-      } else {
-        selectPrimary()
-      }
+    if let (motion, extending) = Self.multiCursorMoves[selector] {
+      moveMultiCursor(motion, extending: extending)
       return true
+    }
+    if Self.multiCursorScrolls.contains(selector) { return false }
+    session.goalX = nil
+    if let motion = Self.multiCursorDeletions[selector] {
+      deleteAtMultiCursor(motion)
+      return true
+    }
+    switch selector {
     case #selector(insertNewline(_:)), #selector(insertParagraphSeparator(_:)):
       return multiCursorInsertText("\n", replacementRange: NSRange(location: NSNotFound, length: 0))
     case #selector(insertTab(_:)):
@@ -202,6 +202,23 @@ extension ManuscriptTextView {
     default:
       endMultiCursor()
       return false
+    }
+  }
+
+  /// 지우기 키: 자리마다 선택이 있으면 그 선택, 커서만 있으면 커서에서 `motion`만큼. 모든 자리가 ⌘Z 한 단위.
+  private func deleteAtMultiCursor(_ motion: CursorMotion) {
+    guard let session = multiCursor else { return }
+    let ranges = session.cursor.ranges
+    let stops = ranges.map { $0.length > 0 ? $0.location : deletionStop(motion, from: $0.location) }
+    let targets = MultiCursor.deleteTargets(ranges, to: stops)
+    guard targets.contains(where: { $0.length > 0 }),
+      let inserted = applyMultiCursor(targets, texts: targets.map { _ in "" }, extendingInput: false)
+    else { return }
+    session.cursor.place(inserted)
+    if session.cursor.ranges.count < 2 {
+      endMultiCursor()
+    } else {
+      selectPrimary()
     }
   }
 
@@ -216,6 +233,7 @@ extension ManuscriptTextView {
     let text = string as NSString
     let originals = targets.map { text.substring(with: $0) }
     let cursorsBefore = session.cursor.ranges
+    session.goalX = nil
     isApplyingMultiCursor = true
     defer { isApplyingMultiCursor = false }
     let undo = episodeUndoManager
@@ -342,23 +360,37 @@ extension ManuscriptTextView {
   }
 
   func extraCaretRect(at index: Int) -> NSRect? {
+    guard let line = caretLine(at: index) else { return nil }
+    return caretRect(in: line.offsetBy(dx: textContainerOrigin.x, dy: textContainerOrigin.y))
+  }
+
+  /// `index` 앞에 놓인 커서의 줄 칸(글 상자 좌표, 폭 1pt, x가 커서 자리). 줄이 접히는 자리는 다음 줄 처음.
+  func caretLine(at index: Int) -> NSRect? {
     guard let layoutManager, let textContainer else { return nil }
     let length = (string as NSString).length
     guard index <= length else { return nil }
-    var line: NSRect
-    var x: CGFloat
+    if index == length { layoutManager.ensureLayout(for: textContainer) }
     if length == 0 || (index == length && layoutManager.extraLineFragmentTextContainer != nil) {
-      line = layoutManager.extraLineFragmentRect
-      x = line.minX + textContainer.lineFragmentPadding
-    } else {
-      let glyph = layoutManager.glyphIndexForCharacter(at: min(index, length - 1))
-      line = layoutManager.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
-      let box = layoutManager.boundingRect(forGlyphRange: NSRange(location: glyph, length: 1), in: textContainer)
-      x = index < length ? box.minX : box.maxX
+      var line = layoutManager.extraLineFragmentRect
+      line.origin.x += textContainer.lineFragmentPadding
+      line.size.width = 1
+      return line
     }
-    line.origin.x = x
+    // 글자 상자(`boundingRect`)는 글자 모양이 그려지는 넓이라 커서 자리와 다르다(Pretendard에서 12pt쯤).
+    // 커서 자리는 그 글자가 놓인 자리(`location`), 글 끝은 빈 범위의 선택 칸.
+    let glyph = layoutManager.glyphIndexForCharacter(at: index)
+    var line = layoutManager.lineFragmentRect(forGlyphAt: min(glyph, layoutManager.numberOfGlyphs - 1), effectiveRange: nil)
+    if glyph < layoutManager.numberOfGlyphs {
+      line.origin.x += layoutManager.location(forGlyphAt: glyph).x
+    } else {
+      let empty = NSRange(location: glyph, length: 0)
+      layoutManager.enumerateEnclosingRects(forGlyphRange: empty, withinSelectedGlyphRange: empty, in: textContainer) { rect, stop in
+        line.origin.x = rect.minX
+        stop.pointee = true
+      }
+    }
     line.size.width = 1
-    return caretRect(in: line.offsetBy(dx: textContainerOrigin.x, dy: textContainerOrigin.y))
+    return line
   }
 
   private func updateMarkedUnderline() {
