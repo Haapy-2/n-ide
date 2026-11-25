@@ -310,7 +310,7 @@ extension ManuscriptTextView {
     }
   }
 
-  /// 맨 앞 말고 다른 자리의 커서. 맨 앞 커서의 깜빡임에 맞춘다(`extraCaretsOn`).
+  /// 맨 앞 말고 다른 자리의 커서. 맨 앞 커서가 그려져 있을 때만(`extraCaretsOn`).
   func drawMultiCursorCarets(in rect: NSRect) {
     guard extraCaretsOn, let ranges = multiCursor?.cursor.ranges.dropFirst() else { return }
     insertionPointColor.setFill()
@@ -320,17 +320,28 @@ extension ManuscriptTextView {
     }
   }
 
-  /// 맨 앞 커서가 켜지고 꺼질 때 다른 커서 칸도 다시 그린다.
-  func syncExtraCarets(_ on: Bool) {
-    guard on != extraCaretsOn else { return }
-    extraCaretsOn = on
+  /// 시스템이 맨 앞 커서를 켜는 그리기 안에서 다른 커서도 그린다. 그 칸들은 `invalidateExtraCarets`로
+  /// 이 그리기에 들어와 있어, 다음 화면 갱신을 기다리지 않고 같은 순간에 켜진다.
+  func drawExtraCaretsWithFirst() {
+    extraCaretsOn = true
+    drawMultiCursorCarets(in: visibleRect)
+  }
+
+  /// 창이 비활성화되는 등 시스템이 커서를 직접 끌 때.
+  func turnOffExtraCarets() {
+    guard extraCaretsOn else { return }
+    extraCaretsOn = false
+    invalidateExtraCarets()
+  }
+
+  func invalidateExtraCarets() {
     guard let ranges = multiCursor?.cursor.ranges.dropFirst() else { return }
     for range in ranges where range.length == 0 {
       if let caret = extraCaretRect(at: range.location) { setNeedsDisplay(caret.insetBy(dx: -1, dy: -1)) }
     }
   }
 
-  private func extraCaretRect(at index: Int) -> NSRect? {
+  func extraCaretRect(at index: Int) -> NSRect? {
     guard let layoutManager, let textContainer else { return nil }
     let length = (string as NSString).length
     guard index <= length else { return nil }

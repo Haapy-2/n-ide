@@ -55,7 +55,7 @@ final class ManuscriptTextView: NSTextView {
   var isApplyingMultiCursor = false
   /// 커서만 있던 자리에서 ⌘D로 고른 단어. 다음 ⌘D가 단어 전체로 찾을지 정한다.
   var wordFromCaret: NSRange?
-  /// 맨 앞 커서의 깜빡임(다른 커서도 같이 켜고 끈다).
+  /// 맨 앞 커서가 지금 화면에 그려져 있나. 다른 자리 커서도 이 값대로 그린다(`MultiCursorEditing.swift`).
   var extraCaretsOn = false
 
   /// 회차마다 따로 쓰는 실행 취소 기록. 회차를 바꾸면 비운다(PLAN.md 세부 기준).
@@ -132,20 +132,24 @@ final class ManuscriptTextView: NSTextView {
     if multiCursor != nil { drawMultiCursorSelections(in: rect) }
   }
 
+  // 시스템은 커서를 끌 때 `drawInsertionPoint(turnedOn: false)`를 부르지 않고 그 칸을 다시 그리기만 한다.
+  // 그래서 맨 앞 커서 칸을 다시 그리면 꺼진 것으로 본다. 켜진 때면 이 그리기 바로 뒤에 시스템이 다시 켠다.
   override func draw(_ dirtyRect: NSRect) {
+    if multiCursor != nil, let last = lastCaretRect, needsToDraw(last) { extraCaretsOn = false }
     super.draw(dirtyRect)
     if multiCursor != nil { drawMultiCursorCarets(in: dirtyRect) }
   }
 
   // 커서 모양은 `InsertionCaret.swift`. 끌 때(깜빡임)는 원래 칸 전체를 지워 흔적이 남지 않게 한다.
   override func drawInsertionPoint(in rect: NSRect, color: NSColor, turnedOn flag: Bool) {
-    if multiCursor != nil { syncExtraCarets(flag) }
     if flag {
       let caret = caretRect(in: rect)
       if let last = lastCaretRect, last != caret { eraseCaret(last) }
       lastCaretRect = caret
       super.drawInsertionPoint(in: caret, color: color, turnedOn: true)
+      if multiCursor != nil { drawExtraCaretsWithFirst() }
     } else {
+      if multiCursor != nil { turnOffExtraCarets() }
       super.drawInsertionPoint(in: widenedForCaret(rect), color: color, turnedOn: false)
       if let last = lastCaretRect { eraseCaret(last) }
       lastCaretRect = nil
@@ -155,7 +159,7 @@ final class ManuscriptTextView: NSTextView {
   /// 창이 비활성화되거나 앱이 뒤로 가면 커서는 그려지지 않아야 한다. 남아 있는 칸을 지운다.
   @objc private func eraseCaretOnDeactivate(_ notification: Notification) {
     if let window = notification.object as? NSWindow, window !== self.window { return }
-    if multiCursor != nil { syncExtraCarets(false) }
+    if multiCursor != nil { turnOffExtraCarets() }
     guard let last = lastCaretRect else { return }
     eraseCaret(last)
     lastCaretRect = nil
@@ -169,14 +173,17 @@ final class ManuscriptTextView: NSTextView {
   // 글자를 고치면 NSTextView는 본문 칸 안만 다시 그리게 한다. 번호 칸은 그 왼쪽 여백이라, 줄이 밀려 내려가도
   // 옛 번호가 남는다. 줄 번호를 켰을 때만 다시 그릴 곳을 왼쪽 끝까지 넓힌다(본문 칸은 그대로라 비용은 여백 조금).
   // 커서 자국을 막으려고 가는 칸은 커서 두께만큼 넓힌다(`InsertionCaret.swift`).
+  // 맨 앞 커서 칸을 다시 그리라는 요청에는 다른 자리 커서 칸도 붙여, 깜빡임이 같은 그리기에서 같이 바뀌게 한다.
   override func setNeedsDisplay(_ invalidRect: NSRect) {
     let rect = widenedForCaret(invalidRect)
     super.setNeedsDisplay(showsLineNumbers ? widenedToGutter(rect) : rect)
+    if multiCursor != nil, isCaretSized(invalidRect) { invalidateExtraCarets() }
   }
 
   override func setNeedsDisplay(_ rect: NSRect, avoidAdditionalLayout flag: Bool) {
-    let rect = widenedForCaret(rect)
-    super.setNeedsDisplay(showsLineNumbers ? widenedToGutter(rect) : rect, avoidAdditionalLayout: flag)
+    let wide = widenedForCaret(rect)
+    super.setNeedsDisplay(showsLineNumbers ? widenedToGutter(wide) : wide, avoidAdditionalLayout: flag)
+    if multiCursor != nil, isCaretSized(rect) { invalidateExtraCarets() }
   }
 
   private func widenedToGutter(_ rect: NSRect) -> NSRect {

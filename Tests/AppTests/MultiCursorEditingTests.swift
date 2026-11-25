@@ -235,4 +235,84 @@ final class MultiCursorEditingTests: XCTestCase {
     XCTAssertNil(view.multiCursorRanges)
     XCTAssertEqual(view.selectedRange(), NSRange(location: 0, length: 2))
   }
+
+  // MARK: - 깜빡임
+
+  // 시스템은 커서를 켤 때만 `drawInsertionPoint(turnedOn: true)`를 부르고, 끌 때는 그 칸을 다시 그리기만 한다.
+  // 아래 두 테스트는 그 두 순간을 재생한다.
+
+  /// 세 자리에 한 글자씩 쳐서 모두 커서(길이 0)로 만든다. 그리려면 창 크기만 한 틀과 배치가 있어야 한다.
+  private func threeCarets() {
+    let scrollView = NSScrollView(frame: NSRect(x: 0, y: 0, width: 800, height: 300))
+    scrollView.documentView = view
+    view.setFrameSize(NSSize(width: 800, height: 300))
+    view.style = EditorStyle()
+    selectThree()
+    key { view.insertText("가", replacementRange: none) }
+    XCTAssertEqual(view.multiCursorRanges?.map(\.length), [0, 0, 0])
+    view.layoutManager?.ensureLayout(for: view.textContainer!)
+  }
+
+  /// 시스템이 주는 맨 앞 커서 칸(줄 높이, 폭 1pt).
+  private func systemCaretRect() -> NSRect {
+    let layoutManager = view.layoutManager!
+    let index = view.selectedRange().location
+    let glyph = layoutManager.glyphIndexForCharacter(at: index - 1)
+    var line = layoutManager.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
+    let box = layoutManager.boundingRect(forGlyphRange: NSRange(location: glyph, length: 1), in: view.textContainer!)
+    line.origin.x = box.maxX
+    line.size.width = 1
+    return line.offsetBy(dx: view.textContainerOrigin.x, dy: view.textContainerOrigin.y)
+  }
+
+  /// 그린 그림에서 `point` 점의 색(뒤집힌 1배 비트맵).
+  private func pixel(at point: NSPoint, _ draw: (NSBitmapImageRep) -> Void) -> NSColor? {
+    let size = view.bounds.size
+    let rep = NSBitmapImageRep(
+      bitmapDataPlanes: nil, pixelsWide: Int(size.width), pixelsHigh: Int(size.height), bitsPerSample: 8,
+      samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+    rep.size = size
+    draw(rep)
+    return rep.colorAt(x: Int(point.x), y: Int(point.y))
+  }
+
+  /// 둘째 자리 커서 한가운데.
+  private func secondCaretCenter() -> NSPoint {
+    let caret = view.extraCaretRect(at: view.multiCursorRanges![1].location)!
+    return NSPoint(x: caret.midX, y: caret.midY)
+  }
+
+  /// 커서를 켜는 순간, 다른 자리 커서도 같은 그리기에서 그려진다(다음 화면 갱신으로 미루지 않는다).
+  func testExtraCaretsTurnOnInTheSameDrawAsFirstCaret() {
+    threeCarets()
+
+    let pixel = self.pixel(at: secondCaretCenter()) { rep in
+      NSGraphicsContext.saveGraphicsState()
+      NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+      let flip = NSAffineTransform()
+      flip.translateX(by: 0, yBy: view.bounds.height)
+      flip.scaleX(by: 1, yBy: -1)
+      flip.concat()
+      view.drawInsertionPoint(in: systemCaretRect(), color: .red, turnedOn: true)
+      NSGraphicsContext.restoreGraphicsState()
+    }
+
+    XCTAssertGreaterThan(pixel?.alphaComponent ?? 0, 0.5, "맨 앞 커서와 함께 켜져야 한다")
+  }
+
+  /// 켜진 뒤 맨 앞 커서 칸을 다시 그리면(시스템이 끄는 방법) 다른 자리 커서도 꺼진다.
+  func testExtraCaretsTurnOffWhenFirstCaretIsRedrawn() {
+    threeCarets()
+    let image = NSImage(size: view.bounds.size)
+    image.lockFocusFlipped(true)
+    view.drawInsertionPoint(in: systemCaretRect(), color: .red, turnedOn: true)
+    image.unlockFocus()
+
+    let center = secondCaretCenter()
+    let pixel = self.pixel(at: center) { rep in view.cacheDisplay(in: view.bounds, to: rep) }
+
+    view.dropMultiCursor()
+    let background = self.pixel(at: center) { rep in view.cacheDisplay(in: view.bounds, to: rep) }
+    XCTAssertEqual(pixel, background, "맨 앞 커서가 지워진 그림에는 다른 자리 커서도 없어야 한다")
+  }
 }

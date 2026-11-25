@@ -25,9 +25,14 @@ extension ManuscriptTextView {
   /// 시스템은 커서를 옮기거나 깜빡일 때 원래 굵기(1pt) 칸만 지운다. 더 굵게 그리면 오른쪽 1pt가 남아 자국이 생기므로
   /// 커서처럼 가는 칸을 다시 그리라는 요청은 커서 두께 + 1pt까지 넓힌다. 다른 다시 그리기는 그대로.
   func widenedForCaret(_ rect: NSRect) -> NSRect {
-    guard !rect.isEmpty, rect.width < caret.width + 1 else { return rect }
+    guard isCaretSized(rect) else { return rect }
     var wide = rect
     wide.size.width = caret.width + 1
     return wide
+  }
+
+  /// 시스템이 커서 칸으로 보내는 가는 칸인가(넓힌 칸은 아니다).
+  func isCaretSized(_ rect: NSRect) -> Bool {
+    !rect.isEmpty && rect.width < caret.width + 1
   }
 }
