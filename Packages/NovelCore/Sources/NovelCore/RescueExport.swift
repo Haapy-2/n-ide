@@ -24,10 +24,22 @@ public enum RescueExport {
     return written
   }
 
-  /// 파일 이름에 쓸 수 없는 `/`와 `:`를 바꾸고, 빈 제목은 "제목 없음"으로.
+  /// 파일 이름에 쓸 수 없는 `/`와 `:`를 바꾸고, 앞의 점(숨김 파일이 된다)을 떼고, 빈 제목은 "제목 없음"으로.
+  /// 길면 글자 경계에서 자른다. 임시 파일 이름(`.이름.UUID.tmp`, 42바이트 더)과 ` (번호).md`를 붙여도
+  /// 이름 한도(255)를 넘지 않게 한다. 파일 시스템에 따라 한글을 자모로 풀어(가 → ㄱㅏ, 6바이트) 세므로 푼 꼴의 바이트로 잰다.
   static func fileName(for title: String) -> String {
-    let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty else { return "제목 없음" }
-    return trimmed.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
+    let cleaned = title.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+    var name = ""
+    var bytes = 0
+    for character in cleaned.drop(while: { $0 == "." }) {
+      bytes += String(character).decomposedStringWithCanonicalMapping.utf8.count
+      guard bytes <= nameLimit else { break }
+      name.append(character)
+    }
+    name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+    return name.isEmpty ? "제목 없음" : name
   }
+
+  static let nameLimit = 200
 }

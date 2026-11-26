@@ -151,7 +151,7 @@ struct WorkspaceView: View {
     }
     .alert(conflictTitle, isPresented: isShowingConflict, presenting: readyConflict) { conflict in
       Button("이 앱의 내용 쓰기") { Task { await model?.autosaver.keepAppVersion(conflict.episodeID) } }
-      Button("바깥에서 바뀐 내용 쓰기") { model?.autosaver.useDiskVersion(conflict.episodeID) }
+      Button("바깥에서 바뀐 내용 쓰기") { Task { await model?.autosaver.useDiskVersion(conflict.episodeID) } }
     } message: { conflict in
       Text(conflictMessage(conflict))
     }
@@ -208,11 +208,7 @@ struct WorkspaceView: View {
       if let model {
         // 떠날 때 스냅샷과 저장은 편집기가 아직 있는 지금 시작하고, 끝나기를 기다리는 것만 Task로 한다.
         model.autosaver.startFinishing()
-        Task {
-          await model.autosaver.finish()
-          await model.saveCountsNow()
-          Self.rescueUnsaved(model)
-        }
+        Task { await Self.finishClosing(model) }
       }
     }
   }
@@ -652,6 +648,19 @@ struct WorkspaceView: View {
     }
   }
 
+  /// 창을 닫을 때 남은 저장을 마친다. 원고나 회차 목록을 끝내 쓰지 못했으면 묻는다.
+  static func finishClosing(
+    _ model: ProjectModel, retryProjectSave: @MainActor () -> Bool = SystemDialogs.retryProjectSaveOnClose
+  ) async {
+    await model.autosaver.finish()
+    await model.saveCountsNow()
+    rescueUnsaved(model)
+    // 회차 목록(project.json)을 끝내 못 썼으면 종료 때처럼 다시 시도할지 묻는다. 묻지 않고 닫으면 목록 변경이 조용히 사라진다.
+    while model.autosaver.hasProjectWork(), retryProjectSave() {
+      await model.finishProjectSaves()
+    }
+  }
+
   /// 창을 닫았는데도 저장하지 못한 원고가 남았으면 다른 곳에 내보낼지 묻는다.
   /// 안 내보내면 앱을 끌 때 다시 물을 수 있게 저장기를 붙잡아 둔다(창과 함께 사라지면 원고도 사라진다).
   private static func rescueUnsaved(_ model: ProjectModel) {
@@ -711,7 +720,15 @@ struct WorkspaceView: View {
   private func conflictMessage(_ conflict: EpisodeAutosaver.Conflict) -> String {
     let kept = conflict.snapshot.map { "이 앱에서 쓰던 내용은 스냅샷(\($0.lastPathComponent))으로 남겨 두었어요." }
       ?? "이 앱에서 쓰던 내용을 스냅샷으로 남기지 못했어요. 고르기 전까지 메모리에 들고 있어요."
+    let stopped: String? =
+      switch conflict.unkept {
+      case .app: "이 앱에서 쓴 내용을 스냅샷으로 남기지 못해 바꾸지 않았어요."
+      case .disk: "바깥에서 바뀐 내용을 스냅샷으로 남기지 못해 덮어쓰지 않았어요."
+      case nil: nil
+      }
+    let retry = stopped.map { "\n\n\($0) 디스크 공간과 작품 폴더 권한을 확인한 뒤 다시 골라 주세요." } ?? ""
     return "이 앱에서도 고친 내용이 있어서 덮어쓰지 않았어요. \(kept)\n어느 쪽을 쓸까요? 고르지 않은 쪽도 스냅샷으로 남아요."
+      + retry
   }
 
   /// 반드시 둘 중 하나를 골라야 한다. 닫기만 하면 다시 뜬다.

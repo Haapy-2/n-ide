@@ -99,4 +99,23 @@ struct EmergencyBackupTests {
     #expect(try store.readEpisode(id) == "파일이 없어진 회차")
     #expect(try store.snapshots(of: id).isEmpty)
   }
+
+  /// 지금 파일을 읽지 못하면(UTF-8이 아님 등) `복원 전` 스냅샷 없이 덮지 않는다. 덮으면 그 파일 내용은 어디에도 남지 않는다.
+  @Test func restoreRefusesWhenCurrentFileCannotBeRead() throws {
+    let folder = try TestFolder()
+    defer { folder.remove() }
+    let store = try ProjectStore.create(at: folder.url.appending(path: "작품.novel"), title: "작품")
+    let id = EpisodeID.make()
+    let unreadable = Data([0xFF, 0xFE, 0x00, 0xD8])
+    try unreadable.write(to: store.layout.episodeFile(id))
+    let backup = EmergencyBackup(folder: folder.url.appending(path: "Backups"))
+    try backup.write("백업 글", episode: id, episodeTitle: "", projectTitle: "")
+
+    #expect(throws: (any Error).self) {
+      try backup.restore(try #require(backup.entries(for: [id]).first), into: store, memo: "")
+    }
+
+    #expect(try Data(contentsOf: store.layout.episodeFile(id)) == unreadable)
+    #expect(backup.entries(for: [id]).map(\.text) == ["백업 글"], "되살리지 못했으니 백업은 그대로")
+  }
 }

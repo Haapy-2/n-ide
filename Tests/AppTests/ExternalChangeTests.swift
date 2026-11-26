@@ -159,6 +159,75 @@ final class ExternalChangeTests: XCTestCase {
     XCTAssertFalse(autosaver.unprotectedAreBackedUp)
   }
 
+  /// 충돌 스냅샷을 남기지 못한 채 "바깥 내용"을 고르면 앱 쪽 글이 어디에도 남지 않는다. 그때는 바꾸지 않는다.
+  func testChoosingDiskVersionWithoutAppSnapshotKeepsAppText() async throws {
+    let snapshots = store.layout.snapshotFolder(episode)
+    try FileManager.default.createDirectory(at: snapshots, withIntermediateDirectories: true)
+    try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: snapshots.path(percentEncoded: false))
+    defer {
+      try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: snapshots.path(percentEncoded: false))
+    }
+    type(" 앱에서 쓴 문장")
+    try externalWrite("다른 편집기에서 고친 문장")
+    await autosaver.checkExternalChange()
+    let conflict = try await readyConflict()
+    XCTAssertNil(conflict.snapshot)
+
+    await autosaver.useDiskVersion(episode)
+
+    XCTAssertNotNil(autosaver.conflicts[episode], "고르기를 막고 충돌을 그대로 둔다")
+    XCTAssertEqual(autosaver.conflicts[episode]?.unkept, .app, "묻는 창이 바꾸지 않은 까닭을 보인다")
+    XCTAssertEqual(textView.string, "첫 문장 앱에서 쓴 문장")
+    XCTAssertEqual(autosaver.unsavedManuscripts().map(\.text), ["첫 문장 앱에서 쓴 문장"], "내보낼 원고로 남는다")
+
+    // 스냅샷을 남길 수 있게 되면 다시 고를 수 있고, 앱 쪽 글은 스냅샷에 남는다.
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: snapshots.path(percentEncoded: false))
+    await autosaver.useDiskVersion(episode)
+
+    XCTAssertNil(autosaver.conflicts[episode])
+    XCTAssertEqual(textView.string, "다른 편집기에서 고친 문장")
+    XCTAssertEqual(try conflictSnapshotTexts(), ["첫 문장 앱에서 쓴 문장"])
+  }
+
+  /// 충돌 스냅샷 뒤에 더 친 글도 "바깥 내용"으로 바꾸기 전에 스냅샷으로 남긴다.
+  func testChoosingDiskVersionKeepsTextTypedAfterConflictSnapshot() async throws {
+    type(" 앱에서 쓴 문장")
+    try externalWrite("다른 편집기에서 고친 문장")
+    await autosaver.checkExternalChange()
+    _ = try await readyConflict()
+    type(" 더 쓴 문장")
+
+    await autosaver.useDiskVersion(episode)
+
+    XCTAssertEqual(textView.string, "다른 편집기에서 고친 문장")
+    XCTAssertTrue(try conflictSnapshotTexts().contains("첫 문장 앱에서 쓴 문장 더 쓴 문장"), "버린 쪽의 마지막 글이 스냅샷에 있다")
+  }
+
+  /// "이 앱의 내용"을 고를 때 덮을 바깥 내용을 스냅샷으로 남기지 못하면 덮지 않는다.
+  func testChoosingAppVersionWithoutExternalSnapshotDoesNotOverwrite() async throws {
+    type(" 앱에서 쓴 문장")
+    try externalWrite("다른 편집기에서 고친 문장")
+    await autosaver.flush()
+    _ = try await readyConflict()
+    let snapshots = store.layout.snapshotFolder(episode).path(percentEncoded: false)
+    try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: snapshots)
+    defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: snapshots) }
+
+    await autosaver.keepAppVersion(episode)
+    await autosaver.flush()
+
+    XCTAssertEqual(try store.readEpisode(episode), "다른 편집기에서 고친 문장", "바깥 내용을 남기지 못했으니 덮지 않는다")
+    XCTAssertNotNil(autosaver.conflicts[episode], "충돌을 그대로 둔다")
+    XCTAssertEqual(autosaver.conflicts[episode]?.unkept, .disk)
+    XCTAssertEqual(textView.string, "첫 문장 앱에서 쓴 문장")
+  }
+
+  private func conflictSnapshotTexts() throws -> [String] {
+    try snapshotFiles().filter { $0.contains("-conflict") && $0.hasSuffix(".md") }.map {
+      try String(contentsOf: store.layout.snapshotFolder(episode).appending(path: $0), encoding: .utf8)
+    }
+  }
+
   func testSaveRightBeforeWritingDetectsExternalChange() async throws {
     type(" 앱에서 쓴 문장")
     try externalWrite("다른 편집기에서 고친 문장")
@@ -193,7 +262,7 @@ final class ExternalChangeTests: XCTestCase {
     await autosaver.flush()
     _ = try await readyConflict()
 
-    autosaver.useDiskVersion(episode)
+    await autosaver.useDiskVersion(episode)
     await autosaver.flush()
 
     XCTAssertEqual(textView.string, "다른 편집기에서 고친 문장")
@@ -208,7 +277,7 @@ final class ExternalChangeTests: XCTestCase {
     try externalWrite("다른 편집기에서 고친 문장")
     await autosaver.flush()
     _ = try await readyConflict()
-    autosaver.useDiskVersion(episode)
+    await autosaver.useDiskVersion(episode)
 
     type(" 이어 쓰기")
     await autosaver.flush()

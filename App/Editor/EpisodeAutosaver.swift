@@ -29,12 +29,11 @@ final class EpisodeAutosaver {
 
     init() {}
 
-    init(_ error: Error, isBackedUp: Bool) {
+    init(_ error: Error) {
       let problem: WriteProblem =
         if case ProjectError.writeFailed(_, _, let problem) = error { problem } else { WriteProblem(error: error) }
       label = problem.statusLabel
       detail = (error as? ProjectError)?.userMessage ?? error.localizedDescription
-      self.isBackedUp = isBackedUp
     }
   }
 
@@ -43,12 +42,21 @@ final class EpisodeAutosaver {
     let episodeID: EpisodeID
     /// 디스크의 지금 상태(앱 밖에서 바뀐 내용).
     let disk: DiskVersion
-    /// 충돌이 났을 때의 변경 번호. 그 뒤에 더 고쳤으면 스냅샷에 없는 글이 있다.
-    let change: Int
+    /// `snapshot`에 남긴 때의 변경 번호. 그 뒤에 더 고쳤으면 스냅샷에 없는 글이 있다.
+    var change: Int
     /// 앱 쪽 본문을 남긴 스냅샷. 남기는 중이면 nil.
     var snapshot: URL?
     /// 스냅샷 쓰기를 마쳤는지(실패 포함). 마친 뒤에 묻는다.
     var isReady = false
+    /// 고른 쪽으로 바꾸려다 버릴 쪽을 스냅샷으로 남기지 못해 멈췄으면 그 버릴 쪽. 묻는 창이 까닭을 보인다.
+    var unkept: Side?
+
+    enum Side: Equatable {
+      /// 이 앱에서 쓴 글
+      case app
+      /// 앱 밖에서 바뀐 글
+      case disk
+    }
   }
 
   private(set) var status: Status = .idle
@@ -132,9 +140,15 @@ final class EpisodeAutosaver {
   /// 고르지 않은 충돌 중 앱 쪽 글이 스냅샷에 그대로 남은 회차 수. 종료 때 따로 알린다.
   var conflictsKeptInSnapshots: Int { conflicts.keys.filter(isKeptInSnapshot).count }
 
-  /// 지켜지지 않은 원고가 모두 작품 밖 백업에 있는지(종료 경고 문구). 충돌 회차는 백업하지 않는다.
+  /// 지켜지지 않은 원고가 모두 작품 밖 백업에 실제로 써졌는지(종료 경고·상태 줄 문구). 충돌 회차는 백업하지 않는다.
   var unprotectedAreBackedUp: Bool {
-    backup != nil && !unsaved.keys.contains { conflicts[$0] != nil && !isKeptInSnapshot($0) }
+    backup != nil && unsaved.keys.allSatisfy { isKeptInSnapshot($0) || (conflicts[$0] == nil && isBackedUp($0)) }
+  }
+
+  /// 그 회차의 마지막 글이 백업에 써졌는지. 써진 뒤에 더 고쳤으면 아니다.
+  private func isBackedUp(_ id: EpisodeID) -> Bool {
+    guard let written = writtenBackups[id] else { return false }
+    return written >= changes[id, default: 0]
   }
 
   private func isKeptInSnapshot(_ id: EpisodeID) -> Bool {
@@ -152,6 +166,8 @@ final class EpisodeAutosaver {
   @ObservationIgnored var backup: EmergencyBackup?
   /// 이번 실행에서 백업한 회차와 그 변경 번호. 그보다 새 본문이 저장되면 백업을 지운다.
   @ObservationIgnored private var backedUp: [EpisodeID: Int] = [:]
+  /// 그중 백업 파일에 실제로 써진 것. 쓰기가 실패하면(디스크 가득 등) 들지 않아 "백업해 두었어요"라고 하지 않는다.
+  @ObservationIgnored private var writtenBackups: [EpisodeID: Int] = [:]
   /// 백업 쓰기·지우기를 차례대로(옛 쓰기가 새 지우기 뒤에 끝나 낡은 백업이 남지 않게).
   @ObservationIgnored private var backupTail: Task<Void, Never>?
 
@@ -586,7 +602,7 @@ final class EpisodeAutosaver {
       if (unsaved[job.id]?.change ?? 0) <= job.change {
         unsaved[job.id] = job
         backUp(job)
-        lastFailure = Failure(error, isBackedUp: backup != nil)
+        lastFailure = Failure(error)
       }
       settleStatus()
     }
@@ -672,13 +688,18 @@ final class EpisodeAutosaver {
   }
 
   /// 사용자가 "이 앱의 내용"을 골랐다. 덮어쓸 바깥 내용도 스냅샷으로 남긴 뒤 앱 쪽 본문을 저장한다.
+  /// 남기지 못하면 덮지 않고 충돌을 그대로 둔다(스냅샷 폴더만 막혀 본문 저장은 될 수도 있다).
   func keepAppVersion(_ id: EpisodeID) async {
     guard let conflict = conflicts[id], conflict.isReady else { return }
     let store = store
-    // 남기지 못하는 경우는 디스크에 쓸 수 없는 경우라 아래 저장도 실패하고 앱 쪽 본문은 메모리에 남는다.
-    _ = try? await Task.detached {
-      try store.writeSnapshot(conflict.disk.text, episode: id, kind: .external)
-    }.value
+    do {
+      _ = try await Task.detached {
+        try store.writeSnapshot(conflict.disk.text, episode: id, kind: .external)
+      }.value
+    } catch {
+      conflicts[id]?.unkept = .disk
+      return
+    }
     guard conflicts.removeValue(forKey: id) != nil else { return }
     // 디스크의 지금 상태를 알고 덮어쓴다는 뜻으로 기준을 바꾼다. 그 뒤 또 바뀌었으면 저장 직전 확인이 다시 묻는다.
     disk[id] = conflict.disk
@@ -691,10 +712,24 @@ final class EpisodeAutosaver {
     }
   }
 
-  /// 사용자가 "바깥에서 바뀐 내용"을 골랐다. 앱 쪽 본문은 이미 스냅샷에 있다.
+  /// 사용자가 "바깥에서 바뀐 내용"을 골랐다. 버리기 전에 앱 쪽 지금 글이 스냅샷에 그대로 있게 한다:
+  /// 충돌 스냅샷을 못 남겼거나 그 뒤에 더 썼으면 지금 남긴다. 남기지 못하면 버리지 않고 충돌을 그대로 둔다.
   /// 고르는 동안 또 바뀌었을 수 있어 지금 내용을 다시 읽는다. 회차 전환처럼 바로 읽는다(5,000자 안팎, 0.1ms 수준):
   /// 기다리는 사이에 친 글자가 곧바로 덮여 사라지지 않게 하려는 것이다.
-  func useDiskVersion(_ id: EpisodeID) {
+  func useDiskVersion(_ id: EpisodeID) async {
+    while conflicts[id] != nil, !isKeptInSnapshot(id) {
+      guard let text = (id == episodeID ? textView?.string : nil) ?? unsaved[id]?.text else { break }
+      let change = changes[id, default: 0]
+      let store = store
+      do {
+        let url = try await Task.detached { try store.writeSnapshot(text, episode: id, kind: .conflict)?.url }.value
+        conflicts[id]?.snapshot = url
+        conflicts[id]?.change = change
+      } catch {
+        conflicts[id]?.unkept = .app
+        return
+      }
+    }
     guard let conflict = conflicts.removeValue(forKey: id) else { return }
     let version = (try? store.readEpisodeVersion(id)) ?? conflict.disk
     disk[id] = version
@@ -709,7 +744,13 @@ final class EpisodeAutosaver {
   /// 저장 하나가 끝나면 상태 줄을 실제 상태에 맞춘다. 마지막 저장의 결과로 덮으면, 다른 회차가 저장된 뒤
   /// 앞 회차의 실패 표시가 사라지고 "저장 중"에 멈춘다. 충돌은 실패로 보이지 않는다.
   private func settleStatus() {
-    status = unsaved.keys.contains { conflicts[$0] == nil } ? .failed(lastFailure) : .idle
+    guard unsaved.keys.contains(where: { conflicts[$0] == nil }) else {
+      status = .idle
+      return
+    }
+    var failure = lastFailure
+    failure.isBackedUp = unprotectedAreBackedUp
+    status = .failed(failure)
   }
 
   /// 입력이 `delay`만큼 멈추면 저장한다. 쉬지 않고 계속 치면 이 기다림이 끝없이 미뤄지므로,
@@ -793,7 +834,7 @@ final class EpisodeAutosaver {
       if savedChanges[job.id, default: 0] < job.change, (unsaved[job.id]?.change ?? 0) <= job.change {
         unsaved[job.id] = job
         backUp(job)
-        lastFailure = Failure(error, isBackedUp: backup != nil)
+        lastFailure = Failure(error)
       }
       settleStatus()
     }
@@ -809,21 +850,36 @@ final class EpisodeAutosaver {
     let episodeTitle = episodeTitle(job.id)
     let projectTitle = projectTitle()
     let text = job.text
-    let id = job.id
-    enqueueBackup { try backup.write(text, episode: id, episodeTitle: episodeTitle, projectTitle: projectTitle) }
+    let (id, change) = (job.id, job.change)
+    enqueueBackup {
+      try backup.write(text, episode: id, episodeTitle: episodeTitle, projectTitle: projectTitle)
+    } done: { [weak self] written in
+      self?.recordBackup(id, change: change, written: written)
+    }
+  }
+
+  private func recordBackup(_ id: EpisodeID, change: Int, written: Bool) {
+    // 그사이 저장돼 백업을 지웠거나 더 새 백업을 시작했으면 이 결과는 지난 일이다.
+    guard backedUp[id] == change else { return }
+    writtenBackups[id] = written ? change : nil
+    if case .failed = status { settleStatus() }
   }
 
   private func removeBackup(_ id: EpisodeID) {
+    writtenBackups[id] = nil
     guard let backup, backedUp.removeValue(forKey: id) != nil else { return }
     enqueueBackup { try backup.remove(id) }
   }
 
-  /// 백업을 못 써도 원고는 메모리에 남고 상태 줄이 실패를 보여 주므로, 오류는 삼킨다.
-  private func enqueueBackup(_ work: @escaping @Sendable () throws -> Void) {
+  /// 백업을 못 써도 원고는 메모리에 남고 상태 줄이 실패를 보여 준다. 써졌는지는 `done`으로 알린다.
+  private func enqueueBackup(
+    _ work: @escaping @Sendable () throws -> Void, done: @escaping @MainActor @Sendable (Bool) -> Void = { _ in }
+  ) {
     let previous = backupTail
     backupTail = Task.detached(priority: .utility) {
       await previous?.value
-      try? work()
+      let written = (try? work()) != nil
+      await done(written)
     }
   }
 

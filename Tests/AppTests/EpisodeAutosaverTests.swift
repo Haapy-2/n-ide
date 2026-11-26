@@ -90,6 +90,36 @@ final class EpisodeAutosaverTests: XCTestCase {
     XCTAssertTrue(backup.entries(for: [episode]).isEmpty, "저장되면 백업을 지운다")
   }
 
+  /// 백업마저 쓰지 못했으면 "백업해 두었어요"라고 하면 안 된다(종료 안내·상태 줄). 실제로 써진 뒤에만 백업됐다고 본다.
+  func testBackupThatFailsToWriteIsNotReportedAsBackedUp() async throws {
+    let backupFolder = folder.appending(path: "Backups")
+    try FileManager.default.createDirectory(at: backupFolder, withIntermediateDirectories: true)
+    try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: backupFolder.path(percentEncoded: false))
+    defer {
+      try? FileManager.default.setAttributes(
+        [.posixPermissions: 0o755], ofItemAtPath: backupFolder.path(percentEncoded: false))
+    }
+    autosaver.backup = EmergencyBackup(folder: backupFolder)
+    let episodes = store.layout.episodesFolder.path(percentEncoded: false)
+    try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: episodes)
+    type(" 지켜야 할 문장")
+
+    await autosaver.flush()
+    await autosaver.waitForBackups()
+
+    XCTAssertFalse(autosaver.unprotectedAreBackedUp, "백업을 못 썼으면 종료 안내가 내보내기를 권해야 한다")
+    guard case .failed(let failure) = autosaver.status else { return XCTFail("실패 상태여야 한다: \(autosaver.status)") }
+    XCTAssertFalse(failure.isBackedUp, "상태 줄도 백업해 두었다고 하지 않는다")
+
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: backupFolder.path(percentEncoded: false))
+    await autosaver.flush()
+    await autosaver.waitForBackups()
+
+    XCTAssertTrue(autosaver.unprotectedAreBackedUp, "다시 시도해 백업이 써지면 백업됐다고 본다")
+    guard case .failed(let again) = autosaver.status else { return XCTFail("실패 상태여야 한다: \(autosaver.status)") }
+    XCTAssertTrue(again.isBackedUp)
+  }
+
   func testNoBackupWhenSavingSucceeds() async throws {
     let backup = EmergencyBackup(folder: folder.appending(path: "Backups"))
     autosaver.backup = backup

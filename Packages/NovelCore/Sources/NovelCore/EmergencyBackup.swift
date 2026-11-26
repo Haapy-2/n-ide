@@ -72,8 +72,10 @@ public struct EmergencyBackup: Sendable {
   /// 되살린 뒤에도 스냅샷 판에서 비교하거나 되돌릴 수 있다. 다 쓴 뒤에만 백업을 지운다.
   /// 파일과 같으면(이미 저장됐던 것) 쓰지 않고 백업만 지운다. 되살려 썼으면 true.
   @discardableResult
+  /// 파일이 있는데 읽지 못하면(UTF-8이 아님 등) 던진다. 스냅샷 없이 덮으면 그 내용이 어디에도 남지 않는다.
   public func restore(_ entry: Entry, into store: ProjectStore, memo: String) throws -> Bool {
-    let current = try? store.readEpisode(entry.episodeID)
+    let file = store.layout.episodeFile(entry.episodeID).path(percentEncoded: false)
+    let current = FileManager.default.fileExists(atPath: file) ? try store.readEpisode(entry.episodeID) : nil
     guard current != entry.text else {
       try remove(entry.episodeID)
       return false

@@ -52,6 +52,18 @@ extension SystemDialogs {
     return exportUnsaved(manuscripts)
   }
 
+  /// 창을 닫았는데 회차 목록(project.json)을 끝내 쓰지 못했을 때(종료 때와 같은 물음). 다시 시도를 고르면 true.
+  /// 창은 이미 닫혀 취소는 없다.
+  static func retryProjectSaveOnClose() -> Bool {
+    let alert = NSAlert()
+    alert.alertStyle = .critical
+    alert.messageText = "회차 목록을 저장하지 못했어요"
+    alert.informativeText = "이대로 닫으면 회차 추가·순서·이름을 바꾼 것이 사라질 수 있어요. 디스크 공간과 작품 폴더 권한을 확인한 뒤 다시 시도해 주세요."
+    alert.addButton(withTitle: "다시 시도")
+    alert.addButton(withTitle: "그래도 닫기")
+    return alert.runModal() == .alertFirstButtonReturn
+  }
+
   enum SlowSaveChoice {
     case finished, export, cancel
   }

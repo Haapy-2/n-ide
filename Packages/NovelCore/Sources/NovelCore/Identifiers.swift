@@ -9,7 +9,7 @@ public struct EpisodeID: Hashable, Codable, Sendable, CustomStringConvertible {
   public var description: String { rawValue }
 
   public init(from decoder: Decoder) throws {
-    rawValue = try decoder.singleValueContainer().decode(String.self)
+    rawValue = try decodeFileNameID(from: decoder)
   }
   public func encode(to encoder: Encoder) throws {
     var container = encoder.singleValueContainer()
@@ -25,7 +25,7 @@ public struct NoteID: Hashable, Codable, Sendable, CustomStringConvertible {
   public var description: String { rawValue }
 
   public init(from decoder: Decoder) throws {
-    rawValue = try decoder.singleValueContainer().decode(String.self)
+    rawValue = try decodeFileNameID(from: decoder)
   }
   public func encode(to encoder: Encoder) throws {
     var container = encoder.singleValueContainer()
@@ -47,4 +47,15 @@ public struct GroupID: Hashable, Codable, Sendable, CustomStringConvertible {
     var container = encoder.singleValueContainer()
     try container.encode(rawValue)
   }
+}
+
+/// 파일 이름으로 쓰이는 ID를 읽는다. `project.json`은 앱 밖에서 고칠 수 있어서, 경로를 벗어나는 값(`/`, `.`, `..`, NUL)은
+/// 받지 않는다. 받으면 `episodes/../../x.md`처럼 작품 폴더 밖에 쓰게 된다. 던지면 깨진 `project.json`으로 보고 복구한다.
+private func decodeFileNameID(from decoder: Decoder) throws -> String {
+  let container = try decoder.singleValueContainer()
+  let raw = try container.decode(String.self)
+  guard !raw.isEmpty, raw != ".", raw != "..", !raw.contains("/"), !raw.contains("\0") else {
+    throw DecodingError.dataCorruptedError(in: container, debugDescription: "파일 이름으로 쓸 수 없는 ID")
+  }
+  return raw
 }

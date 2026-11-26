@@ -28,6 +28,27 @@ struct ProjectRecoveryTests {
     try Data("{ \"schemaVersion\" : 1, \"title\" : \"반쯤".utf8).write(to: store.layout.projectFile)
   }
 
+  /// 회차·노트 ID는 파일 이름이 된다. `/`나 `..`가 든 ID는 작품 폴더 밖에 쓰게 되므로 깨진 파일로 보고 복구 길로 간다.
+  @Test(arguments: ["../../밖", "a/b", "..", "a\u{0}b"])
+  func idThatEscapesFolderIsTreatedAsCorrupt(_ bad: String) throws {
+    let folder = try TestFolder()
+    defer { folder.remove() }
+    let (store, project) = try makeProject(in: folder)
+    let before = try episodeBytes(store)
+    let good = project.episodes[0].id.rawValue
+    let text = try String(contentsOf: store.layout.projectFile, encoding: .utf8)
+    let escaped = String(data: try JSONEncoder().encode(bad), encoding: .utf8)!
+    try Data(text.replacingOccurrences(of: "\"\(good)\"", with: escaped).utf8).write(to: store.layout.projectFile)
+    #expect(throws: ProjectError.corruptProjectFile(store.layout.projectFile)) { try store.loadProject() }
+
+    let (opened, recovery) = try store.open()
+
+    #expect(recovery == .fromBackup)
+    #expect(!opened.episodes.contains { $0.id.rawValue == bad })
+    #expect(try episodeBytes(store) == before)
+    #expect(try folder.fileNames(in: store.layout.root).contains { $0.hasPrefix("project.json.broken-") })
+  }
+
   // MARK: - 백업
 
   @Test func saveKeepsPreviousGoodVersionAsBackup() throws {

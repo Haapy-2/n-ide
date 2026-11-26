@@ -8,7 +8,11 @@ enum EmergencyBackupRecovery {
   nonisolated static let snapshotMemo = "비상 백업에서 되살리기 전"
 
   /// 되살린 회차의 글자 수를 고친 작품 정보를 돌려준다. 백업이 없으면 그대로.
-  static func run(_ backup: EmergencyBackup, project: ProjectFile, root: URL) async -> ProjectFile {
+  static func run(
+    _ backup: EmergencyBackup, project: ProjectFile, root: URL,
+    ask: @MainActor ([String]) -> SystemDialogs.BackupChoice = SystemDialogs.offerBackupRestore(episodeNames:),
+    export: @MainActor ([(title: String, text: String)]) -> Bool = SystemDialogs.exportUnsaved
+  ) async -> ProjectFile {
     let ids = Set(project.episodes.map(\.id))
     let store = ProjectStore(root: root)
     // 파일에 이미 같은 글이 있으면(저장은 됐는데 백업을 못 지움) 묻지 않고 지운다.
@@ -22,16 +26,21 @@ enum EmergencyBackupRecovery {
     guard !entries.isEmpty else { return project }
 
     let names = entries.map { name(of: $0, in: project) }
-    switch SystemDialogs.offerBackupRestore(episodeNames: names) {
-    case .restore:
-      return await restore(entries, backup: backup, store: store, project: project)
-    case .export:
-      let manuscripts = zip(entries, names).map { (title: $1, text: $0.text) }
-      if SystemDialogs.exportUnsaved(manuscripts) { trash(entries, backup: backup) }
-      return project
-    case .discard:
-      trash(entries, backup: backup)
-      return project
+    while true {
+      switch ask(names) {
+      case .restore:
+        return await restore(entries, backup: backup, store: store, project: project)
+      case .export:
+        let manuscripts = zip(entries, names).map { (title: $1, text: $0.text) }
+        // 폴더 창을 닫았으면 아무것도 고르지 않은 것이라 다시 묻는다. 백업을 남긴 채 열면 그 회차를 새로 저장한 뒤에도
+        // 다음에 열 때 옛 글로 되살리자고 한다.
+        guard export(manuscripts) else { continue }
+        trash(entries, backup: backup)
+        return project
+      case .discard:
+        trash(entries, backup: backup)
+        return project
+      }
     }
   }
 

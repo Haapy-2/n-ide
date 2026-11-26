@@ -60,6 +60,30 @@ struct ProjectStoreTests {
     #expect(try store.loadProject() == project)
   }
 
+  /// 손으로 고치거나 동기화가 꼬여 같은 묶음·같은 회차가 두 번 적혀 있어도 연다. 처음 나온 것을 남긴다.
+  /// (묶음 제목 줄을 만들 때 같은 묶음 ID가 둘이면 앱이 죽었다.)
+  @Test func duplicateGroupsAndEpisodesKeepTheFirst() throws {
+    let folder = try TestFolder()
+    defer { folder.remove() }
+    let store = try ProjectStore.create(at: folder.url.appending(path: "작품.novel"), title: "작품")
+    let group = EpisodeGroup(title: "1부")
+    let first = EpisodeMeta(title: "1화", goal: 5_000, group: group.id)
+    let second = EpisodeMeta(title: "2화", goal: 5_000, group: group.id)
+    var project = try store.loadProject()
+    project.groups = [group, EpisodeGroup(id: group.id, title: "겹친 1부")]
+    project.episodes = [first, second, EpisodeMeta(id: first.id, title: "겹친 1화", goal: 1)]
+    try store.saveProject(project)
+    try store.writeEpisode("1화 본문", id: first.id)
+
+    let loaded = try store.loadProject()
+
+    #expect(loaded.groups == [group])
+    try #require(loaded.episodes == [first, second])
+    let rows = EpisodeGrouping.rows(.init(episodes: loaded.episodes, groups: loaded.groups), collapsed: [])
+    #expect(rows.count == 3)
+    #expect(try store.readEpisode(first.id) == "1화 본문", "겹친 줄을 버려도 본문 파일은 그대로")
+  }
+
   @Test func projectJSONIsReadableText() throws {
     let folder = try TestFolder()
     defer { folder.remove() }

@@ -22,13 +22,15 @@ final class ProjectModelTests: XCTestCase {
   }
 
   /// 진짜 휴지통 대신 테스트 폴더 안 "휴지통"으로 옮기는 모델.
-  private func makeModel(trashFails: Bool = false) throws -> ProjectModel {
+  /// `trashDelay`: 휴지통으로 옮기는 데 걸리는 시간(옮기는 도중을 재현할 때).
+  private func makeModel(trashFails: Bool = false, trashDelay: TimeInterval = 0) throws -> ProjectModel {
     let trash = trash!
     return ProjectModel(
       project: try store.loadProject(), store: store, queue: SaveQueue(retryDelays: [.milliseconds(5)]),
       autosaveDelay: .milliseconds(20),
       moveToTrash: { url in
         if trashFails { throw CocoaError(.fileWriteNoPermission) }
+        if trashDelay > 0 { Thread.sleep(forTimeInterval: trashDelay) }
         let destination = trash.appending(path: url.lastPathComponent)
         try FileManager.default.moveItem(at: url, to: destination)
         return destination
@@ -306,6 +308,61 @@ final class ProjectModelTests: XCTestCase {
     try saved.write(to: projectFile)
     await model.autosaver.finishProjectWork()
 
+    XCTAssertFalse(model.autosaver.hasProjectWork())
+    XCTAssertEqual(try store.loadProject().episodes.first?.title, "바꾼 제목")
+  }
+
+  /// 앱을 끌 때 휴지통으로 옮기는 중인 회차가 있으면 끝날 때까지 기다린다. 안 기다리면 파일은 옮겨졌는데 목록에는 남는다.
+  func testQuitWaitsForTrashInProgress() async throws {
+    let model = try makeModel(trashDelay: 0.3)
+    let id = try await model.addEpisode()
+    let trashing = Task { try await model.trashEpisode(id) }
+    try await Task.sleep(for: .milliseconds(100))
+
+    XCTAssertTrue(model.autosaver.hasProjectWork(), "옮기는 중이면 끝낼 일이 있다")
+    await model.autosaver.finishProjectWork()
+
+    XCTAssertEqual(try store.loadProject().episodes.map(\.id), [], "기다린 뒤에는 목록에서도 빠져 있다")
+    try await trashing.value
+  }
+
+  /// ⌘Z로 시작한 파일 옮기기도 앱을 끌 때 기다린다.
+  func testQuitWaitsForUndoFileMove() async throws {
+    let model = try makeModel(trashDelay: 0.3)
+    let undo = UndoManager()
+    undo.groupsByEvent = false
+    var added: EpisodeID!
+    try await grouped(undo) { added = try await model.addEpisode(undoManager: undo) }
+
+    undo.undo()
+
+    XCTAssertTrue(model.autosaver.hasProjectWork(), "되돌리기로 파일을 옮기는 중이면 끝낼 일이 있다")
+    await model.autosaver.finishProjectWork()
+    XCTAssertEqual(try store.loadProject().episodes.map(\.id), [], "기다린 뒤에는 목록에서도 빠져 있다")
+    XCTAssertTrue(FileManager.default.fileExists(atPath: trash.appending(path: "\(added.rawValue).md").path(percentEncoded: false)))
+  }
+
+  /// 창을 닫을 때도 회차 목록 저장이 끝내 실패한 채면 종료 때처럼 다시 시도할지 묻는다(전에는 묻지 않고 닫혔다).
+  func testClosingWindowAsksToRetryFailedProjectSave() async throws {
+    let model = try makeModel()
+    let id = try await model.addEpisode()
+    let projectFile = store.layout.projectFile
+    let saved = try Data(contentsOf: projectFile)
+    try FileManager.default.removeItem(at: projectFile)
+    try FileManager.default.createDirectory(at: projectFile, withIntermediateDirectories: false)
+    try Data().write(to: projectFile.appending(path: "막음"))
+    await model.renameEpisodes([id: "바꾼 제목"], reason: .single)
+
+    var asked = 0
+    await WorkspaceView.finishClosing(model) {
+      asked += 1
+      // 첫 물음에서 사용자가 문제를 고치고 다시 시도를 고른다.
+      try? FileManager.default.removeItem(at: projectFile)
+      try? saved.write(to: projectFile)
+      return asked == 1
+    }
+
+    XCTAssertEqual(asked, 1)
     XCTAssertFalse(model.autosaver.hasProjectWork())
     XCTAssertEqual(try store.loadProject().episodes.first?.title, "바꾼 제목")
   }

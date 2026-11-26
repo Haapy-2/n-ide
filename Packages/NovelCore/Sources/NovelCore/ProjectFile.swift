@@ -36,10 +36,17 @@ public struct ProjectFile: Codable, Equatable, Sendable {
     _ = try container.decode(Int.self, forKey: .schemaVersion)
     schemaVersion = ProjectFormat.currentSchemaVersion
     title = try container.decode(String.self, forKey: .title)
-    episodes = try container.decode([EpisodeMeta].self, forKey: .episodes)
+    // 손으로 고치거나 동기화가 꼬여 같은 ID가 두 번 적혀 있으면 처음 것만 남긴다(ID로 찾는 곳들이 하나라고 믿는다).
+    // 버린 줄의 본문 파일은 건드리지 않는다. 다음 저장 때 정리된 목록이 적힌다.
+    episodes = Self.firstOfEach(try container.decode([EpisodeMeta].self, forKey: .episodes))
     notes = try container.decode([NoteMeta].self, forKey: .notes)
     settings = try container.decode(ProjectSettings.self, forKey: .settings)
-    groups = try container.decodeIfPresent([EpisodeGroup].self, forKey: .groups) ?? []
+    groups = Self.firstOfEach(try container.decodeIfPresent([EpisodeGroup].self, forKey: .groups) ?? [])
+  }
+
+  private static func firstOfEach<Item: Identifiable>(_ items: [Item]) -> [Item] {
+    var seen = Set<Item.ID>()
+    return items.filter { seen.insert($0.id).inserted }
   }
 }
 

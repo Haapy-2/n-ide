@@ -31,6 +31,8 @@ final class ProjectModel {
   @ObservationIgnored private let countSaveDelay: Duration
   @ObservationIgnored private var countSave: Task<Void, Never>?
   @ObservationIgnored private var fileUndoTail: Task<Void, Never>?
+  /// 아직 안 끝난 되돌리기 파일 옮기기 수. 앱 종료가 기다린다.
+  @ObservationIgnored private var fileUndos = 0
   /// 마지막 `project.json` 저장이 실패했다. 앱을 끌 때 다시 시도하고, 그래도 안 되면 묻는다.
   @ObservationIgnored private var projectSaveFailed = false
 
@@ -57,8 +59,11 @@ final class ProjectModel {
     autosaver = EpisodeAutosaver(store: store, queue: queue, delay: autosaveDelay)
     counter = CharacterCounter(interval: countDelay)
     counter.onCount = { [weak self] id, count in self?.recordCount(count, for: id) }
+    // 휴지통 옮기기와 되돌리기 파일 옮기기도 넣는다. 도중에 끄면 파일은 옮겨졌는데 목록(project.json)에는 남는다.
     autosaver.hasProjectWork = { [weak self] in
-      self.map { $0.countSave != nil || $0.projectSaves > 0 || $0.projectSaveFailed } ?? false
+      self.map {
+        $0.countSave != nil || $0.projectSaves > 0 || $0.projectSaveFailed || !$0.leaving.isEmpty || $0.fileUndos > 0
+      } ?? false
     }
     autosaver.finishProjectWork = { [weak self] in await self?.finishProjectSaves() }
     autosaver.episodeTitle = { [weak self] id in self?.project.episodes.first { $0.id == id }?.title ?? "" }
@@ -411,6 +416,7 @@ final class ProjectModel {
   /// 목록에는 있는데 파일은 휴지통에 있는 회차가 생길 수 있다.
   private func enqueueFileUndo(_ work: @escaping () async throws -> Void) {
     let previous = fileUndoTail
+    fileUndos += 1
     fileUndoTail = Task {
       await previous?.value
       do {
@@ -418,6 +424,7 @@ final class ProjectModel {
       } catch {
         errorMessage = "되돌리지 못했어요. 파일은 그대로 두었어요. \(error.localizedDescription)"
       }
+      fileUndos -= 1
     }
   }
 
@@ -461,9 +468,12 @@ final class ProjectModel {
 
   // MARK: - 저장
 
-  /// 미뤄 둔 글자 수 저장을 지금 하고, 시작된 `project.json` 저장이 모두 끝날 때까지 기다린다(창 닫기, 앱 종료).
+  /// 휴지통·되돌리기 파일 옮기기를 기다리고, 미뤄 둔 글자 수 저장을 지금 하고, 시작된 `project.json` 저장이 모두
+  /// 끝날 때까지 기다린다(창 닫기, 앱 종료).
   /// 이름을 바꾸자마자 앱을 꺼도 바뀐 목록이 디스크에 남게 하려는 것.
   func finishProjectSaves() async {
+    await finishFileUndos()
+    while !leaving.isEmpty { try? await Task.sleep(for: .milliseconds(2)) }
     await saveCountsNow()
     while projectSaves > 0 {
       try? await Task.sleep(for: .milliseconds(2))
