@@ -3,7 +3,22 @@
 한국어 웹소설을 쓰기 위한 macOS 네이티브 집필 에디터. 회차마다 `.md` 파일 하나로 저장하고,
 빠른 입력과 깨지지 않는 한글 조합, 잃어버리지 않는 원고를 가장 중요하게 여긴다.
 
-> 현재 상태: **13-2단계(⌘D 여러 커서)까지 만듦**(실제 앱 확인 남음), 다음은 안정성 마무리 → 삽화(14-1) → 자료·플롯(15). 진행 상황과 알려진 문제는 [docs/PROGRESS.md](docs/PROGRESS.md), 전체 단계는 [docs/PLAN.md](docs/PLAN.md).
+> 현재 상태: **13-2단계(⌘D 여러 커서)까지 만듦**(실제 앱 확인 끝, 묶음 끌어 놓기 한 곳 남음), 다음은 안정성 마무리 → 삽화(14-1) → 자료·플롯(15). 진행 상황과 알려진 문제는 [docs/PROGRESS.md](docs/PROGRESS.md), 전체 단계는 [docs/PLAN.md](docs/PLAN.md).
+
+## 화면
+
+"잘 만든 종이 원고"를 목표로 한 디자인([docs/DESIGN.md](docs/DESIGN.md)). 다크·라이트·기기 설정 테마를 고를 수 있다. 아래는 실제 앱을 검증용 더미 작품으로 띄워 찍은 것이다(2026-11-27, [docs/ui/](docs/ui/)).
+
+| 다크 | 라이트 |
+|---|---|
+| ![작업 공간 (다크)](docs/ui/workspace-dark.jpg) | ![작업 공간 (라이트)](docs/ui/workspace-light.jpg) |
+| 작업 공간: 왼쪽 회차 목록(회차별 글자 수), 가운데 본문 | 같은 화면, 라이트 테마 |
+| ![스냅샷 비교 (다크)](docs/ui/snapshot-diff-dark.jpg) | ![스냅샷 비교 (라이트)](docs/ui/snapshot-diff-light.jpg) |
+| 스냅샷 판: 과거↔현재 두 칸 비교, 더한 문단은 초록 | 같은 화면, 라이트 테마 |
+| ![작품 전체 검색](docs/ui/search-dark.jpg) | ![설정: 일반](docs/ui/settings-general-light.jpg) |
+| 작품 전체 검색(⇧⌘F): 회차별 결과와 전체 바꾸기 | 설정 › 일반: 테마, 목표, 스냅샷 |
+| ![설정: 편집기](docs/ui/settings-editor-dark.jpg) | ![작품 선택](docs/ui/picker-dark.jpg) |
+| 설정 › 편집기: 미리 보기와 글꼴·크기·간격·폭 | 작품 선택 창: 최근 작품, 새 작품, 다른 위치에서 열기 |
 
 ## 지금 되는 것
 
@@ -54,7 +69,7 @@ Packages/NovelCore/  공통 로직 패키지(모델, 저장, 검색, 글자 수,
 Tests/AppTests/      앱 쪽 테스트, 디자인 스냅샷
 Scripts/             build.sh, run.sh, test.sh, snapshots.sh, perf.sh, check-comments.sh(이력형 주석 검사), lib.sh(공통)
 .claude/skills/      verify-noveleditor/ = 에이전트가 실제 앱을 띄워 조작·증명하는 검증 스킬
-docs/                모든 문서 (log/ = 날짜별 작업 기록)
+docs/                모든 문서 (log/ = 날짜별 작업 기록, ui/ = 실제 앱 화면 스크린샷)
 build/               빌드 산출물과 임시 파일 (git 제외, 지워도 됨)
 ```
 
@@ -66,4 +81,5 @@ build/               빌드 산출물과 임시 파일 (git 제외, 지워도 �
 - [docs/PERFORMANCE.md](docs/PERFORMANCE.md): 성능과 UX 규칙
 - [docs/PROGRESS.md](docs/PROGRESS.md): 진행 상황과 성능 측정
 - docs/design-snapshots/: 단계별 화면 스냅샷
+- [docs/ui/](docs/ui/): 실제 앱 화면 스크린샷(README "화면"에 쓰는 것)
 - [docs/log/](docs/log/): 날짜별 작업 기록
