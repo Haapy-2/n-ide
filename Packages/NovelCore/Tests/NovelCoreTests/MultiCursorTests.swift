@@ -192,6 +192,18 @@ struct MultiCursorTests {
     #expect(cursor.ranges == [NSRange(location: 0, length: 0)])
   }
 
+  /// 맞닿은 자리를 지운 뒤의 되돌리기 기록은 빈 범위들이 한 점에서 만난다. 하나로 합쳐야 되돌릴 수 있다(E4).
+  @Test func meetingPointsJoinForUndo() throws {
+    let joined = MultiCursor.joinedAtMeetingPoints(
+      [NSRange(location: 0, length: 0), NSRange(location: 0, length: 0), NSRange(location: 0, length: 1), NSRange(location: 2, length: 0)],
+      texts: ["가", "가", "나", "다"])
+
+    #expect(joined.ranges == [NSRange(location: 0, length: 1), NSRange(location: 2, length: 0)])
+    #expect(joined.texts == ["가가나", "다"])
+    let edit = try #require(MultiCursor.edit(joined.ranges, texts: joined.texts, textLength: 2))
+    #expect(TextChange.applying(edit.changes, to: "x ") == "가가나 다")
+  }
+
   @Test func mergedJoinsOverlapsAndSameSpotCarets() {
     let merged = MultiCursor.merged([
       NSRange(location: 5, length: 0), NSRange(location: 0, length: 3), NSRange(location: 2, length: 2),

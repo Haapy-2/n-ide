@@ -138,6 +138,50 @@ final class MultiCursorEditingTests: XCTestCase {
     XCTAssertNil(view.multiCursorRanges)
   }
 
+  /// 줄 번호를 켜고 여러 커서로 엔터를 쳐도 줄 수가 맞다(자리마다 세지 않고 다 고친 뒤 한 번 센다).
+  func testLineCountFollowsMultiCursorNewlines() {
+    view.showsLineNumbers = true
+    XCTAssertEqual(view.currentLineCount, 1)
+    selectThree()
+
+    key { view.doCommand(by: #selector(NSResponder.insertNewline(_:))) }
+
+    XCTAssertEqual(view.currentLineCount, 4)
+  }
+
+  /// 맞닿은 선택을 지워 한 점에서 만나도 ⌘Z가 지운 글을 모두 되살리고(E4), 그 아래 기록은 제 글자에 적용된다.
+  func testUndoAfterCursorsMeetRestoresEveryDeletedCharacter() {
+    view.replaceAllText(with: "가가 나다")
+    view.setSelectedRange(NSRange(location: 3, length: 0))
+    key { view.insertText("사", replacementRange: none) }
+    view.setSelectedRange(NSRange(location: 0, length: 1))
+    view.selectNextOccurrence(nil)
+    XCTAssertEqual(view.multiCursorRanges, [NSRange(location: 0, length: 1), NSRange(location: 1, length: 1)])
+
+    key { view.doCommand(by: #selector(NSResponder.deleteBackward(_:))) }
+    XCTAssertEqual(view.string, " 사나다")
+
+    view.undo(nil)
+    XCTAssertEqual(view.string, "가가 사나다")
+    XCTAssertEqual(view.multiCursorRanges, [NSRange(location: 0, length: 1), NSRange(location: 1, length: 1)])
+    view.undo(nil)
+    XCTAssertEqual(view.string, "가가 나다")
+  }
+
+  /// 조합 중에 지워(입력기가 빈 글을 줌) 맞닿은 자리가 만나도 ⌘Z로 고른 글이 돌아온다.
+  func testUndoAfterCompositionDeletedAtMeetingCursors() {
+    view.replaceAllText(with: "가가 나")
+    view.setSelectedRange(NSRange(location: 0, length: 1))
+    view.selectNextOccurrence(nil)
+
+    key { view.setMarkedText("ㄷ", selectedRange: NSRange(location: 1, length: 0), replacementRange: none) }
+    view.setMarkedText("", selectedRange: NSRange(location: 0, length: 0), replacementRange: none)
+    XCTAssertEqual(view.string, " 나")
+
+    view.undo(nil)
+    XCTAssertEqual(view.string, "가가 나")
+  }
+
   // MARK: - 실행 취소
 
   /// 조합 하나(한 글자)가 모든 자리에서 ⌘Z 한 단위(16장 U1). 되돌리면 그때의 커서들로(U2).

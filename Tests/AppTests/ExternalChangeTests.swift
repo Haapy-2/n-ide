@@ -217,6 +217,47 @@ final class ExternalChangeTests: XCTestCase {
     XCTAssertTrue(autosaver.conflicts.isEmpty)
   }
 
+  /// 여러 커서 중이면 "앱 쪽 변경 있음"으로 본다(16장 X4): 조용히 다시 읽어 커서들을 버리지 않고 묻는다.
+  func testMultiCursorCountsAsAppChange() async throws {
+    textView.multiCursor = MultiCursorSession(cursor: try XCTUnwrap(MultiCursor(
+      ranges: [NSRange(location: 0, length: 0), NSRange(location: 2, length: 0)], wholeWord: false)))
+    try externalWrite("다른 편집기에서 고친 문장")
+
+    await autosaver.checkExternalChange()
+
+    XCTAssertNotNil(autosaver.conflicts[episode], "묻는다")
+    XCTAssertEqual(textView.string, "첫 문장", "묻기 전에는 화면 본문을 바꾸지 않는다")
+    XCTAssertEqual(textView.multiCursorRanges?.count, 2)
+  }
+
+  /// 바깥 내용으로 갈아 끼울 때, 표시된 글자 없이 이어 가던 입력기에도 그 글자를 놓으라고 알린다.
+  /// 알리지 않으면 입력기가 옛 본문의 자리를 `replacementRange`로 고쳐 쓴다.
+  func testReloadTellsInputMethodToForgetCharacterInProgress() throws {
+    let method = try XCTUnwrap(class_getInstanceMethod(NSTextInputContext.self, #selector(NSTextInputContext.discardMarkedText)))
+    let original = method_getImplementation(method)
+    typealias Discard = @convention(c) (NSTextInputContext, Selector) -> Void
+    nonisolated(unsafe) var discarded = 0
+    let counting: @convention(block) (NSTextInputContext) -> Void = { context in
+      discarded += 1
+      unsafeBitCast(original, to: Discard.self)(context, #selector(NSTextInputContext.discardMarkedText))
+    }
+    method_setImplementation(method, imp_implementationWithBlock(counting))
+    defer { method_setImplementation(method, original) }
+    XCTAssertNotNil(textView.inputContext)
+
+    textView.setSelectedRange(NSRange(location: 0, length: 0))
+    textView.insertText("ㄱ", replacementRange: NSRange(location: NSNotFound, length: 0))
+    XCTAssertFalse(textView.hasMarkedText())
+    discarded = 0
+    textView.reloadText(with: "바깥에서 쓴 글")
+    XCTAssertEqual(discarded, 1, "외부 변경 불러오기")
+
+    textView.insertText("ㄱ", replacementRange: NSRange(location: NSNotFound, length: 0))
+    discarded = 0
+    textView.replaceAllText(with: "다른 회차")
+    XCTAssertEqual(discarded, 1, "회차 전환")
+  }
+
   func testDeletedFileIsRecreatedFromApp() async throws {
     try FileManager.default.removeItem(at: store.layout.episodeFile(episode))
 

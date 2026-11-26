@@ -145,6 +145,20 @@ final class EpisodeAutosaverTests: XCTestCase {
   }
 
   /// 한글 조합 중에 저장해도 조합이 끊기지 않는다(텍스트 저장소를 읽기만 한다).
+  /// 되돌리기 알림이 없으면 입력해도 알림 값을 건드리지 않는다. 건드리면 키마다 상태 줄이 다시 그려진다.
+  func testTypingWithoutRestoreNoticeLeavesNoticeObserversAlone() {
+    nonisolated(unsafe) var notified = false
+    withObservationTracking {
+      _ = autosaver.restoreNotice
+    } onChange: {
+      notified = true
+    }
+
+    type("가")
+
+    XCTAssertFalse(notified)
+  }
+
   func testSavingDuringCompositionKeepsMarkedText() async throws {
     textView.setSelectedRange(NSRange(location: textView.string.utf16.count, length: 0))
     textView.setMarkedText("하", selectedRange: NSRange(location: 1, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))

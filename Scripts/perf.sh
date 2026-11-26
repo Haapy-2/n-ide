@@ -73,7 +73,7 @@ def perf(name, text):
 row("키 입력 1,000번 (5,000자 회차)", perf("keystroke_ms", app), 16, stat="p95")
 row("키 입력 300번 (10만 자 회차, 글자 수 실시간)", perf("keystroke_realtime_100k_ms", app), 16, stat="p95")
 row("키 입력 300번 (10만 자 회차 끝, 줄 번호 켬, 30번에 한 번 엔터)", perf("keystroke_line_numbers_100k_ms", app), 16, stat="p95")
-row("키 입력 300번 (10만 자, 커서 100개)", perf("multi_cursor_100_keystroke_ms", app), 16, stat="p95")
+row("키 입력 300번 (10만 자, 커서 100개, 화면 그리기까지)", perf("multi_cursor_100_keystroke_ms", app), 16, stat="p95")
 row("회차 전환 (처음 여는 5,000자 회차)", perf("switch_ms", app), 50)
 # 타이핑 중 0.2초마다: 글자 수 하나가 바뀌어 작업 공간(사이드바 500회차 포함)이 다시 그려질 때까지. 한 프레임 기준.
 row("글자 수 바뀜 → 화면 갱신 (사이드바 500회차)", perf("sidebar_count_ms", app), 16, stat="p95")
@@ -121,6 +121,10 @@ else:
 print("| 항목 | 기준값 | 최솟값 | 최댓값 | 목표 | 결과 |")
 print("|---|---|---|---|---|---|")
 print("\n".join(rows))
+full = perf("multi_cursor_100_keystroke_full_layout_ms", app)
+if full:
+    ordered = sorted(full)
+    print(f"\n참고: 커서 100개 키 입력을 본문 전체 레이아웃까지 재면 p95 {ordered[min(len(ordered) - 1, int(len(ordered) * 0.95))]:.1f}ms (앱은 이 몫을 뒤에서 나눠 한다)")
 if runs: print(f"\n참고: 첫 실행 {runs[0]:.1f}ms")
 if hung: print(f"주의: 실행 6번 중 {hung}번이 10초 안에 입력 가능 상태가 되지 않아 껐음")
 # 회차 전환 메모리(MemoryGrowthTests): footprint/malloc 사용량(MB). 쌓이는지는 malloc 쪽으로 본다(목표 없음, 참고값).

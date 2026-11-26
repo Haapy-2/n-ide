@@ -173,6 +173,23 @@ public struct MultiCursor: Equatable, Sendable {
     return Edit(changes: zip(targets, texts).map { TextChange(range: $0, text: $1) }, inserted: inserted)
   }
 
+  /// 고친 뒤의 자리(`Edit.inserted`)를 다시 고칠 때(되돌리기). 맞닿은 선택을 지우면 빈 범위와 다음 범위가 한 점에서 시작하는데(E4),
+  /// `edit`은 같은 자리에서 시작하는 범위를 낡았다고 보고 받지 않는다. 그런 이웃을 하나로 합치고 글은 앞에서부터 잇는다.
+  public static func joinedAtMeetingPoints(_ ranges: [NSRange], texts: [String]) -> (ranges: [NSRange], texts: [String]) {
+    var joinedRanges: [NSRange] = []
+    var joinedTexts: [String] = []
+    for (range, text) in zip(ranges, texts) {
+      if let last = joinedRanges.last, last.length == 0, range.location == last.location {
+        joinedRanges[joinedRanges.count - 1] = range
+        joinedTexts[joinedTexts.count - 1] += text
+      } else {
+        joinedRanges.append(range)
+        joinedTexts.append(text)
+      }
+    }
+    return (joinedRanges, joinedTexts)
+  }
+
   /// 입력기가 맨 앞 자리(`anchors[0]`) 둘레의 `replacement`를 바꾸라고 할 때, 자리마다 같은 상대 범위
   /// (자리 앞 N글자부터 자리 뒤 M글자까지). 자리마다 자기 길이를 쓰므로 자모를 따로 적은 한글처럼 길이가 다른 자리도 맞는다(E2).
   /// `replacement`가 맨 앞 자리 둘레가 아니거나(재변환·한자 변환 등) 옮긴 범위가 본문 밖이거나 서로 겹치면 nil:

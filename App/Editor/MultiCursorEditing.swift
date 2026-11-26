@@ -280,6 +280,7 @@ extension ManuscriptTextView {
       return nil
     }
     replaceEach(edit.changes, in: storage)
+    recountLines()
     didChangeText()
     undo.enableUndoRegistration()
 
@@ -319,14 +320,15 @@ extension ManuscriptTextView {
   private func revertMultiInput(_ unit: MultiInputUnit) {
     finishComposition()
     dropMultiCursor()
+    let (ranges, originals) = MultiCursor.joinedAtMeetingPoints(unit.ranges, texts: unit.originals)
     guard let storage = textStorage,
-      let edit = MultiCursor.edit(unit.ranges, texts: unit.originals, textLength: storage.length)
+      let edit = MultiCursor.edit(ranges, texts: originals, textLength: storage.length)
     else { return }
     let text = string as NSString
-    let replaced = unit.ranges.map { text.substring(with: $0) }
+    let replaced = ranges.map { text.substring(with: $0) }
     let undo = episodeUndoManager
     undo.disableUndoRegistration()
-    let changed = shouldChangeText(inRanges: unit.ranges.map { NSValue(range: $0) }, replacementStrings: unit.originals)
+    let changed = shouldChangeText(inRanges: ranges.map { NSValue(range: $0) }, replacementStrings: originals)
     if changed {
       replaceEach(edit.changes, in: storage)
       didChangeText()

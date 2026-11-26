@@ -128,7 +128,13 @@ final class ManuscriptTextView: NSTextView {
   /// 줄 수가 같으면 아무것도 안 한다. 글자만 친 줄은 아래 `setNeedsDisplay`가 번호 칸까지 넓혀 다시 그린다.
   /// 읽기만 하므로 조합 중에도 안전하다.
   @objc private func storageEditedForLineNumbers(_ notification: Notification) {
-    guard showsLineNumbers, let storage = textStorage, storage.editedMask.contains(.editedCharacters) else { return }
+    // 여러 커서는 자리마다 따로 고쳐 이 알림이 커서 수만큼 온다. 그때는 다 고친 뒤 한 번만 센다.
+    guard !isApplyingMultiCursor, let storage = textStorage, storage.editedMask.contains(.editedCharacters) else { return }
+    recountLines()
+  }
+
+  func recountLines() {
+    guard showsLineNumbers, let storage = textStorage else { return }
     let old = lineCountCache
     let count = ParagraphLines.lineCount(in: storage.mutableString)
     lineCountCache = count
@@ -221,11 +227,11 @@ final class ManuscriptTextView: NSTextView {
     // 조합을 확정하고 입력기에도 끝났다고 알린다. unmarkText만 하면 입력기는 아직 조합 중이라 여겨,
     // 다음 키가 앞 회차의 자모와 합쳐져 새 본문에 들어갈 수 있다.
     finishComposition()
+    forgetInputInProgress()
     dropMultiCursor()
     textStorage?.setAttributedString(NSAttributedString(string: text, attributes: style.textAttributes))
     setSelectedRange(NSRange(location: 0, length: 0))
     episodeUndoManager.removeAllActions()
-    currentInput = nil
     scroll(.zero)
   }
 
@@ -322,13 +328,13 @@ final class ManuscriptTextView: NSTextView {
     // 조합을 확정하고 입력기에도 끝났다고 알린다. unmarkText만 하면 입력기는 아직 조합 중이라 여겨,
     // 다음 키가 앞 회차의 자모와 합쳐져 새 본문에 들어갈 수 있다.
     finishComposition()
+    forgetInputInProgress()
     dropMultiCursor()
     let cursor = selectedRange().location
     let origin = enclosingScrollView?.contentView.bounds.origin ?? .zero
     textStorage?.setAttributedString(NSAttributedString(string: text, attributes: style.textAttributes))
     setSelectedRange(NSRange(location: min(cursor, (text as NSString).length), length: 0))
     episodeUndoManager.removeAllActions()
-    currentInput = nil
     scroll(origin)
   }
 

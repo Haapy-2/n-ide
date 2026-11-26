@@ -81,6 +81,8 @@ final class EditorPerformanceTests: XCTestCase {
 
   /// 같은 말 여러 커서: 10만 자 회차에 1,000자마다 놓은 표시어 100개를 ⌘D로 모두 고르고 300번.
   /// 한 글자는 `testKeystroke`처럼 조합 두 번 + 확정 한 번. 자리가 본문 전체에 흩어져 있어야 고치는 곳이 넓게 퍼진 가장 무거운 경우가 된다.
+  /// 목표 줄은 화면 그리기까지다(보이는 곳만 바로 레이아웃). 본문 전체 레이아웃까지는 참고로 따로 잰다: 100곳이 본문 전체에
+  /// 흩어져 있어 매번 전체를 다시 배치하는데, 앱은 이것을 키 입력 중이 아니라 뒤에서 나눠 한다.
   func testMultiCursorKeystroke100k() throws {
     let (window, textView) = makeEditorWindow()
     defer { window.close() }
@@ -101,22 +103,26 @@ final class EditorPerformanceTests: XCTestCase {
     textView.scrollRangeToVisible(textView.selectedRange())
     settle()
 
-    var samples: [Double] = []
     let clock = ContinuousClock()
-    for index in 0..<300 {
-      let elapsed = clock.measure {
-        switch index % 3 {
-        case 0: textView.setMarkedText("ㄱ", selectedRange: NSRange(location: 1, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
-        case 1: textView.setMarkedText("가", selectedRange: NSRange(location: 1, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
-        default: textView.insertText("가", replacementRange: NSRange(location: NSNotFound, length: 0))
-        }
-        textView.layoutManager?.ensureLayout(for: textView.textContainer!)
-        textView.displayIfNeeded()
+    func type(_ count: Int, fullLayout: Bool) -> [Double] {
+      (0..<count).map { index in
+        milliseconds(clock.measure {
+          switch index % 3 {
+          case 0: textView.setMarkedText("ㄱ", selectedRange: NSRange(location: 1, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
+          case 1: textView.setMarkedText("가", selectedRange: NSRange(location: 1, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
+          default: textView.insertText("가", replacementRange: NSRange(location: NSNotFound, length: 0))
+          }
+          if fullLayout { textView.layoutManager?.ensureLayout(for: textView.textContainer!) }
+          textView.displayIfNeeded()
+        })
       }
-      samples.append(milliseconds(elapsed))
     }
-    XCTAssertEqual(textView.multiCursorRanges?.count, 100, "300번 내내 여러 커서였다")
+    let samples = type(300, fullLayout: false)
+    textView.layoutManager?.ensureLayout(for: textView.textContainer!)
+    let fullLayout = type(150, fullLayout: true)
+    XCTAssertEqual(textView.multiCursorRanges?.count, 100, "내내 여러 커서였다")
     report("multi_cursor_100_keystroke_ms", samples)
+    report("multi_cursor_100_keystroke_full_layout_ms", fullLayout)
   }
 
   /// 줄 번호를 켠 키 입력: 10만 자 회차 거의 끝(보이는 첫 문단 번호를 구하려고 앞을 가장 많이 셈)에서 300번.

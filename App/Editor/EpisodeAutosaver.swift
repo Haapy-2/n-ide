@@ -651,8 +651,9 @@ final class EpisodeAutosaver {
   }
 
   /// 앱 쪽에 아직 디스크에 없는 내용이 있는지: 저장 안 된 입력, 쓰는 중인 저장, 조합 중인 글자.
+  /// 여러 커서도 넣는다(PLAN 16장 X4): 다시 읽으면 고르던 자리들이 말없이 사라진다.
   private func hasAppChanges(_ id: EpisodeID) -> Bool {
-    isDirty(id) || inFlight[id] != nil || (textView?.hasMarkedText() ?? false)
+    isDirty(id) || inFlight[id] != nil || (textView?.hasMarkedText() ?? false) || textView?.multiCursor != nil
   }
 
   /// 양쪽 다 바뀌었다. 앱 쪽 본문을 메모리에 붙잡아 두고 스냅샷으로 남긴 뒤, 다 남기면 묻는다(`conflicts`).

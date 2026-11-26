@@ -95,8 +95,12 @@ struct ManuscriptEditor: NSViewRepresentable {
     if !revealing, let place = EpisodeViewStates.shared.state(for: content.episodeID) {
       textView.restoreViewState(place)
       let token = content.token
+      let restored = textView.selectedRange()
+      // 그사이 첫 키가 먼저 왔으면(조합 중이거나 커서가 움직였으면) 옮기지 않는다: 조합 중 선택을 바꾸면 한글이 깨진다.
       DispatchQueue.main.async { [weak textView, weak coordinator] in
-        guard let textView, let coordinator, coordinator.appliedToken == token else { return }
+        guard let textView, let coordinator, coordinator.appliedToken == token,
+          !textView.hasMarkedText(), textView.selectedRange() == restored
+        else { return }
         textView.restoreViewState(place)
         coordinator.rememberPlace()
       }
