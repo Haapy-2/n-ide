@@ -421,6 +421,11 @@ final class ProjectModel {
     }
   }
 
+  /// 되돌리기로 시작한 파일 옮기기가 모두 끝날 때까지 기다린다. 줄의 마지막 일은 앞의 일과 그 뒤 목록 저장까지 기다린다.
+  func finishFileUndos() async {
+    await fileUndoTail?.value
+  }
+
   nonisolated static func systemTrash(_ url: URL) throws -> URL {
     var resulting: NSURL?
     try FileManager.default.trashItem(at: url, resultingItemURL: &resulting)

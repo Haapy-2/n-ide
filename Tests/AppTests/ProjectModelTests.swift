@@ -186,12 +186,12 @@ final class ProjectModelTests: XCTestCase {
     XCTAssertEqual(undo.undoActionName, "순서 변경")
 
     undo.undo()
-    try await Task.sleep(for: .milliseconds(100))
+    await model.finishProjectSaves()
     XCTAssertEqual(model.episodes.map(\.id), [a, b, c])
     XCTAssertEqual(try store.loadProject().episodes.map(\.id), [a, b, c])
 
     undo.redo()
-    try await Task.sleep(for: .milliseconds(100))
+    await model.finishProjectSaves()
     XCTAssertEqual(model.episodes.map(\.id), [c, a, b])
     XCTAssertEqual(try store.loadProject().episodes.map(\.id), [c, a, b])
   }
@@ -206,7 +206,7 @@ final class ProjectModelTests: XCTestCase {
     await model.renameEpisodes([id: "새 제목"], reason: .single, undoManager: undo)
     undo.endUndoGrouping()
     undo.undo()
-    try await Task.sleep(for: .milliseconds(100))
+    await model.finishProjectSaves()
 
     XCTAssertEqual(model.episode(id)?.title, "")
     XCTAssertEqual(try store.loadProject().episodes.first?.title, "")
@@ -229,13 +229,13 @@ final class ProjectModelTests: XCTestCase {
     XCTAssertEqual(undo.undoActionName, "새 회차")
 
     undo.undo()
-    try await Task.sleep(for: .milliseconds(150))
+    await model.finishFileUndos()
     XCTAssertEqual(model.episodes.map(\.id), [first])
     XCTAssertEqual(try store.loadProject().episodes.map(\.id), [first])
     XCTAssertTrue(FileManager.default.fileExists(atPath: trash.appending(path: "\(added.rawValue).md").path(percentEncoded: false)))
 
     undo.redo()
-    try await Task.sleep(for: .milliseconds(150))
+    await model.finishFileUndos()
     XCTAssertEqual(model.episodes.map(\.id), [first, added])
     XCTAssertEqual(try store.readEpisode(added), "")
   }
@@ -254,13 +254,13 @@ final class ProjectModelTests: XCTestCase {
     XCTAssertEqual(model.episodes.map(\.id), [a, c])
 
     undo.undo()
-    try await Task.sleep(for: .milliseconds(150))
+    await model.finishFileUndos()
     XCTAssertEqual(model.episodes.map(\.id), [a, b, c])
     XCTAssertEqual(try store.loadProject().episodes.map(\.id), [a, b, c])
     XCTAssertEqual(try store.readEpisode(b), "되살릴 본문")
 
     undo.redo()
-    try await Task.sleep(for: .milliseconds(150))
+    await model.finishFileUndos()
     XCTAssertEqual(model.episodes.map(\.id), [a, c])
     XCTAssertFalse(FileManager.default.fileExists(atPath: store.layout.episodeFile(b).path(percentEncoded: false)))
   }
@@ -277,12 +277,12 @@ final class ProjectModelTests: XCTestCase {
 
     undo.undo()
     undo.redo()
-    try await Task.sleep(for: .milliseconds(300))
+    await model.finishFileUndos()
 
     XCTAssertEqual(model.episodes.map(\.id), [a], "다시 실행까지 끝나면 목록에 없다")
     XCTAssertFalse(FileManager.default.fileExists(atPath: store.layout.episodeFile(b).path(percentEncoded: false)))
     undo.undo()
-    try await Task.sleep(for: .milliseconds(300))
+    await model.finishFileUndos()
     XCTAssertEqual(model.episodes.map(\.id), [a, b], "한 번 더 되돌리면 다시 꺼내진다")
     XCTAssertEqual(try store.readEpisode(b), "본문")
   }
@@ -330,7 +330,7 @@ final class ProjectModelTests: XCTestCase {
     undo.groupsByEvent = false
     try await grouped(undo) { try await model.trashEpisode(id, undoManager: undo) }
     undo.undo()
-    try await Task.sleep(for: .milliseconds(150))
+    await model.finishFileUndos()
     XCTAssertEqual(model.episodes.map(\.id), [id])
 
     // 회차 전환처럼 디스크에서 다시 읽어 연 뒤 한 글자 고친다.
@@ -357,17 +357,17 @@ final class ProjectModelTests: XCTestCase {
       model.setDefaultEpisodeGoal(3_000, undoManager: undo)
       await model.setGoal(first, to: 3_000, undoManager: undo)
     }
-    try await Task.sleep(for: .milliseconds(100))
+    await model.finishProjectSaves()
     XCTAssertEqual(try store.loadProject().settings.defaultEpisodeGoal, 3_000)
 
     undo.undo()
-    try await Task.sleep(for: .milliseconds(100))
+    await model.finishProjectSaves()
     XCTAssertEqual(model.project.settings.defaultEpisodeGoal, 5_000)
     XCTAssertEqual(model.episode(first)?.goal, 5_000)
     XCTAssertEqual(try store.loadProject().settings.defaultEpisodeGoal, 5_000)
 
     undo.redo()
-    try await Task.sleep(for: .milliseconds(100))
+    await model.finishProjectSaves()
     let second = try await model.addEpisode()
     XCTAssertEqual(model.episode(first)?.goal, 3_000)
     XCTAssertEqual(model.episode(second)?.goal, 3_000)
@@ -393,7 +393,7 @@ final class ProjectModelTests: XCTestCase {
     XCTAssertEqual(try store.loadProject().episodes.map(\.goal), [3_000, 3_000])
 
     undo.undo()
-    try await Task.sleep(for: .milliseconds(100))
+    await model.finishProjectSaves()
     XCTAssertEqual(model.episode(a)?.goal, 5_000)
     XCTAssertEqual(model.episode(b)?.goal, 4_000)
   }

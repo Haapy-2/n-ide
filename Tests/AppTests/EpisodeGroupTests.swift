@@ -52,7 +52,7 @@ final class EpisodeGroupTests: XCTestCase {
     XCTAssertEqual(saved.episodes.filter { $0.group == group }.map(\.id), [ids[1], ids[4]])
 
     undo.undo()
-    try await Task.sleep(for: .milliseconds(100))
+    await model.finishProjectSaves()
     XCTAssertEqual(model.episodes.map(\.id), ids)
     XCTAssertTrue(model.project.groups.isEmpty)
     XCTAssertEqual(try store.loadProject().episodes.map(\.id), ids)
