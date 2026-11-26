@@ -326,7 +326,8 @@ struct WorkspaceView: View {
         // 글자 수는 body에서 읽지 않는다(읽으면 글자 수가 바뀔 때마다 작업 공간 전체가 다시 계산된다).
         knownCount: { model.countBox(for: selection).value },
         reveal: reveal,
-        onShown: { episodeShown($0) })
+        onShown: { episodeShown($0) },
+        onNotice: { toasts.show($0, systemImage: "exclamationmark.circle") })
     } else {
       Color.clear
     }

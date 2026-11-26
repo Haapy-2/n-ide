@@ -183,6 +183,11 @@ final class EpisodeAutosaver {
 
   func attach(_ textView: ManuscriptTextView) {
     self.textView = textView
+    // 본문 복사는 들어갈 때 한 번만 메인에서, 쓰기는 스냅샷 줄이 메인 밖에서 한다.
+    textView.onEnterMultiCursor = { [weak self, weak textView] in
+      guard let self, let textView, let id = episodeID else { return }
+      snapshots.takeBeforeMultiCursor(id, text: textView.string)
+    }
   }
 
   /// 회차를 열 때 디스크 대신 보여줄 본문: 저장에 실패해 메모리에 남은 것, 또는 아직 쓰는 중인 것. 없으면 nil.

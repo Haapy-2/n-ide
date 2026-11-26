@@ -81,6 +81,37 @@ final class SnapshotTimingTests: XCTestCase {
     XCTAssertFalse(autosaver.hasWorkBeforeQuit)
   }
 
+  // MARK: - 여러 커서 전
+
+  /// 여러 커서로 들어갈 때 그 직전 글을 남긴다. 같은 글로 다시 들어가면 더 찍지 않고, 종료는 쓰기를 기다린다.
+  func testEnteringMultiCursorSnapshotsTextBefore() async throws {
+    let none = NSRange(location: NSNotFound, length: 0)
+    textView.replaceAllText(with: "민준 가 민준 나 민준")
+    textView.setSelectedRange(NSRange(location: 0, length: 2))
+    textView.selectNextOccurrence(nil)
+    textView.selectNextOccurrence(nil)
+    XCTAssertTrue(autosaver.hasWorkBeforeQuit, "앱을 끌 때 이 쓰기를 기다린다")
+    await autosaver.snapshots.waitForWrites()
+    let first = try snapshots()
+    XCTAssertEqual(first.map(\.kind), [.multiCursor])
+    XCTAssertEqual(try store.readSnapshot(first[0]), "민준 가 민준 나 민준")
+
+    textView.endMultiCursor()
+    textView.setSelectedRange(NSRange(location: 0, length: 2))
+    textView.selectNextOccurrence(nil)
+    await autosaver.snapshots.waitForWrites()
+    XCTAssertEqual(try snapshots().count, 1, "같은 글로 다시 들어가면 더 찍지 않는다")
+
+    textView.insertText("서윤", replacementRange: none)
+    textView.endMultiCursor()
+    textView.setSelectedRange(NSRange(location: 0, length: 2))
+    textView.selectNextOccurrence(nil)
+    await autosaver.snapshots.waitForWrites()
+    let taken = try snapshots()
+    XCTAssertEqual(taken.map(\.kind), [.multiCursor, .multiCursor])
+    XCTAssertEqual(try store.readSnapshot(taken[1]), "서윤 가 서윤 나 민준")
+  }
+
   // MARK: - 자동
 
   func testAutoTickOnlyWhenEdited() async throws {

@@ -56,6 +56,7 @@ extension ManuscriptTextView {
 
   /// 커서만 있으면 커서 아래 단어를 고르고, 고른 말이 있으면 다음 같은 말을 하나 더 고른다(VS Code ⌘D).
   @objc func selectNextOccurrence(_ sender: Any?) {
+    guard multiCursorEnabled else { return }
     finishComposition()
     if let session = multiCursor {
       guard session.cursor.ranges.allSatisfy({ $0.length > 0 }) else { return }
@@ -84,6 +85,7 @@ extension ManuscriptTextView {
       if let session {
         session.cursor = cursor
       } else {
+        onEnterMultiCursor()
         multiCursor = MultiCursorSession(cursor: cursor)
       }
       selectPrimary()
@@ -92,7 +94,7 @@ extension ManuscriptTextView {
     case .noMore, .notSearchable:
       break
     case .limitReached:
-      NSSound.beep()
+      onNotice("커서는 \(MultiCursor.limit.formatted())개까지 만들 수 있어요")
     }
   }
 

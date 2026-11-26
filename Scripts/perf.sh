@@ -73,6 +73,7 @@ def perf(name, text):
 row("키 입력 1,000번 (5,000자 회차)", perf("keystroke_ms", app), 16, stat="p95")
 row("키 입력 300번 (10만 자 회차, 글자 수 실시간)", perf("keystroke_realtime_100k_ms", app), 16, stat="p95")
 row("키 입력 300번 (10만 자 회차 끝, 줄 번호 켬, 30번에 한 번 엔터)", perf("keystroke_line_numbers_100k_ms", app), 16, stat="p95")
+row("키 입력 300번 (10만 자, 커서 100개)", perf("multi_cursor_100_keystroke_ms", app), 16, stat="p95")
 row("회차 전환 (처음 여는 5,000자 회차)", perf("switch_ms", app), 50)
 # 타이핑 중 0.2초마다: 글자 수 하나가 바뀌어 작업 공간(사이드바 500회차 포함)이 다시 그려질 때까지. 한 프레임 기준.
 row("글자 수 바뀜 → 화면 갱신 (사이드바 500회차)", perf("sidebar_count_ms", app), 16, stat="p95")

@@ -19,6 +19,7 @@ struct ManuscriptEditor: NSViewRepresentable {
   let content: Content
   var style = EditorStyle()
   var showsLineNumbers = false
+  var multiCursorEnabled = true
   var caret = CaretStyle()
   /// 검색 결과로 가기. 같은 회차의 본문이 올라간 뒤 token마다 한 번만 한다.
   var reveal: TextReveal?
@@ -30,6 +31,8 @@ struct ManuscriptEditor: NSViewRepresentable {
   var onFocusGained: () -> Void = {}
   /// 편집기가 만들어졌을 때 한 번.
   var onReady: (ManuscriptTextView) -> Void = { _ in }
+  /// 작가에게 짧게 알릴 말(토스트). 여러 커서 한도에 닿았을 때.
+  var onNotice: (String) -> Void = { _ in }
   /// 회차 본문을 편집기에 넣은 뒤 한 번(바꾼 회차 목록에서 그 회차의 스냅샷 판을 열 때).
   /// 화면 갱신 중에 상태를 바꾸지 않도록 한 차례 뒤에 부른다.
   var onShown: (EpisodeID) -> Void = { _ in }
@@ -43,7 +46,9 @@ struct ManuscriptEditor: NSViewRepresentable {
     let textView = ManuscriptTextView.make()
     textView.style = style
     textView.showsLineNumbers = showsLineNumbers
+    textView.multiCursorEnabled = multiCursorEnabled
     textView.caret = caret
+    textView.onNotice = { [weak coordinator = context.coordinator] in coordinator?.parent?.onNotice($0) }
     scrollView.documentView = textView
     textView.delegate = context.coordinator
     context.coordinator.textView = textView
@@ -64,6 +69,8 @@ struct ManuscriptEditor: NSViewRepresentable {
     if textView.style != style { textView.style = style }
     // 그림만 바뀌어 조합 중에도 바로 넣어도 된다.
     textView.showsLineNumbers = showsLineNumbers
+    // 끄면 여러 커서를 끝낸다. 조합 중이면 끝내기가 먼저 확정한다(`endMultiCursor`).
+    if textView.multiCursorEnabled != multiCursorEnabled { textView.multiCursorEnabled = multiCursorEnabled }
     if textView.caret != caret { textView.caret = caret }
     if context.coordinator.appliedToken != content.token {
       apply(content, to: textView, coordinator: context.coordinator)

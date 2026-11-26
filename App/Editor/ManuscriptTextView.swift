@@ -57,6 +57,15 @@ final class ManuscriptTextView: NSTextView {
   var wordFromCaret: NSRange?
   /// 맨 앞 커서가 지금 화면에 그려져 있나. 다른 자리 커서도 이 값대로 그린다(`MultiCursorEditing.swift`).
   var extraCaretsOn = false
+  /// 설정 › 편집기 "같은 말 여러 커서". 끄면 ⌘D가 아무것도 하지 않고, 여러 커서 중이면 끝낸다.
+  /// 메뉴만 흐리게 하면 메뉴를 거치지 않는 호출(`sendSelectNextOccurrence`)이 남아 여기서도 막는다.
+  var multiCursorEnabled = true {
+    didSet { if !multiCursorEnabled { endMultiCursor() } }
+  }
+  /// 커서 하나에서 여러 커서로 바뀌기 직전. 본문은 아직 그대로다(들어가기 전 스냅샷용).
+  var onEnterMultiCursor: () -> Void = {}
+  /// 작가에게 짧게 알릴 말(토스트).
+  var onNotice: (String) -> Void = { _ in }
 
   /// 회차마다 따로 쓰는 실행 취소 기록. 회차를 바꾸면 비운다(PLAN.md 세부 기준).
   let episodeUndoManager = UndoManager()

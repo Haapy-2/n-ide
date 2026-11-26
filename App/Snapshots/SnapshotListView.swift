@@ -145,6 +145,7 @@ struct SnapshotListView: View {
     case .replaced: "바꾼 뒤"
     case .revert: "되돌리기 전"
     case .rename: "이름 변경"
+    case .multiCursor: "여러 커서 전"
     }
   }
 }

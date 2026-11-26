@@ -229,6 +229,31 @@ struct SnapshotTests {
     #expect(store.isKept(kept))
   }
 
+  @Test func multiCursorIsNamedListedAndPrunedWithAuto() throws {
+    let folder = try TestFolder()
+    defer { folder.remove() }
+    let (store, id) = try makeStore(folder)
+    try store.writeSnapshot("가", episode: id, kind: .multiCursor, at: time(0))
+    try store.writeSnapshot("가나", episode: id, kind: .auto, at: time(1))
+    try store.writeSnapshot("가나", episode: id, kind: .manual, at: time(2))
+    try store.writeSnapshot("가나다", episode: id, kind: .multiCursor, at: time(3))
+    try store.writeSnapshot("가나다라", episode: id, kind: .multiCursor, at: time(3))
+
+    #expect(try names(store, id) == [
+      "20261111-090000-multicursor.md", "20261111-090001-auto.md", "20261111-090002-manual.md",
+      "20261111-090003-multicursor.md", "20261111-090003-multicursor-2.md",
+    ], "파일 이름을 다시 읽어 시간순으로 놓는다")
+    #expect(try store.snapshots(of: id).map(\.kind) == [.multiCursor, .auto, .manual, .multiCursor, .multiCursor])
+
+    let removed = try store.pruneSnapshots(of: id, keeping: 2)
+
+    #expect(removed.map(\.id) == ["20261111-090000-multicursor.md", "20261111-090001-auto.md"],
+      "자동과 함께 세어 오래된 것부터 지운다")
+    #expect(try store.snapshots(of: id).map { try store.readSnapshot($0) } == ["가나", "가나다", "가나다라"],
+      "직접 찍은 것은 남는다")
+    #expect(!SnapshotKind.multiCursor.capturesEdits, "고친 회차 표시와 따로 간다")
+  }
+
   /// 같은 초에 여러 개 찍다가 앞 번호가 정리돼도, 다음 것은 빈 번호가 아니라 뒤 번호를 받아 가장 새 것으로 남는다.
   @Test func sameSecondNeverReusesPrunedNumber() throws {
     let folder = try TestFolder()

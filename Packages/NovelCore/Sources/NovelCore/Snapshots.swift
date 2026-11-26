@@ -23,12 +23,14 @@ public enum SnapshotKind: String, Sendable, CaseIterable {
   /// 회차 이름이 바뀔 때의 본문. 바뀌기 전 제목을 `.title`에 함께 둬서 복원하면 제목도 돌아간다.
   /// 기록용이라 메모가 있어도 보관 개수로 지운다. `.keep`이 있을 때만 지킨다.
   case rename
+  /// 같은 말 여러 커서(⌘D)로 들어가기 직전의 본문. 파일 이름에 대문자를 넣지 않으려고 이름을 따로 준다.
+  case multiCursor = "multicursor"
 
   /// 보관 개수를 넘으면 지워도 되는 종류. 지울 수 있는 것을 하나씩 적는 허용 목록이라,
   /// 나중에 종류가 늘어도 여기에 적지 않으면 지워지지 않는다.
   public var isPrunable: Bool {
     switch self {
-    case .auto, .leave, .rename: true
+    case .auto, .leave, .rename, .multiCursor: true
     case .manual, .restore, .conflict, .external, .replace, .replaced, .revert: false
     }
   }
@@ -224,7 +226,7 @@ extension ProjectStore {
     }
   }
 
-  /// `auto`·`leave`·`rename`을 함께 세어 `limit`개를 넘으면 오래된 것부터 바로 지운다(휴지통 아님). 지운 목록을 돌려준다.
+  /// `auto`·`leave`·`rename`·`multicursor`를 함께 세어 `limit`개를 넘으면 오래된 것부터 바로 지운다(휴지통 아님). 지운 목록을 돌려준다.
   /// 다른 종류와 모르는 파일은 세지도 지우지도 않는다. 지키기로 한 것(`isKept`)도 세지도 지우지도 않는다.
   @discardableResult
   public func pruneSnapshots(of id: EpisodeID, keeping limit: Int) throws -> [Snapshot] {

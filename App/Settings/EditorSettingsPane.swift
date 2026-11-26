@@ -9,6 +9,7 @@ struct EditorSettingsPane: View {
   @AppStorage(AppSettingKey.statusBarHidesWhileTyping) private var hidesWhileTyping = false
   @AppStorage(AppSettingKey.statusBarHidesWhenIdle) private var hidesWhenIdle = true
   @AppStorage(AppSettingKey.showsLineNumbers) private var showsLineNumbers = false
+  @AppStorage(AppSettingKey.multiCursorEnabled) private var multiCursorEnabled = true
 
   var body: some View {
     Form {
@@ -23,6 +24,10 @@ struct EditorSettingsPane: View {
         NumberSlider(title: "문단 간격", value: editor.$paragraphSpacing, setting: .paragraphSpacing) { String(format: "%.1f줄", $0) }
         NumberSlider(title: "본문 폭", value: editor.$lineWidthInCharacters, setting: .lineWidthInCharacters) { "\(Int($0))자" }
         Toggle("줄 번호 보이기", isOn: $showsLineNumbers)
+        Toggle(isOn: $multiCursorEnabled) {
+          Text("같은 말 여러 커서")
+          Text(multiCursorDescription)
+        }
       }
       Section("상태 줄") {
         Picker("글자 수", selection: $display) {
@@ -45,5 +50,12 @@ struct EditorSettingsPane: View {
       }
     }
     .formStyle(.grouped)
+  }
+
+  /// 단축키는 설정에서 바꿀 수 있어 제목에 넣지 않고 지금 키를 여기 보인다.
+  private var multiCursorDescription: String {
+    let sentence = "같은 말을 하나씩 더 골라 한꺼번에 고쳐요"
+    guard let combo = ShortcutStore.shared.settings.combo(for: .selectNextOccurrence) else { return sentence }
+    return "\(sentence) (\(combo.displayText))"
   }
 }

@@ -14,6 +14,8 @@ struct EpisodeEditorPane: View {
   var reveal: TextReveal?
   /// 이 회차의 본문이 편집기에 올라간 뒤 한 번.
   var onShown: (EpisodeID) -> Void = { _ in }
+  /// 편집기가 작가에게 알릴 말(토스트).
+  var onNotice: (String) -> Void = { _ in }
   @State private var content: ManuscriptEditor.Content?
   @State private var errorMessage: String?
   @State private var fade = StatusBarFade()
@@ -27,6 +29,7 @@ struct EpisodeEditorPane: View {
   @AppStorage(AppSettingKey.autoSnapshotMinutes) private var snapshotMinutes = 30
   @AppStorage(AppSettingKey.snapshotRetention) private var snapshotRetention = 50
   @AppStorage(AppSettingKey.showsLineNumbers) private var showsLineNumbers = false
+  @AppStorage(AppSettingKey.multiCursorEnabled) private var multiCursorEnabled = true
 
   var body: some View {
     let style = editorSettings.style
@@ -39,6 +42,7 @@ struct EpisodeEditorPane: View {
             content: content,
             style: style,
             showsLineNumbers: showsLineNumbers,
+            multiCursorEnabled: multiCursorEnabled,
             caret: caretSettings.style,
             reveal: reveal,
             onTextChange: {
@@ -52,6 +56,7 @@ struct EpisodeEditorPane: View {
               autosaver.attach($0)
               counter.attach($0)
             },
+            onNotice: onNotice,
             onShown: onShown)
         } else if let errorMessage {
           Text(errorMessage)

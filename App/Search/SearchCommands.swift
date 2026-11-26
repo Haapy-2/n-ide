@@ -4,6 +4,7 @@ import SwiftUI
 /// 앞에 있는 작업 공간 창이 없으면 흐리게 보인다.
 struct SearchCommands: Commands {
   @FocusedValue(\.workspaceActions) private var actions
+  @AppStorage(AppSettingKey.multiCursorEnabled) private var multiCursorEnabled = true
 
   var body: some Commands {
     CommandGroup(after: .textEditing) {
@@ -16,7 +17,7 @@ struct SearchCommands: Commands {
       Divider()
       Button(ShortcutCommand.selectNextOccurrence.title) { ManuscriptTextView.sendSelectNextOccurrence() }
         .keyboardShortcut(ShortcutStore.shared.settings.shortcut(.selectNextOccurrence))
-        .disabled(actions == nil)
+        .disabled(actions == nil || !multiCursorEnabled)
     }
   }
 }

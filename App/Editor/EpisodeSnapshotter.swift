@@ -6,6 +6,7 @@ import NovelCore
 /// - 떠날 때: 회차 전환·창 닫기·앱 종료. 자동을 꺼도 늘 찍는다(결정 16). 이번에 고치지 않은 회차는 찍지 않는다
 ///   (훑어보기만 한 회차마다 스냅샷이 생기지 않게).
 /// - 직접(⌃⌘S): 고치지 않았어도 찍는다.
+/// - 여러 커서 전: ⌘D로 커서가 둘이 되는 순간. 여러 커서로 망친 글을 되찾을 수 있게(PLAN 16장 4번).
 /// 자동·떠날 때는 마지막 스냅샷과 같으면 건너뛰고, 찍은 뒤 보관 개수로 정리한다.
 /// 쓰기는 메인 스레드 밖에서 한 줄로 차례대로 한다(앞 것이 끝나야 "마지막과 같은지"를 바르게 본다).
 @MainActor
@@ -13,7 +14,7 @@ final class EpisodeSnapshotter {
   struct Settings: Equatable {
     var autoEnabled = true
     var interval: Duration = .seconds(30 * 60)
-    /// `auto`·`leave`·`rename`을 회차마다 몇 개까지 남길지
+    /// `auto`·`leave`·`rename`·`multicursor`를 회차마다 몇 개까지 남길지
     var retention = 50
 
     static let intervalChoices = [5, 10, 15, 30, 60]
@@ -79,6 +80,12 @@ final class EpisodeSnapshotter {
   /// 되돌리기 직전 지금 본문을 `restore`로 남긴다. 같은 내용이어도 늘 찍는다: 메모로 "언제 무엇으로 되돌렸나"를 남기려고.
   func takeRestore(_ id: EpisodeID, text: String, memo: String) async throws -> Snapshot? {
     try await enqueue(text, id, .restore, memo: memo).value
+  }
+
+  /// 여러 커서로 들어가기 직전(`multicursor`). 마지막 스냅샷과 같으면 건너뛰고, 찍은 뒤 보관 개수로 정리한다.
+  /// 고친 회차 표시는 그대로 둔다: 여러 커서로 고친 글은 다음 간격이나 떠날 때 따로 남아야 한다.
+  func takeBeforeMultiCursor(_ id: EpisodeID, text: String) {
+    enqueue(text, id, .multiCursor, skipIfSame: true)
   }
 
   /// 이름이 바뀔 때(`rename`). 같은 글이어도 늘 찍고, 바뀌기 전 제목을 함께 남긴 뒤 보관 개수로 정리한다.
@@ -195,7 +202,7 @@ final class EpisodeSnapshotter {
     let store = store
     return try await Task.detached {
       let text = try body()
-      // 자동·떠날 때만 마지막과 같으면 건너뛴다. 직접·복원 전·이름 변경은 그 순간을 기록하려는 것이라 늘 찍는다
+      // 자동·떠날 때·여러 커서 전만 마지막과 같으면 건너뛴다. 직접·복원 전·이름 변경은 그 순간을 기록하려는 것이라 늘 찍는다
       // (저장하면서 찍는 직접 찍기만 예외로 건너뛴다).
       let snapshot = try store.writeSnapshot(
         text, episode: id, kind: kind, memo: memo, title: title, at: date,

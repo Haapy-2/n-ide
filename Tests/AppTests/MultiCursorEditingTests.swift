@@ -1,5 +1,6 @@
 import AppKit
 import NovelCore
+import SwiftUI
 import XCTest
 @testable import NovelEditor
 
@@ -372,6 +373,83 @@ final class MultiCursorEditingTests: XCTestCase {
 
     XCTAssertEqual(board.string(forType: .string), "그대로")
     XCTAssertEqual(view.string, "가 가 가 나 가")
+  }
+
+  // MARK: - 안전망 (16장 4번)
+
+  func testTurnedOffCommandDDoesNothing() {
+    view.multiCursorEnabled = false
+    view.setSelectedRange(NSRange(location: 0, length: 2))
+    view.selectNextOccurrence(nil)
+    XCTAssertNil(view.multiCursorRanges)
+    XCTAssertEqual(view.selectedRange(), NSRange(location: 0, length: 2))
+
+    view.setSelectedRange(NSRange(location: 6, length: 0))
+    view.selectNextOccurrence(nil)
+    XCTAssertEqual(view.selectedRange(), NSRange(location: 6, length: 0), "커서 아래 단어도 고르지 않는다")
+  }
+
+  func testTurningOffDuringCompositionCommitsAndEnds() {
+    selectThree()
+    key { view.setMarkedText("ㄱ", selectedRange: NSRange(location: 1, length: 0), replacementRange: none) }
+
+    view.multiCursorEnabled = false
+
+    XCTAssertNil(view.multiCursorRanges)
+    XCTAssertFalse(view.hasMarkedText())
+    XCTAssertEqual(view.string, "ㄱ 가 ㄱ 나 ㄱ", "조합 중인 글자는 모든 자리에 그대로 남는다")
+    XCTAssertEqual(view.selectedRange(), NSRange(location: 1, length: 0), "맨 앞 자리 하나로")
+  }
+
+  func testEnterCallbackOnlyWhenSecondCursorAppearsBeforeAnyChange() {
+    var seen: [String] = []
+    let view = view!
+    view.onEnterMultiCursor = { [unowned view] in seen.append(view.string) }
+
+    selectThree()
+    XCTAssertEqual(seen, ["민준 가 민준 나 민준"], "세 번째 자리를 더할 때는 다시 부르지 않는다")
+
+    key { view.insertText("서윤", replacementRange: none) }
+    view.endMultiCursor()
+    view.setSelectedRange(NSRange(location: 0, length: 2))
+    view.selectNextOccurrence(nil)
+    XCTAssertEqual(seen, ["민준 가 민준 나 민준", "서윤 가 서윤 나 서윤"])
+  }
+
+  /// 실제 앱처럼 SwiftUI 다리를 거친다: 한도 알림이 다리 밖으로 나오고, 설정을 끄면 여러 커서가 끝난다.
+  func testBridgeCarriesLimitNoticeAndSwitch() async throws {
+    var notices: [String] = []
+    var editor: ManuscriptTextView?
+    let content = ManuscriptEditor.Content(
+      token: UUID(), episodeID: EpisodeID.make(), text: String(repeating: "가 ", count: MultiCursor.limit + 1))
+    func bridge(enabled: Bool) -> ManuscriptEditor {
+      ManuscriptEditor(
+        content: content, multiCursorEnabled: enabled, onReady: { editor = $0 }, onNotice: { notices.append($0) })
+    }
+    let window = NSWindow(
+      contentRect: NSRect(x: 0, y: 0, width: 800, height: 600), styleMask: [.titled], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    defer { window.close() }
+    let host = NSHostingView(rootView: bridge(enabled: true))
+    window.contentView = host
+    window.orderFront(nil)
+    try await Task.sleep(for: .milliseconds(100))
+    let textView = try XCTUnwrap(editor)
+
+    textView.setSelectedRange(NSRange(location: 0, length: 1))
+    for _ in 1..<MultiCursor.limit { textView.selectNextOccurrence(nil) }
+    XCTAssertEqual(textView.multiCursorRanges?.count, 1_000)
+    XCTAssertTrue(notices.isEmpty)
+    textView.selectNextOccurrence(nil)
+    XCTAssertEqual(notices, ["커서는 1,000개까지 만들 수 있어요"])
+    XCTAssertEqual(textView.multiCursorRanges?.count, 1_000)
+
+    host.rootView = bridge(enabled: false)
+    try await Task.sleep(for: .milliseconds(100))
+    XCTAssertNil(textView.multiCursorRanges, "설정을 끄면 여러 커서를 끝낸다")
+    textView.selectNextOccurrence(nil)
+    XCTAssertNil(textView.multiCursorRanges)
+    XCTAssertEqual(textView.selectedRange(), NSRange(location: 0, length: 1))
   }
 }
 

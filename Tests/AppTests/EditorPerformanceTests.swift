@@ -79,6 +79,46 @@ final class EditorPerformanceTests: XCTestCase {
     report("keystroke_realtime_100k_ms", samples)
   }
 
+  /// 같은 말 여러 커서: 10만 자 회차에 1,000자마다 놓은 표시어 100개를 ⌘D로 모두 고르고 300번.
+  /// 한 글자는 `testKeystroke`처럼 조합 두 번 + 확정 한 번. 자리가 본문 전체에 흩어져 있어야 고치는 곳이 넓게 퍼진 가장 무거운 경우가 된다.
+  func testMultiCursorKeystroke100k() throws {
+    let (window, textView) = makeEditorWindow()
+    defer { window.close() }
+    let marker = "표시어"
+    let base = String(repeating: try store.readEpisode(project.episodes[0].id), count: 20) as NSString
+    var text = ""
+    var start = 0
+    for index in 0..<100 {
+      let end = base.rangeOfComposedCharacterSequence(at: min(index * 1_000 + 500, base.length - 1)).location
+      text += base.substring(with: NSRange(location: start, length: end - start)) + " \(marker) "
+      start = end
+    }
+    text += base.substring(from: start)
+    textView.replaceAllText(with: text)
+    textView.setSelectedRange((text as NSString).range(of: marker))
+    for _ in 1..<100 { textView.selectNextOccurrence(nil) }
+    XCTAssertEqual(textView.multiCursorRanges?.count, 100, "표시어 100곳을 모두 골랐다")
+    textView.scrollRangeToVisible(textView.selectedRange())
+    settle()
+
+    var samples: [Double] = []
+    let clock = ContinuousClock()
+    for index in 0..<300 {
+      let elapsed = clock.measure {
+        switch index % 3 {
+        case 0: textView.setMarkedText("ㄱ", selectedRange: NSRange(location: 1, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
+        case 1: textView.setMarkedText("가", selectedRange: NSRange(location: 1, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
+        default: textView.insertText("가", replacementRange: NSRange(location: NSNotFound, length: 0))
+        }
+        textView.layoutManager?.ensureLayout(for: textView.textContainer!)
+        textView.displayIfNeeded()
+      }
+      samples.append(milliseconds(elapsed))
+    }
+    XCTAssertEqual(textView.multiCursorRanges?.count, 100, "300번 내내 여러 커서였다")
+    report("multi_cursor_100_keystroke_ms", samples)
+  }
+
   /// 줄 번호를 켠 키 입력: 10만 자 회차 거의 끝(보이는 첫 문단 번호를 구하려고 앞을 가장 많이 셈)에서 300번.
   /// 조합 두 번 + 확정 한 번을 한 글자로, 30번에 한 번은 엔터(줄 수가 바뀌어 보이는 번호를 모두 다시 그리는 가장 무거운 경우).
   func testKeystrokeLineNumbers100k() throws {
