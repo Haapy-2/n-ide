@@ -75,29 +75,71 @@ public enum EpisodeGrouping {
     return normalized(List(episodes: rest, groups: list.groups))
   }
 
-  /// 드래그로 옮긴 뒤 묶음 정하기. 옮긴 회차는
-  /// ① 앞뒤 회차가 같은 묶음이면(묶음 한가운데에 놓음) 그 묶음에 들어가고,
-  /// ② 아니면 제 묶음의 끝에 붙어 있을 때만 제 묶음에 남고,
-  /// ③ 그 밖에는 묶음에서 빠진다.
-  public static func moved(_ ids: Set<EpisodeID>, in list: List) -> List {
-    var episodes = list.episodes
-    for index in episodes.indices where ids.contains(episodes[index].id) {
-      var before = index - 1
-      while before >= 0, ids.contains(episodes[before].id) { before -= 1 }
-      var after = index + 1
-      while after < episodes.count, ids.contains(episodes[after].id) { after += 1 }
-      let previous = before >= 0 ? episodes[before].group : nil
-      let next = after < episodes.count ? episodes[after].group : nil
-      let own = list.episodes[index].group
-      if let previous, previous == next {
-        episodes[index].group = previous
-      } else if let own, own == previous || own == next {
-        episodes[index].group = own
-      } else {
-        episodes[index].group = nil
+  /// 드래그로 보이는 줄 `source`를 줄 `destination` 앞에 놓는다(SwiftUI `onMove`의 두 값, 줄은 `rows(list, collapsed:)`).
+  /// 옮긴 회차의 묶음은 놓은 자리의 바로 위 줄로 정한다(옮기는 줄은 빼고 본다).
+  /// ① 펼친 묶음 제목 바로 아래, 또는 같은 묶음 회차 사이 → 그 묶음에 들어간다.
+  /// ② 묶음의 마지막 회차 바로 뒤 → 제 묶음이었던 회차만 남는다.
+  /// ③ 그 밖(묶음 제목 위, 접힌 묶음 바로 뒤, 묶음 없는 회차 사이) → 묶음에서 빠진다.
+  /// 묶음 제목 위와 아래는 회차 목록에서 같은 자리라, 줄로 봐야 둘을 가를 수 있다.
+  public static func drop(_ source: IndexSet, before destination: Int, in list: List, collapsed: Set<GroupID>) -> List {
+    let rows = rows(list, collapsed: collapsed)
+    let from = IndexSet(source.compactMap { rows.indices.contains($0) ? rows[$0].episodeIndex : nil })
+    guard !from.isEmpty else { return list }
+    let slot = min(max(destination, 0), rows.count)
+    let to: Int =
+      switch slot < rows.count ? rows[slot] : nil {
+      case .episode(_, _, let index, _): index
+      case .group(let group, _, _): list.episodes.firstIndex { $0.group == group.id } ?? list.episodes.count
+      case nil: list.episodes.count
       }
+    let staying = { (row: Row) in row.episodeIndex.map { !from.contains($0) } ?? true }
+    let above = rows[..<slot].last(where: staying)
+    let below = rows[slot...].first(where: staying)
+    var joins: GroupID?
+    var endOf: GroupID?
+    switch above {
+    case .group(let group, _, false):
+      joins = group.id
+    case .episode(let episode, _, _, _):
+      if let group = episode.group, case .episode(let next, _, _, _) = below, next.group == group {
+        joins = group
+      } else {
+        endOf = episode.group
+      }
+    default:
+      break
     }
+    var picked = from.map { list.episodes[$0] }
+    for index in picked.indices {
+      let own = picked[index].group
+      picked[index].group = joins ?? (own != nil && own == endOf ? own : nil)
+    }
+    var episodes = list.episodes.enumerated().filter { !from.contains($0.offset) }.map(\.element)
+    episodes.insert(contentsOf: picked, at: to - from.count(in: 0..<to))
     return normalized(List(episodes: episodes, groups: list.groups))
+  }
+
+  /// 사이드바에서 `id`의 앞(`step` -1)·뒤(+1)에 보이는 회차. 접힌 묶음 안 회차는 건너뛴다.
+  /// `id`가 접힌 묶음 안이어도(고른 뒤에 접음) 목록 순서로 가장 가까운 보이는 회차를 준다.
+  public static func visibleNeighbor(of id: EpisodeID, step: Int, in list: List, collapsed: Set<GroupID>) -> EpisodeID? {
+    guard let start = list.episodes.firstIndex(where: { $0.id == id }) else { return nil }
+    var index = start + step
+    while list.episodes.indices.contains(index) {
+      if !isHidden(list.episodes[index], collapsed) { return list.episodes[index].id }
+      index += step
+    }
+    return nil
+  }
+
+  /// ⇧클릭: 두 회차 사이(둘 포함)의 보이는 회차를 목록 순서로.
+  public static func visibleRange(from: EpisodeID, to: EpisodeID, in list: List, collapsed: Set<GroupID>) -> [EpisodeID] {
+    guard let a = list.episodes.firstIndex(where: { $0.id == from }), let b = list.episodes.firstIndex(where: { $0.id == to })
+    else { return [] }
+    return list.episodes[min(a, b)...max(a, b)].filter { !isHidden($0, collapsed) }.map(\.id)
+  }
+
+  private static func isHidden(_ episode: EpisodeMeta, _ collapsed: Set<GroupID>) -> Bool {
+    episode.group.map(collapsed.contains) ?? false
   }
 
   // MARK: - 사이드바에 보일 줄
@@ -110,8 +152,16 @@ public enum EpisodeGrouping {
     public var id: String {
       switch self {
       case .group(let group, _, _): "g-\(group.id.rawValue)"
-      case .episode(let episode, _, _, _): "e-\(episode.id.rawValue)"
+      case .episode(let episode, _, _, _): Self.id(of: episode.id)
       }
+    }
+
+    /// 회차 줄의 `id`(사이드바가 그 줄로 스크롤할 때)
+    public static func id(of episode: EpisodeID) -> String { "e-\(episode.rawValue)" }
+
+    var episodeIndex: Int? {
+      if case .episode(_, _, let index, _) = self { return index }
+      return nil
     }
   }
 

@@ -73,6 +73,8 @@ final class EpisodeAutosaver {
   private let maxWait: Duration
   @ObservationIgnored private weak var textView: ManuscriptTextView?
   @ObservationIgnored private(set) var episodeID: EpisodeID?
+  /// 스냅샷 판이 열려 있다(`beginPanel`~`endPanel`). 그동안 외부 변경 확인을 미룬다.
+  @ObservationIgnored private var isHoldingExternalChanges = false
   /// 회차별 변경 번호. 입력할 때마다 1씩 오른다.
   @ObservationIgnored private var changes: [EpisodeID: Int] = [:]
   @ObservationIgnored private var savedChanges: [EpisodeID: Int] = [:]
@@ -301,14 +303,28 @@ final class EpisodeAutosaver {
 
   /// 떠 있는 판(⇧⌘S)을 열 때: 편집기의 조합을 끝내고 초점을 내려놓은 뒤 지금 본문을 한 번 복사해 준다.
   /// 편집기가 없으면 nil. `hadFocus`는 닫을 때 `endPanel`에 그대로 돌려준다.
+  /// 판이 열린 동안은 바깥에서 바뀐 내용을 불러오지 않는다. 판의 "현재"가 이때 복사한 본문이라 비교가 틀어진다.
   func beginPanel() -> (text: String, hadFocus: Bool)? {
     guard let textView else { return nil }
-    let hadFocus = textView.yieldFocusForPanel()
+    let hadFocus = yieldFocus()
+    isHoldingExternalChanges = true
     return (textView.string, hadFocus)
   }
 
+  /// 판을 닫을 때. 열린 동안 미룬 외부 변경 확인을 한 번 한다.
   func endPanel(hadFocus: Bool) {
-    if hadFocus { textView?.regainFocusAfterPanel() }
+    isHoldingExternalChanges = false
+    if hadFocus { regainFocus() }
+    Task { await checkExternalChange() }
+  }
+
+  /// 편집기의 조합을 끝내고 키보드 초점을 내려놓는다. 편집기가 초점을 갖고 있었는지 돌려준다.
+  func yieldFocus() -> Bool {
+    textView?.yieldFocusForPanel() ?? false
+  }
+
+  func regainFocus() {
+    textView?.regainFocusAfterPanel()
   }
 
   /// 회차를 휴지통으로 보낸 뒤 부른다. 그 회차에 대해 남은 저장 정보를 버린다.
@@ -633,7 +649,7 @@ final class EpisodeAutosaver {
 
   /// 창이 다시 활성화될 때. 지금 회차 파일이 앱 밖에서 바뀌었는지 백그라운드에서 본다.
   func checkExternalChange() async {
-    guard let id = episodeID, conflicts[id] == nil, let known = disk[id] else { return }
+    guard !isHoldingExternalChanges, let id = episodeID, conflicts[id] == nil, let known = disk[id] else { return }
     let store = store
     let disk = disk
     let result = await Task.detached { () -> DiskCheck? in
@@ -647,7 +663,7 @@ final class EpisodeAutosaver {
       return disk[id] == known ? result : nil
     }.value
     // 기다리는 사이 회차가 바뀌었거나 저장이 끝나 기준이 바뀌었으면 손대지 않는다.
-    guard let result, episodeID == id, conflicts[id] == nil, disk[id] == known else { return }
+    guard let result, !isHoldingExternalChanges, episodeID == id, conflicts[id] == nil, disk[id] == known else { return }
     switch result {
     case .unchanged:
       break

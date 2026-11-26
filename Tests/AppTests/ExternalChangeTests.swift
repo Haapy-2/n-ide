@@ -73,6 +73,20 @@ final class ExternalChangeTests: XCTestCase {
     XCTAssertEqual(try snapshotFiles(), [], "앱 쪽에 잃을 내용이 없으니 스냅샷도 필요 없다")
   }
 
+  /// 스냅샷 판이 열린 동안은 바깥 내용을 불러오지 않는다(판의 "현재"는 판을 연 때의 본문이라 비교가 틀어진다).
+  /// 판을 닫을 때 한 번 확인해 불러온다.
+  func testSnapshotPanelHoldsExternalChangeUntilClosed() async throws {
+    let panel = try XCTUnwrap(autosaver.beginPanel())
+    try externalWrite("판이 열린 동안 바깥에서 고친 문장")
+
+    await autosaver.checkExternalChange()
+    XCTAssertEqual(textView.string, "첫 문장")
+
+    autosaver.endPanel(hadFocus: panel.hadFocus)
+    for _ in 0..<200 where textView.string == "첫 문장" { try await Task.sleep(for: .milliseconds(10)) }
+    XCTAssertEqual(textView.string, "판이 열린 동안 바깥에서 고친 문장")
+  }
+
   func testOwnSaveIsNotMistakenForExternalChange() async throws {
     type(" 둘째 문장")
     await autosaver.flush()

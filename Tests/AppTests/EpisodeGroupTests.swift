@@ -76,12 +76,12 @@ final class EpisodeGroupTests: XCTestCase {
     let made = await model.groupEpisodes([ids[0], ids[1]], title: "1부")
     let group = try XCTUnwrap(made)
 
-    // 4화를 1화와 2화 사이로
-    await model.moveEpisodes(fromOffsets: [3], toOffset: 1)
+    // 4화를 1화와 2화 사이로(줄: 0 1부, 1 「1」, 2 「2」, 3 「3」, 4 「4」)
+    await model.moveEpisodes(rows: [4], before: 2)
     XCTAssertEqual(model.episodes.filter { $0.group == group }.map(\.id), [ids[0], ids[3], ids[1]])
 
-    // 1화를 맨 끝으로
-    await model.moveEpisodes(fromOffsets: [0], toOffset: 4)
+    // 1화를 맨 끝으로(줄: 0 1부, 1 「1」, 2 「4」, 3 「2」, 4 「3」)
+    await model.moveEpisodes(rows: [1], before: 5)
     XCTAssertNil(model.episode(ids[0])?.group)
     XCTAssertEqual(model.episodes.last?.id, ids[0])
   }

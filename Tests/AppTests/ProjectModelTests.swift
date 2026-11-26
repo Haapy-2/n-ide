@@ -85,7 +85,7 @@ final class ProjectModelTests: XCTestCase {
     let b = try await model.addEpisode()
     let c = try await model.addEpisode()
 
-    await model.moveEpisodes(fromOffsets: IndexSet(integer: 2), toOffset: 0)
+    await model.moveEpisodes(rows: IndexSet(integer: 2), before: 0)
 
     XCTAssertEqual(try store.loadProject().episodes.map(\.id), [c, a, b])
     let files = try FileManager.default.contentsOfDirectory(atPath: store.layout.episodesFolder.path(percentEncoded: false))
@@ -182,7 +182,7 @@ final class ProjectModelTests: XCTestCase {
     undo.groupsByEvent = false
 
     undo.beginUndoGrouping()
-    await model.moveEpisodes(fromOffsets: IndexSet(integer: 2), toOffset: 0, undoManager: undo)
+    await model.moveEpisodes(rows: IndexSet(integer: 2), before: 0, undoManager: undo)
     undo.endUndoGrouping()
     XCTAssertEqual(model.episodes.map(\.id), [c, a, b])
     XCTAssertEqual(undo.undoActionName, "순서 변경")

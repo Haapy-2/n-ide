@@ -24,6 +24,7 @@ struct EpisodeList: View {
   var onTrash: ((EpisodeID) -> Void)? = nil
   var onSetGoal: ((EpisodeID) -> Void)? = nil
   var onAddAfter: ((EpisodeID) -> Void)? = nil
+  /// 드래그로 옮기기: 보이는 줄 번호(묶음 제목 줄 포함, `EpisodeGrouping.drop`)
   var onMove: ((IndexSet, Int) -> Void)? = nil
   /// 묶기(이름을 묻는 창을 띄운다), 묶음 풀기, 묶음 이름 변경, 이미 있는 묶음에 넣기
   var onGroup: ((Set<EpisodeID>) -> Void)? = nil
@@ -44,6 +45,13 @@ struct EpisodeList: View {
   /// 줄 좌우 여백 0: 회색 선택 칸이 줄 끝까지 차서, 글자를 버튼 선에 맞춰도 칸이 잘리지 않는다.
   private static let rowInsets = EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0)
   var body: some View {
+    ScrollViewReader { proxy in
+      list
+        .onChange(of: selection, initial: true) { show(selection, with: proxy) }
+    }
+  }
+
+  private var list: some View {
     List {
       // 시스템 구역 제목은 줄과 왼쪽 시작점이 달라 번호와 맞출 수 없어서, 같은 여백을 쓰는 제목 줄을 직접 둔다.
       Text("회차")
@@ -68,8 +76,8 @@ struct EpisodeList: View {
             episodeRow(episode, number: number, inGroup: inGroup)
           }
         }
-        // 드래그로 순서 바꾸기. 번호는 순서로 매기므로 함께 바뀐다(파일 이름은 그대로).
-        .onMove(perform: onMove.map { onMove in { source, destination in moveRows(source, to: destination, onMove) } })
+        // 드래그로 순서 바꾸기(보이는 줄 번호 그대로 넘긴다). 번호는 순서로 매기므로 함께 바뀐다(파일 이름은 그대로).
+        .onMove(perform: onMove)
       }
     }
     // 시스템 기본 최소 줄 높이를 없애 줄 사이에 클릭 안 되는 틈이 생기지 않게 한다.
@@ -93,11 +101,14 @@ struct EpisodeList: View {
     .onCommand(Selector(("redo:"))) { onUndoCommand?(true) }
   }
 
-  private var list: EpisodeGrouping.List { .init(episodes: episodes, groups: groups) }
-  private var collapsed: Set<GroupID> {
-    Set(collapsedText.split(separator: ",").map { GroupID(rawValue: String($0)) })
+  private var grouping: EpisodeGrouping.List { .init(episodes: episodes, groups: groups) }
+  private var collapsed: Set<GroupID> { Self.collapsedGroups(collapsedText) }
+
+  /// 접힌 묶음(설정 `collapsedEpisodeGroups`, 쉼표로 이은 묶음 ID)
+  static func collapsedGroups(_ text: String) -> Set<GroupID> {
+    Set(text.split(separator: ",").map { GroupID(rawValue: String($0)) })
   }
-  private var rows: [EpisodeGrouping.Row] { EpisodeGrouping.rows(list, collapsed: collapsed) }
+  private var rows: [EpisodeGrouping.Row] { EpisodeGrouping.rows(grouping, collapsed: collapsed) }
 
   private func toggleCollapsed(_ group: GroupID) {
     var set = collapsed
@@ -207,43 +218,29 @@ struct EpisodeList: View {
     isFocused = true
   }
 
-  /// 지금 회차(편집기에 열린 것)부터 누른 회차까지 목록 순서대로 모두 고른다.
+  /// 지금 회차(편집기에 열린 것)부터 누른 회차까지 보이는 회차를 모두 고른다(접힌 묶음 안은 빼고).
   private func markRange(to id: EpisodeID) {
-    guard let anchor = selection, let from = episodes.firstIndex(where: { $0.id == anchor }),
-      let to = episodes.firstIndex(where: { $0.id == id })
-    else { return toggleMarked(id) }
-    marked = Set(episodes[min(from, to)...max(from, to)].map(\.id))
+    guard let anchor = selection, episodes.contains(where: { $0.id == anchor }) else { return toggleMarked(id) }
+    marked = Set(EpisodeGrouping.visibleRange(from: anchor, to: id, in: grouping, collapsed: collapsed))
     isFocused = true
   }
 
-  /// 보이는 줄(묶음 제목 포함, 접힌 회차 빠짐)의 자리를 회차 목록 자리로 바꿔 옮긴다.
-  private func moveRows(_ source: IndexSet, to destination: Int, _ onMove: (IndexSet, Int) -> Void) {
-    let rows = rows
-    let from = IndexSet(source.compactMap { row -> Int? in
-      if case .episode(_, _, let index, _) = rows[row] { return index }
-      return nil
-    })
-    guard !from.isEmpty else { return }
-    let to: Int
-    if destination >= rows.count {
-      to = episodes.count
-    } else {
-      switch rows[destination] {
-      case .episode(_, _, let index, _): to = index
-      case .group(let group, _, _): to = episodes.firstIndex { $0.group == group.id } ?? episodes.count
-      }
-    }
-    onMove(from, to)
+  /// 고른 회차 줄이 보이게 스크롤한다(작품을 열 때, 메뉴·단축키·검색 결과로 옮길 때). 접힌 묶음 안이면 묶음을 편다.
+  /// 펼친 줄은 다음 화면 갱신에 생겨서 스크롤은 한 차례 뒤에 한다.
+  private func show(_ id: EpisodeID?, with proxy: ScrollViewProxy) {
+    guard let id, let episode = episodes.first(where: { $0.id == id }) else { return }
+    if let group = episode.group, collapsed.contains(group) { toggleCollapsed(group) }
+    DispatchQueue.main.async { proxy.scrollTo(EpisodeGrouping.Row.id(of: id)) }
   }
 
   private static let groupIndent: CGFloat = 12
 
   private func move(by offset: Int) -> KeyPress.Result {
-    guard let selection, let index = episodes.firstIndex(where: { $0.id == selection }),
-      episodes.indices.contains(index + offset)
+    guard let selection,
+      let next = EpisodeGrouping.visibleNeighbor(of: selection, step: offset, in: grouping, collapsed: collapsed)
     else { return .ignored }
-    self.selection = episodes[index + offset].id
-    marked = [episodes[index + offset].id]
+    self.selection = next
+    marked = [next]
     return .handled
   }
 }

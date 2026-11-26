@@ -29,6 +29,7 @@ struct BatchRenameSheet: View {
   @State private var name = ""
   @State private var start = 1
   @State private var numberFirst = false
+  @State private var isApplying = false
 
   private static let numberRange = 0...99_999
 
@@ -72,9 +73,14 @@ struct BatchRenameSheet: View {
         Button("취소", role: .cancel, action: onCancel)
           .keyboardShortcut(.cancelAction)
         // 한글 조합 중에 엔터를 누르면 조합이 끝나 칸에 마지막 글자가 들어간 뒤에 적용한다.
-        Button("이름 바꾸기") { DispatchQueue.main.async { onRename(rule) } }
-          .keyboardShortcut(.defaultAction)
-          .disabled(changed == 0)
+        // 창이 닫히기 전에 엔터가 한 번 더 눌리면 규칙이 두 번 적용되므로 한 번만 받는다.
+        Button("이름 바꾸기") {
+          guard !isApplying else { return }
+          isApplying = true
+          DispatchQueue.main.async { onRename(rule) }
+        }
+        .keyboardShortcut(.defaultAction)
+        .disabled(changed == 0 || isApplying)
       }
       .padding(12)
     }

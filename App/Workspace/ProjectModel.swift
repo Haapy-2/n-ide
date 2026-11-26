@@ -233,15 +233,14 @@ final class ProjectModel {
     await replaceEpisodes(with: episodes, actionName: "모든 회차 목표", undoManager: undoManager).value
   }
 
-  /// 드래그로 순서 바꾸기. `undoManager`를 주면 ⌘Z로 직전 순서로 되돌릴 수 있다.
-  /// 옮긴 회차의 묶음은 놓은 자리로 정한다(`EpisodeGrouping.moved`: 묶음 한가운데면 들어가고, 밖이면 빠진다).
-  func moveEpisodes(fromOffsets source: IndexSet, toOffset destination: Int, undoManager: UndoManager? = nil) async {
-    let moved = Set(source.map { project.episodes[$0].id })
-    var episodes = project.episodes
-    episodes.move(fromOffsets: source, toOffset: destination)
-    let list = EpisodeGrouping.moved(moved, in: .init(episodes: episodes, groups: project.groups))
-    guard list.episodes != project.episodes else { return }
-    await replaceList(list, actionName: "순서 변경", undoManager: undoManager).value
+  /// 드래그로 순서 바꾸기. 자리는 사이드바의 보이는 줄 번호(묶음 제목 줄 포함, `EpisodeGrouping.rows`)이고,
+  /// 옮긴 회차의 묶음도 놓은 자리로 정한다(`EpisodeGrouping.drop`). `undoManager`를 주면 ⌘Z로 직전 순서로 되돌릴 수 있다.
+  func moveEpisodes(
+    rows source: IndexSet, before destination: Int, collapsed: Set<GroupID> = [], undoManager: UndoManager? = nil
+  ) async {
+    let next = EpisodeGrouping.drop(source, before: destination, in: list, collapsed: collapsed)
+    guard next != list else { return }
+    await replaceList(next, actionName: "순서 변경", undoManager: undoManager).value
   }
 
   // MARK: - 회차 묶음 (PLAN 8장 B안)

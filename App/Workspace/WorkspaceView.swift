@@ -8,6 +8,7 @@ struct WorkspaceView: View {
   private let previewProject: ProjectFile?
   @AppStorage(AppSettingKey.sidebarSeesThroughWindow) private var sidebarSeesThroughWindow = true
   @AppStorage(AppSettingKey.characterCountGoalBasis) private var goalBasis: CharacterCountBasis = .withSpaces
+  @AppStorage(AppSettingKey.collapsedEpisodeGroups) private var collapsedText = ""
   @State private var selection: EpisodeID?
   /// 여러 개 고른 회차(⌘클릭·⇧클릭). 묶기에 쓴다.
   @State private var marked: Set<EpisodeID> = []
@@ -31,6 +32,8 @@ struct WorkspaceView: View {
   @State private var snapshotBrowser: SnapshotBrowser?
   /// 판을 열 때 편집기가 초점을 갖고 있었는지. 닫을 때 그 자리로 돌려준다.
   @State private var editorHadFocus = false
+  /// 검색 패널을 열 때 편집기가 초점을 갖고 있었는지. 닫을 때 그 자리로 돌려준다(스냅샷 판과 같다).
+  @State private var searchTookEditorFocus = false
   /// 확인을 기다리는 사이드바 되돌리기. nil이 아니면 확인 창이 뜬다.
   @State private var pendingUndo: PendingUndo?
   @State private var stopAskingUndo = false
@@ -193,11 +196,10 @@ struct WorkspaceView: View {
       // 메뉴·단축키·검색으로 회차를 옮기면 여러 개 고른 것을 그 회차 하나로 줄인다.
       if let selection, !marked.contains(selection) { marked = [selection] }
     }
-    // 되돌리기 등으로 보고 있던 회차가 목록에서 사라지면 가까운 회차로 옮긴다.
     .onChange(of: project.episodes.map(\.id)) { old, new in
-      guard let current = selection, !new.contains(current) else { return }
-      let oldIndex = old.firstIndex(of: current) ?? 0
-      selection = new.isEmpty ? nil : new[min(oldIndex, new.count - 1)]
+      (selection, marked) = Self.afterListChange(selection: selection, marked: marked, old: old, new: new) {
+        EpisodeViewStates.shared.lastOpened(among: new) ?? new.first
+      }
     }
     // 창을 닫을 때 남은 저장을 마친다(Task가 저장기를 붙잡고 있어 창이 사라져도 끝까지 저장된다).
     .onChange(of: appearsActive, initial: true) {
@@ -221,6 +223,8 @@ struct WorkspaceView: View {
         search: search, replace: replace, episodes: project.episodes, focusRequest: searchFocusRequest,
         measuredInset: $searchInset,
         onReveal: { target in
+          // 결과는 회차 목록이 바뀌면 다시 찾지만, 다시 찾기가 끝나기 전에 누른 결과는 지운 회차를 가리킬 수 있다.
+          guard project.episodes.contains(where: { $0.id == target.episodeID }) else { return }
           selection = target.episodeID
           reveal = target
         },
@@ -235,7 +239,7 @@ struct WorkspaceView: View {
           search.refresh()
         },
         onShowReplaced: { showReplaced($0) },
-        onClose: { showingSearch = false })
+        onClose: { closeSearch() })
     } else {
       EpisodeList(
         episodes: project.episodes,
@@ -249,7 +253,11 @@ struct WorkspaceView: View {
         onSetGoal: model == nil ? nil : { beginSetGoal($0) },
         onAddAfter: model == nil ? nil : { id in addEpisode(after: id) },
         onMove: model == nil ? nil : { source, destination in
-          Task { await model?.moveEpisodes(fromOffsets: source, toOffset: destination, undoManager: undoManager) }
+          Task {
+            await model?.moveEpisodes(
+              rows: source, before: destination, collapsed: EpisodeList.collapsedGroups(collapsedText),
+              undoManager: undoManager)
+          }
         },
         onGroup: model == nil ? nil : { beginGrouping($0) },
         onUngroup: model == nil ? nil : { group in Task { await model?.ungroup(group, undoManager: undoManager) } },
@@ -260,6 +268,19 @@ struct WorkspaceView: View {
         onUndoCommand: model == nil ? nil : { requestUndo(isRedo: $0) },
         countBox: model.map { model in { model.countBox(for: $0) } })
     }
+  }
+
+  /// 회차 목록이 바뀐 뒤(휴지통, ⌘Z, 앱 밖에서 고침)의 선택. 보던 회차가 사라지면 같은 자리(없으면 위) 회차로,
+  /// 고른 회차가 없는데 목록이 비지 않았으면(마지막 회차를 ⌘Z로 되살림) `fallback`으로. 여러 개 고른 것은 남은 회차만.
+  static func afterListChange(
+    selection: EpisodeID?, marked: Set<EpisodeID>, old: [EpisodeID], new: [EpisodeID],
+    whenNothingSelected fallback: () -> EpisodeID?
+  ) -> (selection: EpisodeID?, marked: Set<EpisodeID>) {
+    let remaining = marked.intersection(new)
+    guard let current = selection else { return (new.isEmpty ? nil : fallback(), remaining) }
+    guard !new.contains(current) else { return (current, remaining) }
+    let oldIndex = old.firstIndex(of: current) ?? 0
+    return (new.isEmpty ? nil : new[min(oldIndex, new.count - 1)], remaining)
   }
 
   // MARK: - 회차 묶음
@@ -298,7 +319,7 @@ struct WorkspaceView: View {
   }
 
   private func openSearch() {
-    guard let model else { return }
+    guard let model, snapshotBrowser == nil else { return }
     if search == nil {
       let autosaver = model.autosaver
       search = ProjectSearch(
@@ -307,8 +328,15 @@ struct WorkspaceView: View {
         store: model.store, autosaver: autosaver, episodeIDs: { model.episodes.map(\.id) },
         recordCount: { model.recordCount($0, for: $1) })
     }
+    if !showingSearch { searchTookEditorFocus = model.autosaver.yieldFocus() }
     showingSearch = true
     searchFocusRequest += 1
+  }
+
+  private func closeSearch() {
+    showingSearch = false
+    if searchTookEditorFocus { model?.autosaver.regainFocus() }
+    searchTookEditorFocus = false
   }
 
   @ViewBuilder
@@ -332,31 +360,35 @@ struct WorkspaceView: View {
   // MARK: - 회차 명령
 
   private var actions: WorkspaceActions {
-    let index = selection.flatMap { id in project.episodes.firstIndex { $0.id == id } }
+    // 스냅샷 판이 열린 동안에는 본문·제목을 바꾸는 명령을 막는다. 판의 "현재"는 판을 연 때의 본문과 제목이다.
+    let panelOpen = snapshotBrowser != nil
     return WorkspaceActions(
       addEpisode: { addEpisode(after: selection) },
-      renameSelected: selection.map { id in { beginRename(id) } },
+      renameSelected: panelOpen ? nil : selection.map { id in { beginRename(id) } },
       trashSelected: selection.map { id in { trashing = id } },
       setGoalSelected: selection.map { id in { beginSetGoal(id) } },
-      selectPrevious: neighbor(of: index, offset: -1),
-      selectNext: neighbor(of: index, offset: 1),
+      selectPrevious: neighbor(step: -1),
+      selectNext: neighbor(step: 1),
       saveNow: model.map { model in { saveNow(model) } },
       saveWithSnapshot: model.map { model in { saveWithSnapshot(model) } },
       takeSnapshot: selection == nil || snapshotBrowser != nil ? nil : { takeSnapshot() },
       showSnapshots: selection == nil || snapshotBrowser != nil ? nil : { showSnapshots() },
-      showSearch: { openSearch() },
-      revertReplace: replace?.history.isEmpty == false ? { beginRevert() } : nil,
+      showSearch: panelOpen ? nil : { openSearch() },
+      revertReplace: !panelOpen && replace?.history.isEmpty == false ? { beginRevert() } : nil,
       groupMarked: selection == nil ? nil : { beginGrouping(marked.isEmpty ? Set([selection].compactMap { $0 }) : marked) },
       ungroupSelected: selection.flatMap { id in project.episodes.first { $0.id == id }?.group }.map { group in
         { Task { await model?.ungroup(group, undoManager: undoManager) } }
       })
   }
 
-  /// 선택한 회차의 앞(-1)·뒤(+1) 회차로 옮기는 명령. 없으면 nil.
-  private func neighbor(of index: Int?, offset: Int) -> (() -> Void)? {
-    guard let index, project.episodes.indices.contains(index + offset) else { return nil }
-    let id = project.episodes[index + offset].id
-    return { selection = id }
+  /// 선택한 회차의 앞(-1)·뒤(+1)에 보이는 회차로 옮기는 명령(접힌 묶음 안은 건너뜀). 없으면 nil.
+  private func neighbor(step: Int) -> (() -> Void)? {
+    guard let selection,
+      let id = EpisodeGrouping.visibleNeighbor(
+        of: selection, step: step, in: .init(episodes: project.episodes, groups: project.groups),
+        collapsed: EpisodeList.collapsedGroups(collapsedText))
+    else { return nil }
+    return { self.selection = id }
   }
 
   private func addEpisode(after id: EpisodeID?) {

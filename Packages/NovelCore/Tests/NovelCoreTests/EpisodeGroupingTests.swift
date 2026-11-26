@@ -81,17 +81,14 @@ struct EpisodeGroupingTests {
     #expect(Set(result.episodes.map(\.id)) == Set(start.episodes.map(\.id)))
   }
 
-  // MARK: - 드래그로 옮긴 뒤
+  // MARK: - 드래그로 놓기 (줄 번호는 보이는 줄: 묶음 제목 줄 포함)
 
   @Test func droppingInsideAGroupJoinsIt() {
     let part = EpisodeGroup(title: "1부")
     let start = list(5)
-    var moved = EpisodeGrouping.group(ids(start, "1", "2", "3"), as: part, in: start)
-    // 5화를 1화와 2화 사이로 끌어 놓음
-    let five = moved.episodes.remove(at: 4)
-    moved.episodes.insert(five, at: 1)
-
-    let result = EpisodeGrouping.moved([five.id], in: moved)
+    let grouped = EpisodeGrouping.group(ids(start, "1", "2", "3"), as: part, in: start)
+    // 5화를 1화와 2화 사이로 끌어 놓음(줄: 0 1부, 1 「1」, 2 「2」, 3 「3」, 4 「4」, 5 「5」)
+    let result = EpisodeGrouping.drop([5], before: 2, in: grouped, collapsed: [])
 
     #expect(members(result, part.id) == ["1", "5", "2", "3"])
   }
@@ -99,12 +96,9 @@ struct EpisodeGroupingTests {
   @Test func reorderingWithinOwnGroupEdgeKeepsMembership() {
     let part = EpisodeGroup(title: "1부")
     let start = list(4)
-    var moved = EpisodeGrouping.group(ids(start, "1", "2"), as: part, in: start)
+    let grouped = EpisodeGrouping.group(ids(start, "1", "2"), as: part, in: start)
     // 1화를 묶음 끝(2화 뒤)으로
-    let one = moved.episodes.remove(at: 0)
-    moved.episodes.insert(one, at: 1)
-
-    let result = EpisodeGrouping.moved([one.id], in: moved)
+    let result = EpisodeGrouping.drop([1], before: 3, in: grouped, collapsed: [])
 
     #expect(members(result, part.id) == ["2", "1"])
   }
@@ -112,14 +106,103 @@ struct EpisodeGroupingTests {
   @Test func draggingOutOfAGroupLeavesIt() {
     let part = EpisodeGroup(title: "1부")
     let start = list(5)
-    var moved = EpisodeGrouping.group(ids(start, "1", "2", "3"), as: part, in: start)
-    let two = moved.episodes.remove(at: 1)
-    moved.episodes.append(two)
-
-    let result = EpisodeGrouping.moved([two.id], in: moved)
+    let grouped = EpisodeGrouping.group(ids(start, "1", "2", "3"), as: part, in: start)
+    // 2화를 맨 끝으로
+    let result = EpisodeGrouping.drop([2], before: 6, in: grouped, collapsed: [])
 
     #expect(members(result, part.id) == ["1", "3"])
     #expect(result.episodes.last?.group == nil)
+  }
+
+  @Test func droppingFirstMemberAboveItsHeaderLeavesTheGroup() {
+    let part = EpisodeGroup(title: "1부")
+    let start5 = list(5)
+    let grouped = EpisodeGrouping.group(ids(start5, "1", "2", "3"), as: part, in: start5)
+    // 줄: 0 1부, 1 「1」, 2 「2」, 3 「3」, 4 「4」, 5 「5」. 1화를 묶음 제목 위로
+    let result = EpisodeGrouping.drop([1], before: 0, in: grouped, collapsed: [])
+
+    #expect(titles(result) == ["1", "2", "3", "4", "5"])
+    #expect(members(result, part.id) == ["2", "3"])
+    #expect(result.episodes[0].group == nil)
+  }
+
+  @Test func droppingRightBelowHeaderJoinsAsFirstMember() {
+    let part = EpisodeGroup(title: "1부")
+    let start5 = list(5)
+    let grouped = EpisodeGrouping.group(ids(start5, "1", "2", "3"), as: part, in: start5)
+    // 4화를 묶음 제목과 1화 사이로
+    let result = EpisodeGrouping.drop([4], before: 1, in: grouped, collapsed: [])
+
+    #expect(members(result, part.id) == ["4", "1", "2", "3"])
+  }
+
+  @Test func droppingAboveHeaderBelowAnotherGroupJoinsNeither() {
+    let first = EpisodeGroup(title: "1부")
+    let second = EpisodeGroup(title: "2부")
+    let start6 = list(6)
+    var grouped = EpisodeGrouping.group(ids(start6, "1", "2", "3"), as: first, in: start6)
+    grouped = EpisodeGrouping.group(ids(grouped, "4", "5"), as: second, in: grouped)
+    // 줄: 0 1부, 1~3 「1」~「3」, 4 2부, 5 「4」, 6 「5」, 7 「6」. 4화를 2부 제목 위(1부 끝 바로 뒤)로
+    let result = EpisodeGrouping.drop([5], before: 4, in: grouped, collapsed: [])
+
+    #expect(titles(result) == ["1", "2", "3", "4", "5", "6"])
+    #expect(members(result, first.id) == ["1", "2", "3"])
+    #expect(members(result, second.id) == ["5"])
+    #expect(result.episodes[3].group == nil)
+  }
+
+  @Test func droppingAtGroupEndKeepsOnlyItsOwnMembers() {
+    let part = EpisodeGroup(title: "1부")
+    let start4 = list(4)
+    let grouped = EpisodeGrouping.group(ids(start4, "1", "2"), as: part, in: start4)
+    // 줄: 0 1부, 1 「1」, 2 「2」, 3 「3」, 4 「4」
+    let own = EpisodeGrouping.drop([1], before: 3, in: grouped, collapsed: [])
+    #expect(members(own, part.id) == ["2", "1"])
+
+    let outsider = EpisodeGrouping.drop([4], before: 3, in: grouped, collapsed: [])
+    #expect(titles(outsider) == ["1", "2", "4", "3"])
+    #expect(members(outsider, part.id) == ["1", "2"])
+  }
+
+  @Test func droppingAroundCollapsedGroupStaysOutside() {
+    let part = EpisodeGroup(title: "1부")
+    let start5 = list(5)
+    let grouped = EpisodeGrouping.group(ids(start5, "2", "3"), as: part, in: start5)
+    // 줄: 0 「1」, 1 1부(접힘), 2 「4」, 3 「5」
+    let below = EpisodeGrouping.drop([3], before: 2, in: grouped, collapsed: [part.id])
+    #expect(titles(below) == ["1", "2", "3", "5", "4"])
+    #expect(members(below, part.id) == ["2", "3"])
+
+    let above = EpisodeGrouping.drop([3], before: 1, in: grouped, collapsed: [part.id])
+    #expect(titles(above) == ["1", "5", "2", "3", "4"])
+    #expect(members(above, part.id) == ["2", "3"])
+  }
+
+  // MARK: - 보이는 줄로 움직이기
+
+  @Test func neighborSkipsCollapsedMembers() {
+    let part = EpisodeGroup(title: "1부")
+    let start6 = list(6)
+    let grouped = EpisodeGrouping.group(ids(start6, "3", "4"), as: part, in: start6)
+    let id = { (title: String) in grouped.episodes.first { $0.title == title }!.id }
+
+    #expect(EpisodeGrouping.visibleNeighbor(of: id("2"), step: 1, in: grouped, collapsed: [part.id]) == id("5"))
+    #expect(EpisodeGrouping.visibleNeighbor(of: id("5"), step: -1, in: grouped, collapsed: [part.id]) == id("2"))
+    #expect(EpisodeGrouping.visibleNeighbor(of: id("6"), step: 1, in: grouped, collapsed: [part.id]) == nil)
+    // 고른 회차가 접힌 묶음 안이면(묶음을 접은 뒤) 가장 가까운 보이는 회차로
+    #expect(EpisodeGrouping.visibleNeighbor(of: id("3"), step: 1, in: grouped, collapsed: [part.id]) == id("5"))
+    #expect(EpisodeGrouping.visibleNeighbor(of: id("4"), step: -1, in: grouped, collapsed: [part.id]) == id("2"))
+    #expect(EpisodeGrouping.visibleNeighbor(of: id("2"), step: 1, in: grouped, collapsed: []) == id("3"))
+  }
+
+  @Test func rangeSkipsCollapsedMembers() {
+    let part = EpisodeGroup(title: "1부")
+    let start6 = list(6)
+    let grouped = EpisodeGrouping.group(ids(start6, "3", "4"), as: part, in: start6)
+    let id = { (title: String) in grouped.episodes.first { $0.title == title }!.id }
+
+    let range = EpisodeGrouping.visibleRange(from: id("6"), to: id("1"), in: grouped, collapsed: [part.id])
+    #expect(range.map { id in grouped.episodes.first { $0.id == id }!.title } == ["1", "2", "5", "6"])
   }
 
   // MARK: - 사이드바 줄

@@ -151,6 +151,8 @@ struct SearchPanel: View {
       search.schedule()
     }
     .onChange(of: search.caseSensitive) { search.schedule() }
+    // 휴지통·⌘Z로 회차 목록이 바뀌면 다시 찾는다. 그대로 두면 지운 회차의 결과가 남고, 되살린 회차는 빠진다.
+    .onChange(of: episodes.map(\.id)) { search.refresh() }
     .onChange(of: focusRequest, initial: true) { fieldFocused = true }
     .onAppear { search.refresh() }
     .onDisappear {
