@@ -13,6 +13,7 @@ description: NovelEditor(macOS 한국어 웹소설 편집기)를 사용자처럼
 .claude/skills/verify-noveleditor/verify.sh launch
 ```
 
+- **샌드박스 밖에서 실행한다**(Bash 도구의 샌드박스 끄기). launch·cleanup·`keys` 모두. 샌드박스 안에서 띄운 앱은 명령이 끝나면 꺼지고, `keys`도 앱에 닿지 않는다.
 - NovelEditor가 이미 켜져 있으면 거부한다. 사용자 것일 수 있으니 절대 끄지 말고 사용자에게 묻는다.
 - 하는 일: 사용자 설정(UserDefaults `com.haapy2.NovelEditor`)을 `build/verify/defaults-backup.plist`로 백업 → `Scripts/build.sh` → `build/verify/run/검증 작품.novel`(3회차, 각 약 300자) 생성 → `NOVEL_PERF_OPEN`으로 작품 선택 창을 건너뛰고 그 작품을 바로 연 앱 실행. pid는 `build/verify/run/app.pid`.
 - 준비 완료: `request_access`에 `com.haapy2.NovelEditor`를 넣고 `app_screenshot`. 사이드바에 `1화 2화 3화`, 오른쪽에 본문(AXTextArea)이 보이면 쓸 수 있다.
@@ -64,7 +65,9 @@ computer-use 백그라운드 도구만 쓴다. 사용자 화면을 빼앗지 않
 
 ## 한글 조합 확인 (실제 키 코드)
 
-두벌식 입력기를 실제로 돌리려면 키 코드를 시스템에 보내야 한다. 사용자 화면을 잠시 빼앗으므로 꼭 필요할 때만.
+두벌식 입력기를 실제로 돌리려면 키 코드를 시스템에 보내야 한다. 사용자 화면을 잠시 빼앗으므로 꼭 필요할 때만. 앱을 앞으로 가져오는 `osascript`와 `keys`는 샌드박스 밖에서 돌린다.
+
+한글 자판에서는 컴퓨터 유스 `cmd+글자`가 키 코드 0으로 가서 엉뚱한 단축키가 된다(`cmd+d`가 ⌘A로 들어가 본문 전체가 골라짐). 메뉴에 있는 명령은 `app_menu`로, 없는 단축키는 `keys`(예: ⌘D는 `c2`)로 누른다.
 
 1. 도구 빌드: `xcrun swiftc -O .claude/skills/verify-noveleditor/keys.swift -o build/verify/keys`
 2. 본문 끝에 커서(`app_click`), `request_full_control`, 앱을 앞으로: `osascript -e 'tell application id "com.haapy2.NovelEditor" to activate'`
