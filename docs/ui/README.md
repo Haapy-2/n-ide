@@ -1,6 +1,6 @@
 # 화면 모음 (UI 스크린샷)
 
-UI·UX 개선 작업에서 지금 모습을 비교하려고 남긴 실제 앱 화면이다. 2026-11-27, Debug 빌드, 창 1100×760, 검증용 더미 작품(실제 원고 아님)으로 찍었다. 다크·라이트는 설정 › 일반 › 테마로 바꿔 찍었고 macOS 자체는 다크였다. 메뉴는 화면 일부를 잘라 찍어서 크기가 다르다. 창만 잡는 백그라운드 캡처로 찍어서 macOS 유리 재질(확인 창 바탕 등)은 실제 화면과 다르게 나온다. 특히 라이트 테마 확인 창은 실제로는 밝은데 사진에서는 어둡게 보인다(`dialogs/dialog-goal-light`만 실제 화면에서 다시 찍음).
+UI·UX 개선 작업에서 지금 모습을 비교하려고 남긴 실제 앱 화면이다. 2026-11-27, Debug 빌드, 창 1100×760, 검증용 더미 작품(실제 원고 아님)으로 찍었다. 다크·라이트는 설정 › 일반 › 테마로 바꿔 찍었고 macOS 자체는 다크였다. 메뉴는 화면 일부를 잘라 찍어서 크기가 다르다. 창만 잡는 백그라운드 캡처로 찍어서 macOS 유리 재질(확인 창 바탕 등)은 실제 화면과 다르게 나온다. 그래서 라이트 테마 확인 창(`dialogs/dialog-*-light`)은 실제 화면에서 다시 찍었다(창 크기 그대로 1100×761). 다크 확인 창과 메뉴·툴바 묶음·알림의 유리 바탕은 창 캡처라 실제와 조금 다를 수 있다.
 
 대표 화면은 [README](../../README.md#화면)에 있다. 다시 찍을 때는 같은 이름으로 덮어써서 git 이력으로 전후를 비교한다.
 
@@ -57,14 +57,14 @@ UI·UX 개선 작업에서 지금 모습을 비교하려고 남긴 실제 앱 �
 
 ## 확인 창과 시트
 
-> 확인 창(알림)의 유리 바탕은 캡처 방식 때문에 실제보다 어둡게 찍혔다. 라이트 사진 중 `dialog-goal-light`만 실제 화면 그대로이고, 나머지 `*-light` 확인 창은 실제로는 그것처럼 밝다.
+> 라이트 확인 창은 모두 실제 화면에서 찍었다. 다크 확인 창은 창 캡처라 유리 바탕이 실제보다 어둡고 평평하게 보일 수 있다.
 
 | 화면 | 다크 | 라이트 |
 |---|---|---|
 | 회차 이름 | <img src="dialogs/dialog-rename-dark.jpg" width="360" alt="회차 이름 (dark)"> | <img src="dialogs/dialog-rename-light.jpg" width="360" alt="회차 이름 (light)"> |
 | 목표 글자 수 | <img src="dialogs/dialog-goal-dark.jpg" width="360" alt="목표 글자 수 (dark)"> | <img src="dialogs/dialog-goal-light.jpg" width="360" alt="목표 글자 수 (light)"> |
 | 휴지통으로 옮길까요? | <img src="dialogs/dialog-trash-dark.jpg" width="360" alt="휴지통으로 옮길까요? (dark)"> | <img src="dialogs/dialog-trash-light.jpg" width="360" alt="휴지통으로 옮길까요? (light)"> |
-| 묶기(묶음 이름) | <img src="dialogs/dialog-group-dark.jpg" width="360" alt="묶기(묶음 이름) (dark)"> | – |
+| 묶기(묶음 이름) | <img src="dialogs/dialog-group-dark.jpg" width="360" alt="묶기(묶음 이름) (dark)"> | <img src="dialogs/dialog-group-light.jpg" width="360" alt="묶기(묶음 이름) (light)"> |
 | 회차 두 개를 골랐을 때 묶기 | – | <img src="dialogs/dialog-group-multi-light.jpg" width="360" alt="회차 두 개를 골랐을 때 묶기 (light)"> |
 | 스냅샷 메모 | <img src="dialogs/dialog-snapshot-memo-dark.jpg" width="360" alt="스냅샷 메모 (dark)"> | – |
 | 사이드바에서 ⌘Z: "묶기"를 되돌릴까요? | <img src="dialogs/dialog-sidebar-undo-dark.jpg" width="360" alt="사이드바에서 ⌘Z: "묶기"를 되돌릴까요? (dark)"> | – |
