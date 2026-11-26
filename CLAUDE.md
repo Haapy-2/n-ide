@@ -26,7 +26,7 @@ Packages/NovelCore/    Foundation만 쓰는 공통 로직 패키지 + 단위 테
 Tests/AppTests/        앱 테스트, 디자인 스냅샷 (성능 테스트는 Tests/ 아래 따로)
 Scripts/               build.sh, run.sh, test.sh, snapshots.sh, perf.sh, check-comments.sh(이력형 주석 검사), lib.sh(공통)
 .claude/skills/        verify-noveleditor/ (실제 앱을 띄워 사용자처럼 조작·증명하는 검증 스킬, verify.sh + keys.swift(한글 조합용 실제 키) + features/ 기능 지도)
-docs/                  SPEC, PLAN, DESIGN, PERFORMANCE, PROGRESS, 체크리스트, design-snapshots/, ui/(실제 앱 화면 스크린샷, README "화면"), log/(날짜별 작업 기록)
+docs/                  SPEC, PLAN, DESIGN, PERFORMANCE, PROGRESS, 체크리스트, design-snapshots/, ui/(실제 앱 화면 스크린샷, 영역별 폴더, 목록 README.md), log/(날짜별 작업 기록)
 build/                 빌드 산출물·임시 파일·더미 작품·로그 (git 제외, 통째로 지워도 됨)
 ```
 
