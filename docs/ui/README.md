@@ -120,13 +120,13 @@ UI·UX 개선 작업에서 지금 모습을 비교하려고 남긴 실제 앱 �
 
 | # | 본 것 | 어디서 |
 |---|---|---|
-| 1 | 전체 바꾸기 되돌리기 창에서 고른 줄의 회차 번호와 "N곳" 글자가 배경과 거의 같은 색이다(라이트에서 더 심함, 실제 화면에서 다시 확인 필요) | [search/sheet-revert-replace-*](#작품-전체-검색) |
+| 1 | (고침: 직접 그린 회색 칸) 전체 바꾸기 되돌리기 창에서 고른 줄의 회차 번호와 "N곳" 글자가 배경과 거의 같은 색이다(라이트에서 더 심함, 실제 화면에서 다시 확인 필요) | [search/sheet-revert-replace-*](#작품-전체-검색) |
 | 2 | (고침: 설정 표에 사이드바 ⌘⌫ 안내 줄) 휴지통 단축키가 회차 메뉴에는 ⌘⌫, 설정 › 단축키 표와 기본값 코드에는 ⌥⌘⌫로 서로 다르다. 메뉴는 사이드바에 초점이 있을 때만 ⌘⌫로 바뀌는 의도된 동작이었다 | menus/menu-episode-*, settings/settings-shortcuts-bottom-* |
 | 3 | (고침: `EpisodeLabel`·`KoreanParticle`) 휴지통 확인 제목이 "1화 '1화'을(를)"처럼 번호와 이름이 같으면 겹치고, 조사가 "을(를)"·"(으)로"로 나온다. 스냅샷 판 제목·검색 패널·되돌리기 창의 "1화 1화"도 같은 문제 | dialogs/dialog-trash-*, dialogs/dialog-replace-all-* |
-| 4 | 회차 두 개를 골랐을 때 회차 메뉴의 "묶기"는 고른 회차 모두, "휴지통으로 이동"은 지금 회차 하나에만 적용된다 | dialogs/dialog-group-multi-light, dialogs/dialog-trash-light |
+| 4 | (고침: 메뉴 이름에 "지금 회차(N화)만"·"이 회차만") 회차 두 개를 골랐을 때 회차 메뉴의 "묶기"는 고른 회차 모두, "휴지통으로 이동"은 지금 회차 하나에만 적용된다 | dialogs/dialog-group-multi-light, dialogs/dialog-trash-light |
 | 5 | 스냅샷으로 되돌린 뒤에도 검색 패널이 "5곳을 바꿨어요" 결과를 그대로 보여 준다 | workspace/statusbar-restored-dark |
-| 6 | 단축키 칸이 "키를 누르세요"로 기다리는 상태가 평소 칸과 거의 같아 보인다 | settings/settings-shortcut-recording-dark |
-| 7 | 빈 회차 본문에 안내 글이 없다(작품이 비었을 때는 "첫 회차를 추가해 주세요"가 있음) | workspace/episode-empty-* |
+| 6 | (고침: accent 테두리·글자) 단축키 칸이 "키를 누르세요"로 기다리는 상태가 평소 칸과 거의 같아 보인다 | settings/settings-shortcut-recording-dark |
+| 7 | (고침: "첫 문장을 써 주세요.") 빈 회차 본문에 안내 글이 없다(작품이 비었을 때는 "첫 회차를 추가해 주세요"가 있음) | workspace/episode-empty-* |
 | 8 | 사이드바를 가리면 본문이 커서 쪽으로 스크롤되어 첫 문단이 화면 밖으로 나간 적이 있다(1화, 커서가 끝에 있을 때) | workspace/workspace-sidebar-hidden-light |
 | 9 | 줄 번호가 문단 사이 빈 줄에도 붙고, 빈 줄 번호가 글자 줄 번호보다 위로 떠 보인다 | workspace/editor-line-numbers-dark |
 | 10 | 설정 › 사이드바 판은 항목이 두 개뿐이라 아래가 비어 있다 | settings/settings-sidebar-* |

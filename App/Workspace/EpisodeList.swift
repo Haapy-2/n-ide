@@ -204,7 +204,8 @@ struct EpisodeList: View {
         Button("묶음 풀기") { onUngroup(group) }
       }
       Divider()
-      Button("휴지통으로 이동…") { onTrash(episode.id) }
+      // 휴지통은 한 회차씩이라(되돌리기도 한 회차 단위) 여러 개 고른 위에서는 이 줄만이라고 밝힌다.
+      Button(targets.count > 1 ? "이 회차만 휴지통으로 이동…" : "휴지통으로 이동…") { onTrash(episode.id) }
     }
   }
 

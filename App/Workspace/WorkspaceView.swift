@@ -363,6 +363,7 @@ struct WorkspaceView: View {
       addEpisode: { addEpisode(after: selection) },
       renameSelected: panelOpen ? nil : selection.map { id in { beginRename(id) } },
       trashSelected: selection.map { id in { trashing = id } },
+      trashTitle: trashMenuTitle,
       setGoalSelected: selection.map { id in { beginSetGoal(id) } },
       selectPrevious: neighbor(step: -1),
       selectNext: neighbor(step: 1),
@@ -728,6 +729,14 @@ struct WorkspaceView: View {
         alertMessage = "휴지통으로 옮기지 못해 지우지 않았어요. \(error.localizedDescription)"
       }
     }
+  }
+
+  /// 휴지통은 지금 회차 하나에만 하므로, 여러 회차를 고른 채면 메뉴 이름에 밝힌다(묶기는 고른 회차 모두).
+  private var trashMenuTitle: String? {
+    guard marked.count > 1, let selection, let index = project.episodes.firstIndex(where: { $0.id == selection }) else {
+      return nil
+    }
+    return "지금 회차(\(index + 1)화)만 휴지통으로 이동…"
   }
 
   private var trashTitle: String {

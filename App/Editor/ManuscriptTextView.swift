@@ -20,6 +20,10 @@ final class ManuscriptTextView: NSTextView {
   }
   /// 조합 중에 모양이 바뀌어 본문 전체에는 아직 못 입혔다. 조합이 끝나면 입힌다.
   private var needsRestyle = false
+  /// 레이아웃 매니저의 delegate는 약한 참조라 여기서 붙잡아 둔다.
+  private let blankLineSpacing = BlankLineSpacing()
+  /// 빈 회차 안내 글을 마지막으로 그렸을 때 본문이 비어 있었는지(`EmptyEpisodePlaceholder.swift`)
+  var placeholderShown = true
 
   /// 왼쪽 여백에 줄 번호(`LineNumberGutter.swift`). 그림만 바뀌고 본문·선택은 건드리지 않아 조합 중에 바뀌어도 안전하다.
   var showsLineNumbers = false {
@@ -112,6 +116,7 @@ final class ManuscriptTextView: NSTextView {
     backgroundColor = .paper
     insertionPointColor = caret.dynamicColor
     selectedTextAttributes = [.backgroundColor: NSColor.selectionToken]
+    layoutManager?.delegate = blankLineSpacing
     applyStyle()
     NotificationCenter.default.addObserver(
       self, selector: #selector(eraseCaretOnDeactivate(_:)), name: NSWindow.didResignKeyNotification, object: nil)
@@ -143,6 +148,7 @@ final class ManuscriptTextView: NSTextView {
 
   override func drawBackground(in rect: NSRect) {
     super.drawBackground(in: rect)
+    drawPlaceholder()
     if showsLineNumbers { drawLineNumbers(in: rect) }
     if multiCursor != nil { drawMultiCursorSelections(in: rect) }
   }
@@ -230,6 +236,7 @@ final class ManuscriptTextView: NSTextView {
     forgetInputInProgress()
     dropMultiCursor()
     textStorage?.setAttributedString(NSAttributedString(string: text, attributes: style.textAttributes))
+    updatePlaceholderIfNeeded()
     setSelectedRange(NSRange(location: 0, length: 0))
     episodeUndoManager.removeAllActions()
     scroll(.zero)
@@ -421,6 +428,7 @@ final class ManuscriptTextView: NSTextView {
   /// ⌘Z 한 번에 문장째 지우므로, 고칠 때마다 묶음을 끊는다. 조합 중에는 끊지 않아 조합이 끝난 한 글자("한")가 한 단위가 된다.
   override func didChangeText() {
     super.didChangeText()
+    updatePlaceholderIfNeeded()
     guard !hasMarkedText() else { return }
     if !isInsertingInput {
       currentInput = nil

@@ -8,6 +8,7 @@ struct RevertSheet: View {
   let episodes: [EpisodeMeta]
   let onCancel: () -> Void
   let onRevert: (Set<EpisodeID>) -> Void
+  @FocusState private var listFocused: Bool
 
   var body: some View {
     @Bindable var session = session
@@ -34,18 +35,8 @@ struct RevertSheet: View {
       .padding(16)
       Divider()
       HStack(spacing: 0) {
-        List(selection: $session.focused) {
-          ForEach(session.candidates) { candidate in
-            row(candidate)
-              .tag(candidate.id)
-          }
-        }
-        .onKeyPress(.space) {
-          guard let focused = session.focused else { return .ignored }
-          session.toggle(focused)
-          return .handled
-        }
-        .frame(width: 300)
+        candidateList
+          .frame(width: 300)
         Divider()
         Group {
           if let diff = session.preview {
@@ -73,6 +64,56 @@ struct RevertSheet: View {
       .padding(12)
     }
     .frame(minWidth: 760, idealWidth: 860, minHeight: 460, idealHeight: 560)
+  }
+
+  /// 고른 줄은 다른 화면과 같은 직접 그린 회색 칸. 시스템 선택(`List(selection:)`)은 강조색 칸 위에서
+  /// 색 토큰 글자가 흰색으로 바뀌지 않아 글자가 묻힌다.
+  private var candidateList: some View {
+    ScrollViewReader { proxy in
+      List {
+        ForEach(session.candidates) { candidate in
+          row(candidate)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .rowHighlight(isSelected: session.focused == candidate.id)
+            .padding(.vertical, 1)
+            .contentShape(Rectangle())
+            .onTapGesture {
+              session.focused = candidate.id
+              listFocused = true
+            }
+            .id(candidate.id)
+            .listRowInsets(EdgeInsets(top: 0, leading: 6, bottom: 0, trailing: 6))
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+        }
+      }
+      .environment(\.defaultMinListRowHeight, 0)
+      .focusable()
+      .focused($listFocused)
+      .focusEffectDisabled()
+      .onKeyPress(.upArrow) { moveFocus(by: -1) }
+      .onKeyPress(.downArrow) { moveFocus(by: 1) }
+      .onKeyPress(.space) {
+        guard let focused = session.focused else { return .ignored }
+        session.toggle(focused)
+        return .handled
+      }
+      .onChange(of: session.focused) { _, id in
+        if let id { proxy.scrollTo(id) }
+      }
+      .onAppear { listFocused = true }
+    }
+  }
+
+  private func moveFocus(by offset: Int) -> KeyPress.Result {
+    let ids = session.candidates.map(\.id)
+    guard let focused = session.focused, let index = ids.firstIndex(of: focused),
+      ids.indices.contains(index + offset)
+    else { return .ignored }
+    session.focused = ids[index + offset]
+    return .handled
   }
 
   /// `오늘 15:02에 37개 회차, 412곳을 바꿨어요.`
@@ -114,7 +155,6 @@ struct RevertSheet: View {
         }
       }
     }
-    .padding(.vertical, 2)
     // ⌘클릭: 고른 줄은 그대로 두고 체크만 바꾼다.
     .highPriorityGesture(TapGesture().modifiers(.command).onEnded { session.toggle(candidate.id) })
     .highPriorityGesture(TapGesture().modifiers(.shift).onEnded { session.extend(to: candidate.id) })

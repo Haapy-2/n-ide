@@ -23,10 +23,16 @@ struct ShortcutRecorder: View {
     Button {
       if isRecording { onFinish(.cancelled) } else { onStart() }
     } label: {
-      Text(isRecording ? "키를 누르세요" : combo?.displayText ?? "없음")
+      Text(isRecording ? "키를 누르세요…" : combo?.displayText ?? "없음")
         .monospacedDigit()
-        .foregroundStyle(isRecording || combo == nil ? .secondary : .primary)
+        .foregroundStyle(isRecording ? Color.accent : combo == nil ? .secondary : .primary)
         .frame(minWidth: 96)
+    }
+    // 기다리는 칸이 평소 칸과 같아 보이면 키를 눌러도 되는지 알 수 없어서 강조색 테두리를 두른다.
+    .overlay {
+      if isRecording {
+        RoundedRectangle(cornerRadius: 6).strokeBorder(Color.accent, lineWidth: 2)
+      }
     }
     .accessibilityLabel(isRecording ? "키를 누르세요" : "단축키 \(combo?.displayText ?? "없음")")
     .onChange(of: isRecording, initial: true) {

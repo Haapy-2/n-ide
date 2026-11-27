@@ -5,6 +5,8 @@ struct WorkspaceActions {
   var addEpisode: () -> Void
   var renameSelected: (() -> Void)?
   var trashSelected: (() -> Void)?
+  /// 여러 회차를 고른 채일 때 휴지통 메뉴 이름("지금 회차(3화)만 휴지통으로 이동…"). 평소에는 nil.
+  var trashTitle: String? = nil
   var setGoalSelected: (() -> Void)?
   var selectPrevious: (() -> Void)?
   var selectNext: (() -> Void)?

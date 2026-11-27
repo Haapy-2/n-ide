@@ -27,7 +27,7 @@ struct EpisodeCommands: Commands {
       Button(ShortcutCommand.renameEpisode.title) { actions?.renameSelected?() }
         .keyboardShortcut(shortcuts.shortcut(.renameEpisode))
         .disabled(actions?.renameSelected == nil)
-      Button(ShortcutCommand.trashEpisode.title) { actions?.trashSelected?() }
+      Button(actions?.trashTitle ?? ShortcutCommand.trashEpisode.title) { actions?.trashSelected?() }
         .keyboardShortcut(trashShortcut(shortcuts))
         .disabled(actions?.trashSelected == nil)
 
