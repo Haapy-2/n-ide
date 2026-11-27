@@ -195,21 +195,26 @@ struct SearchPanel: View {
     positions[id].map { "\($0 + 1)화" } ?? ""
   }
 
+  /// 번호 칸 옆에 둘 제목. 비었거나 번호와 같으면("1화") 겹쳐 보이지 않게 빈 문자열.
   private func title(_ id: EpisodeID, _ positions: [EpisodeID: Int]) -> String {
-    positions[id].map { episodes[$0].title } ?? ""
+    guard let index = positions[id] else { return "" }
+    let title = episodes[index].title
+    return EpisodeLabel.text(number: index + 1, title: title) == "\(index + 1)화" ? "" : title
   }
 
   private func header(for found: ProjectSearchResult.Episode, _ positions: [EpisodeID: Int]) -> some View {
     let index = positions[found.id]
-    let title = index.map { episodes[$0].title } ?? ""
+    let title = self.title(found.id, positions)
     return HStack(spacing: 6) {
       Text(index.map { "\($0 + 1)화" } ?? "")
         .font(.system(size: 11).monospacedDigit())
         .foregroundStyle(Color.inkMuted)
-      Text(title.isEmpty ? "제목 없음" : title)
-        .font(.system(size: 12, weight: .semibold))
-        .foregroundStyle(title.isEmpty ? Color.inkMuted : Color.primary)
-        .lineLimit(1)
+      if !title.isEmpty {
+        Text(title)
+          .font(.system(size: 12, weight: .semibold))
+          .foregroundStyle(Color.primary)
+          .lineLimit(1)
+      }
       Spacer(minLength: 4)
       Text("\(found.matches.count)")
         .font(.system(size: 11).monospacedDigit())
@@ -257,10 +262,12 @@ private struct ReplacedEpisodeRow: View {
       Text(number)
         .font(.system(size: 11).monospacedDigit())
         .foregroundStyle(Color.inkMuted)
-      Text(title.isEmpty ? "제목 없음" : title)
-        .font(.system(size: 12, weight: .semibold))
-        .foregroundStyle(title.isEmpty ? Color.inkMuted : Color.primary)
-        .lineLimit(1)
+      if !title.isEmpty {
+        Text(title)
+          .font(.system(size: 12, weight: .semibold))
+          .foregroundStyle(Color.primary)
+          .lineLimit(1)
+      }
       Spacer(minLength: 4)
       Text("\(count.formatted())곳")
         .font(.system(size: 11).monospacedDigit())

@@ -21,7 +21,7 @@ final class ProjectReplace {
       let places = plan.count.formatted()
       return replacement.isEmpty
         ? "\(episodes)개 회차에서 '\(query)' \(places)곳을 지울까요?"
-        : "\(episodes)개 회차에서 \(places)곳을 '\(replacement)'(으)로 바꿀까요?"
+        : "\(episodes)개 회차에서 \(places)곳을 \(KoreanParticle.attach(.direction, to: "'\(replacement)'")) 바꿀까요?"
     }
 
     var message: String {

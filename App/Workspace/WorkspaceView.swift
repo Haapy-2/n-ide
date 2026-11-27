@@ -84,6 +84,7 @@ struct WorkspaceView: View {
         .overlay { ToastOverlay(center: toasts) }
         // 제목과 버튼을 편집 영역 쪽 툴바에 붙인다. 사이드바 쪽에 두면 사이드바 폭만큼만 보여서 긴 제목이 잘린다.
         .navigationTitle(project.title)
+        .navigationSubtitle(selectedEpisodeLabel)
         .toolbar {
           ToolbarItem {
             Button("새 회차", systemImage: "square.and.pencil") { addEpisode(after: selection) }
@@ -92,10 +93,6 @@ struct WorkspaceView: View {
           ToolbarItem {
             Button("작품 전체 검색", systemImage: "magnifyingglass") { openSearch() }
               .disabled(model == nil)
-          }
-          ToolbarItem {
-            Button("노트 나란히 보기", systemImage: "sidebar.right") {}
-              .disabled(true)
           }
         }
     }
@@ -569,12 +566,17 @@ struct WorkspaceView: View {
     }
   }
 
+  private var selectedEpisodeLabel: String {
+    guard let selection, let index = project.episodes.firstIndex(where: { $0.id == selection }) else { return "" }
+    return EpisodeLabel.text(number: index + 1, title: project.episodes[index].title)
+  }
+
   private var snapshotPanelTitle: String {
     guard let id = snapshotBrowser?.episodeID, let index = project.episodes.firstIndex(where: { $0.id == id }) else {
       return "스냅샷"
     }
     let title = project.episodes[index].title
-    return "스냅샷 · \(index + 1)화\(title.isEmpty ? "" : " \(title)")"
+    return "스냅샷 · \(EpisodeLabel.text(number: index + 1, title: title))"
   }
 
   private func commitMemo() {
@@ -731,7 +733,8 @@ struct WorkspaceView: View {
   private var trashTitle: String {
     guard let id = trashing, let index = project.episodes.firstIndex(where: { $0.id == id }) else { return "" }
     let title = project.episodes[index].title
-    return "\(index + 1)화\(title.isEmpty ? "" : " ‘\(title)’")을(를) 휴지통으로 옮길까요?"
+    let name = EpisodeLabel.text(number: index + 1, title: title, quoted: true)
+    return "\(KoreanParticle.attach(.objectMarker, to: name)) 휴지통으로 옮길까요?"
   }
 
   // MARK: - 외부 변경 충돌
@@ -746,7 +749,7 @@ struct WorkspaceView: View {
       return "회차 파일이 앱 밖에서 바뀌었어요"
     }
     let title = project.episodes[index].title
-    return "\(index + 1)화\(title.isEmpty ? "" : " ‘\(title)’") 파일이 앱 밖에서 바뀌었어요"
+    return "\(EpisodeLabel.text(number: index + 1, title: title, quoted: true)) 파일이 앱 밖에서 바뀌었어요"
   }
 
   private func conflictMessage(_ conflict: EpisodeAutosaver.Conflict) -> String {

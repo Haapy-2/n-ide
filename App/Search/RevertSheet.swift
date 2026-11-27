@@ -96,10 +96,12 @@ struct RevertSheet: View {
       Text(index.map { "\($0 + 1)화" } ?? "")
         .font(.system(size: 11).monospacedDigit())
         .foregroundStyle(Color.inkMuted)
-      Text(title.isEmpty ? "제목 없음" : title)
-        .font(.system(size: 12))
-        .foregroundStyle(title.isEmpty ? Color.inkMuted : Color.ink)
-        .lineLimit(1)
+      if let index, EpisodeLabel.text(number: index + 1, title: title) != "\(index + 1)화" {
+        Text(title)
+          .font(.system(size: 12))
+          .foregroundStyle(Color.ink)
+          .lineLimit(1)
+      }
       Spacer(minLength: 4)
       VStack(alignment: .trailing, spacing: 1) {
         Text("\(candidate.count.formatted())곳")

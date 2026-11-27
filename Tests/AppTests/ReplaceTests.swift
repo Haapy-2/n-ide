@@ -96,7 +96,7 @@ final class ReplaceTests: XCTestCase {
   func testCountsEveryPlaceBeforeAsking() async throws {
     let pending = try await prepare("민준", "도윤")
     XCTAssertEqual(pending.plan.episodes.map(\.id), [open, closed])
-    XCTAssertEqual(pending.title, "2개 회차에서 3곳을 '도윤'(으)로 바꿀까요?")
+    XCTAssertEqual(pending.title, "2개 회차에서 3곳을 '도윤'으로 바꿀까요?")
     XCTAssertEqual(try store.readEpisode(closed), "민준과 민준", "묻기 전에는 바꾸지 않는다")
   }
 

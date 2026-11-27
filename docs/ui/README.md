@@ -121,8 +121,8 @@ UI·UX 개선 작업에서 지금 모습을 비교하려고 남긴 실제 앱 �
 | # | 본 것 | 어디서 |
 |---|---|---|
 | 1 | 전체 바꾸기 되돌리기 창에서 고른 줄의 회차 번호와 "N곳" 글자가 배경과 거의 같은 색이다(라이트에서 더 심함, 실제 화면에서 다시 확인 필요) | [search/sheet-revert-replace-*](#작품-전체-검색) |
-| 2 | 휴지통 단축키가 회차 메뉴에는 ⌘⌫, 설정 › 단축키 표와 기본값 코드에는 ⌥⌘⌫로 서로 다르다 | menus/menu-episode-*, settings/settings-shortcuts-bottom-* |
-| 3 | 휴지통 확인 제목이 "1화 '1화'을(를)"처럼 번호와 이름이 같으면 겹치고, 조사가 "을(를)"·"(으)로"로 나온다 | dialogs/dialog-trash-*, dialogs/dialog-replace-all-* |
+| 2 | (고침: 설정 표에 사이드바 ⌘⌫ 안내 줄) 휴지통 단축키가 회차 메뉴에는 ⌘⌫, 설정 › 단축키 표와 기본값 코드에는 ⌥⌘⌫로 서로 다르다. 메뉴는 사이드바에 초점이 있을 때만 ⌘⌫로 바뀌는 의도된 동작이었다 | menus/menu-episode-*, settings/settings-shortcuts-bottom-* |
+| 3 | (고침: `EpisodeLabel`·`KoreanParticle`) 휴지통 확인 제목이 "1화 '1화'을(를)"처럼 번호와 이름이 같으면 겹치고, 조사가 "을(를)"·"(으)로"로 나온다. 스냅샷 판 제목·검색 패널·되돌리기 창의 "1화 1화"도 같은 문제 | dialogs/dialog-trash-*, dialogs/dialog-replace-all-* |
 | 4 | 회차 두 개를 골랐을 때 회차 메뉴의 "묶기"는 고른 회차 모두, "휴지통으로 이동"은 지금 회차 하나에만 적용된다 | dialogs/dialog-group-multi-light, dialogs/dialog-trash-light |
 | 5 | 스냅샷으로 되돌린 뒤에도 검색 패널이 "5곳을 바꿨어요" 결과를 그대로 보여 준다 | workspace/statusbar-restored-dark |
 | 6 | 단축키 칸이 "키를 누르세요"로 기다리는 상태가 평소 칸과 거의 같아 보인다 | settings/settings-shortcut-recording-dark |

@@ -83,7 +83,6 @@ enum EmergencyBackupRecovery {
     guard let index = project.episodes.firstIndex(where: { $0.id == entry.episodeID }) else {
       return entry.episodeTitle.isEmpty ? "제목 없음" : entry.episodeTitle
     }
-    let title = project.episodes[index].title
-    return "\(index + 1)화 \(title.isEmpty ? "제목 없음" : title)"
+    return EpisodeLabel.text(number: index + 1, title: project.episodes[index].title)
   }
 }

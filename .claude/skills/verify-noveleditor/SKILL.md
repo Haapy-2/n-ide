@@ -30,7 +30,7 @@ description: NovelEditor(macOS 한국어 웹소설 편집기)를 사용자처럼
 
 computer-use 백그라운드 도구만 쓴다. 사용자 화면을 빼앗지 않는다.
 
-- 화면·요소: `app_screenshot`(scale 0.5면 충분). AX 요약의 제목으로 대상을 찾는다. 회차 줄은 `AXButton "1화"`, 글자 수 `AXButton "296"`, 본문 `AXTextArea`, 툴바 `"새 회차"`, `"사이드바 가리기"`, `"노트 나란히 보기"`.
+- 화면·요소: `app_screenshot`(scale 0.5면 충분). AX 요약의 제목으로 대상을 찾는다. 회차 줄은 `AXButton "1화"`, 글자 수 `AXButton "296"`, 본문 `AXTextArea`, 툴바 `"새 회차"`, `"사이드바 가리기"`, `"작품 전체 검색"`.
 - 본문 끝에 커서: 본문 영역의 마지막 줄 아래 빈 곳을 `app_click` → 결과에 `moved to end of text`가 뜬다. 그 자리에서 `app_type`.
 - 메뉴 명령은 단축키 대신 `app_menu`로 누른다(사용자가 단축키를 바꿨을 수 있음). 최상위 메뉴: `NovelEditor 파일 편집 보기 회차 윈도우 도움말`.
   - 파일: `지금 저장`, `스냅샷 찍기`, `스냅샷 보기…`, `작품 전환…`

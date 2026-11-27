@@ -85,6 +85,14 @@ struct ShortcutsSettingsPane: View {
           .frame(maxWidth: .infinity, alignment: .leading)
           .fixedSize(horizontal: false, vertical: true)
       }
+      // 기본값일 때만 회차 메뉴가 사이드바 초점에 따라 ⌘⌫로 바꿔 보여서(EpisodeCommands), 표와 메뉴가 달라 보이지 않게 알린다.
+      if command == .trashEpisode, !settings.isCustomized(command) {
+        Text("사이드바에서 회차를 고른 채로는 ⌘⌫로도 돼요. 편집기에서 ⌘⌫는 줄 앞까지 지우기예요.")
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .fixedSize(horizontal: false, vertical: true)
+      }
       if let notice, notice.command == command {
         Text(notice.text)
           .font(.callout)
