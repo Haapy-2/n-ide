@@ -328,6 +328,8 @@ struct WorkspaceView: View {
         recordCount: { model.recordCount($0, for: $1) })
     }
     if !showingSearch { searchTookEditorFocus = model.autosaver.yieldFocus() }
+    // 검색 패널은 사이드바 자리에 뜨므로, 사이드바를 가려 둔 채면 펴야 보인다.
+    if columnVisibility == .detailOnly { columnVisibility = .all }
     showingSearch = true
     searchFocusRequest += 1
   }

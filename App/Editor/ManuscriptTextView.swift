@@ -637,6 +637,21 @@ final class ManuscriptTextView: NSTextView {
     return frame.contains(point) ? self : nil
   }
 
+  /// 시스템은 크기 조절이 끝나면 커서를 화면 가운데로 끌어온다(`_centeredScrollRectToVisible`). 사이드바를 접고 펴는
+  /// 애니메이션도 크기 조절로 쳐서, 커서가 본문 끝에 있으면 본문이 밀려 첫 문단이 화면 위로 나갔다. 보던 자리를 그대로 둔다.
+  /// 본문 폭은 고정이라 대개 줄이 다시 꺾이지 않는다. 커서는 다음에 칠 때 시스템이 다시 보이게 한다.
+  override func viewDidEndLiveResize() {
+    guard let scrollView = enclosingScrollView else { return super.viewDidEndLiveResize() }
+    let clip = scrollView.contentView
+    let before = clip.bounds.origin
+    super.viewDidEndLiveResize()
+    guard clip.bounds.origin != before else { return }
+    var bounds = clip.bounds
+    bounds.origin = before
+    clip.scroll(to: clip.constrainBoundsRect(bounds).origin)
+    scrollView.reflectScrolledClipView(clip)
+  }
+
   override func setFrameSize(_ newSize: NSSize) {
     var size = newSize
     // 마지막 줄을 화면 가운데까지 끌어올릴 수 있도록 보이는 높이의 절반만큼 아래에 여유를 둔다.
