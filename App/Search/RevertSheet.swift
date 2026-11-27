@@ -83,6 +83,10 @@ struct RevertSheet: View {
               session.focused = candidate.id
               listFocused = true
             }
+            // 보조키 클릭은 칸 전체(빈 곳 포함)에서 보통 클릭보다 먼저 받는다.
+            // ⌘클릭: 고른 줄은 그대로 두고 체크만 바꾼다. ⇧클릭: 마지막으로 바꾼 줄부터 범위로.
+            .highPriorityGesture(TapGesture().modifiers(.command).onEnded { session.toggle(candidate.id) })
+            .highPriorityGesture(TapGesture().modifiers(.shift).onEnded { session.extend(to: candidate.id) })
             .id(candidate.id)
             .listRowInsets(EdgeInsets(top: 0, leading: 6, bottom: 0, trailing: 6))
             .listRowBackground(Color.clear)
@@ -129,7 +133,7 @@ struct RevertSheet: View {
     let index = episodes.firstIndex { $0.id == candidate.id }
     let title = index.map { episodes[$0].title } ?? ""
     return HStack(spacing: 8) {
-      // 실제 체크 칸이라 손쉬운 사용(VoiceOver)으로도 켜고 끈다. ⇧클릭은 줄 전체의 동작이 먼저 받는다.
+      // 실제 체크 칸이라 손쉬운 사용(VoiceOver)으로도 켜고 끈다. ⇧클릭은 줄 칸의 동작이 먼저 받는다.
       Toggle(isOn: Binding(get: { isChecked }, set: { _ in session.toggle(candidate.id) })) { EmptyView() }
         .toggleStyle(.checkbox)
         .labelsHidden()
@@ -155,8 +159,5 @@ struct RevertSheet: View {
         }
       }
     }
-    // ⌘클릭: 고른 줄은 그대로 두고 체크만 바꾼다.
-    .highPriorityGesture(TapGesture().modifiers(.command).onEnded { session.toggle(candidate.id) })
-    .highPriorityGesture(TapGesture().modifiers(.shift).onEnded { session.extend(to: candidate.id) })
   }
 }
