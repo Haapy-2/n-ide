@@ -12,6 +12,8 @@ struct WorkspaceView: View {
   @State private var selection: EpisodeID?
   /// 여러 개 고른 회차(⌘클릭·⇧클릭). 묶기에 쓴다.
   @State private var marked: Set<EpisodeID> = []
+  /// 보기 메뉴(⌥⌘S)와 툴바의 사이드바 버튼이 함께 쓴다.
+  @State private var columnVisibility: NavigationSplitViewVisibility = .all
   /// 묶을 회차(이름 묻는 창이 떠 있음)
   @State private var grouping: Set<EpisodeID>?
   @State private var renamingGroup: GroupID?
@@ -74,7 +76,7 @@ struct WorkspaceView: View {
   private var project: ProjectFile { model?.project ?? previewProject! }
 
   var body: some View {
-    NavigationSplitView {
+    NavigationSplitView(columnVisibility: $columnVisibility) {
       sidebar
         .navigationSplitViewColumnWidth(min: 200, ideal: 240, max: 340)
     } detail: {
@@ -376,16 +378,20 @@ struct WorkspaceView: View {
       groupMarked: selection == nil ? nil : { beginGrouping(marked.isEmpty ? Set([selection].compactMap { $0 }) : marked) },
       ungroupSelected: selection.flatMap { id in project.episodes.first { $0.id == id }?.group }.map { group in
         { Task { await model?.ungroup(group, undoManager: undoManager) } }
-      })
+      },
+      toggleSidebar: { columnVisibility = columnVisibility == .detailOnly ? .all : .detailOnly },
+      isSidebarVisible: columnVisibility != .detailOnly)
   }
 
   /// 선택한 회차의 앞(-1)·뒤(+1)에 보이는 회차로 옮기는 명령(접힌 묶음 안은 건너뜀). 없으면 nil.
+  /// 메뉴의 이전·다음 회차는 작품 순서 그대로 옮긴다. 접힌 묶음 안으로 가면 사이드바가 그 묶음을 펼친다(EpisodeList.show).
+  /// 사이드바의 ↑↓는 보이는 줄만 따라간다(EpisodeList.move).
   private func neighbor(step: Int) -> (() -> Void)? {
-    guard let selection,
-      let id = EpisodeGrouping.visibleNeighbor(
-        of: selection, step: step, in: .init(episodes: project.episodes, groups: project.groups),
-        collapsed: EpisodeList.collapsedGroups(collapsedText))
+    let episodes = project.episodes
+    guard let selection, let index = episodes.firstIndex(where: { $0.id == selection }),
+      episodes.indices.contains(index + step)
     else { return nil }
+    let id = episodes[index + step].id
     return { self.selection = id }
   }
 
@@ -484,6 +490,8 @@ struct WorkspaceView: View {
     guard let replace else { return }
     Task {
       let report = await replace.revert(record, ids)
+      // 검색 패널의 "N곳을 바꿨어요"는 이제 맞지 않으니 지우고 지금 본문으로 다시 찾는다.
+      replace.clearFinished()
       toasts.show(
         ProjectReplace.summary(of: report, redo: false), systemImage: "arrow.uturn.backward",
         action: replace.reverted == nil ? nil : .init(title: "다시 바꾸기") { redoReplace() },
@@ -496,6 +504,7 @@ struct WorkspaceView: View {
     guard let replace else { return }
     Task {
       guard let report = await replace.redo() else { return }
+      replace.clearFinished()
       toasts.show(ProjectReplace.summary(of: report, redo: true))
       search?.refresh()
     }
@@ -561,6 +570,9 @@ struct WorkspaceView: View {
         toasts.show("제목도 되돌렸어요", systemImage: "arrow.uturn.backward")
       }
       guard restored, snapshotBrowser === browser else { return }
+      // 되돌린 본문은 검색 패널의 지난 결과("N곳을 바꿨어요", 찾은 줄)와 맞지 않는다.
+      replace?.clearFinished()
+      search?.refresh()
       browser.cancel()
       snapshotBrowser = nil
       model.autosaver.endPanel(hadFocus: true)

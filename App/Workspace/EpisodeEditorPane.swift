@@ -29,6 +29,7 @@ struct EpisodeEditorPane: View {
   @AppStorage(AppSettingKey.autoSnapshotMinutes) private var snapshotMinutes = 30
   @AppStorage(AppSettingKey.snapshotRetention) private var snapshotRetention = 50
   @AppStorage(AppSettingKey.showsLineNumbers) private var showsLineNumbers = false
+  @AppStorage(AppSettingKey.numbersBlankLines) private var numbersBlankLines = true
   @AppStorage(AppSettingKey.multiCursorEnabled) private var multiCursorEnabled = true
 
   var body: some View {
@@ -42,6 +43,7 @@ struct EpisodeEditorPane: View {
             content: content,
             style: style,
             showsLineNumbers: showsLineNumbers,
+            numbersBlankLines: numbersBlankLines,
             multiCursorEnabled: multiCursorEnabled,
             caret: caretSettings.style,
             reveal: reveal,

@@ -37,6 +37,31 @@ final class LineNumberTests: XCTestCase {
     XCTAssertEqual(textView.textContainerInset, insetBefore)
   }
 
+  /// 빈 줄 번호도 글자 줄과 같은 기준선(줄 위에서 같은 거리). 줄바꿈 글리프 자리를 쓰면 위로 떠 보였다.
+  func testBlankLineNumberSitsOnTextBaseline() {
+    for text in ["가\n\n나", "\n가", "가\r\n\r\n나"] {
+      let textView = makeEditor(text)
+      let layoutManager = textView.layoutManager!
+      let storage = textView.textStorage!.mutableString
+      let placements = textView.lineNumberPlacements(in: textView.bounds)
+      var offsets: [CGFloat] = []
+      var location = 0
+      for placement in placements where location < storage.length {
+        let line = layoutManager.lineFragmentRect(forGlyphAt: layoutManager.glyphIndexForCharacter(at: location), effectiveRange: nil)
+        offsets.append(placement.baselineY - textView.textContainerOrigin.y - line.minY)
+        location = NSMaxRange(storage.paragraphRange(for: NSRange(location: location, length: 0)))
+      }
+      XCTAssertEqual(Set(offsets).count, 1, "\(text.debugDescription): \(offsets)")
+    }
+  }
+
+  /// 빈 줄 번호를 끄면 빈 줄만 빠지고 번호 세기는 그대로(비교 화면과 같다).
+  func testBlankLineNumbersCanBeHidden() {
+    let textView = makeEditor("가\n\n나\n")
+    textView.numbersBlankLines = false
+    XCTAssertEqual(numbers(textView), [1, 3])
+  }
+
   func testOffDrawsNothing() {
     XCTAssertEqual(numbers(makeEditor("가\n나", numbers: false)), [])
   }

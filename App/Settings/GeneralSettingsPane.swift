@@ -9,6 +9,8 @@ struct GeneralSettingsPane: View {
   @AppStorage(AppSettingKey.autoSnapshotMinutes) private var snapshotMinutes = 30
   @AppStorage(AppSettingKey.snapshotRetention) private var snapshotRetention = 50
   @AppStorage(AppSettingKey.toastDuration) private var toastDuration = EditorSetting.toastDuration.defaultValue
+  @AppStorage(AppSettingKey.sidebarShowsCharacterCount) private var showsCount = true
+  @AppStorage(AppSettingKey.sidebarSeesThroughWindow) private var seesThroughWindow = true
 
   var body: some View {
     Form {
@@ -22,6 +24,11 @@ struct GeneralSettingsPane: View {
           }
         }
         .pickerStyle(.segmented)
+      }
+      // 사이드바 설정은 두 개뿐이라 따로 판을 두지 않는다(판 아래가 비어 보였다).
+      Section("사이드바") {
+        Toggle("글자 수 보이기", isOn: $showsCount)
+        Toggle("뒤로 창 비치기", isOn: $seesThroughWindow)
       }
       ProjectGoalSection()
       Section {

@@ -14,11 +14,13 @@ final class BlankLineSpacing: NSObject, NSLayoutManagerDelegate {
   ) -> Bool {
     guard let storage = layoutManager.textStorage else { return false }
     let range = layoutManager.characterRange(forGlyphRange: glyphRange, actualGlyphRange: nil)
-    guard range.length == 1 else { return false }
+    // 빈 줄 = 줄바꿈("\n", Windows 파일은 "\r\n")만 있는 줄이고, 바로 앞도 줄바꿈이거나 본문 맨 앞.
+    guard range.length == 1 || range.length == 2 else { return false }
     let text = storage.string as NSString
-    let newline: unichar = 0x0A
-    guard text.character(at: range.location) == newline,
-      range.location == 0 || text.character(at: range.location - 1) == newline
+    let isBreak = ManuscriptTextView.isLineBreak
+    guard (range.location..<NSMaxRange(range)).allSatisfy({ isBreak(text.character(at: $0)) }),
+      range.length == 1 || text.character(at: range.location) == 0x0D,
+      range.location == 0 || isBreak(text.character(at: range.location - 1))
     else { return false }
     // 쓴 칸(줄 높이)보다 긴 부분이 문단 간격이다.
     guard lineFragmentRect.pointee.height > lineFragmentUsedRect.pointee.height else { return false }

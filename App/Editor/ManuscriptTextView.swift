@@ -33,6 +33,10 @@ final class ManuscriptTextView: NSTextView {
       needsDisplay = true
     }
   }
+  /// 줄 번호를 빈 줄에도 그릴지. 그림만 바뀐다.
+  var numbersBlankLines = true {
+    didSet { if numbersBlankLines != oldValue, showsLineNumbers { needsDisplay = true } }
+  }
   /// 전체 줄 수. 본문 글자가 바뀌면 다시 센다(`storageEditedForLineNumbers`).
   private var lineCountCache: Int?
 

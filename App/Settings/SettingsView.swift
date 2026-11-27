@@ -61,7 +61,6 @@ struct SettingsView: View {
       case .general: GeneralSettingsPane()
       case .editor: EditorSettingsPane()
       case .caret: CaretSettingsPane()
-      case .sidebar: SidebarSettingsPane()
       case .shortcuts: ShortcutsSettingsPane()
       }
     }
@@ -85,7 +84,7 @@ private struct RowLayout: Equatable {
 
 /// 설정 창 왼쪽 목록의 섹션. 선언 순서가 목록 순서다(커서는 편집기 바로 아래).
 enum SettingsSection: String, CaseIterable, Identifiable {
-  case general, editor, caret, sidebar, shortcuts
+  case general, editor, caret, shortcuts
 
   var id: Self { self }
 
@@ -94,7 +93,6 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     case .general: "일반"
     case .editor: "편집기"
     case .caret: "커서"
-    case .sidebar: "사이드바"
     case .shortcuts: "단축키"
     }
   }
@@ -104,7 +102,6 @@ enum SettingsSection: String, CaseIterable, Identifiable {
     case .general: "gearshape"
     case .editor: "doc.text"
     case .caret: "character.cursor.ibeam"
-    case .sidebar: "sidebar.left"
     case .shortcuts: "keyboard"
     }
   }

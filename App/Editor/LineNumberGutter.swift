@@ -17,6 +17,8 @@ extension ManuscriptTextView {
   }
 
   static let lineNumberLeading: CGFloat = 20
+  static let newline: unichar = 0x0A
+  static func isLineBreak(_ character: unichar) -> Bool { character == 0x0A || character == 0x0D }
   static let lineNumberFont = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
 
   /// 가장 큰 번호 폭. 자릿수가 달라도 번호 끝이 맞게 이 폭에 오른쪽 정렬한다.
@@ -50,11 +52,14 @@ extension ManuscriptTextView {
         var location = text.paragraphRange(for: NSRange(location: characters.location, length: 0)).location
         var number = ParagraphLines.lineBreaks(in: text, before: location) + 1
         let end = NSMaxRange(characters)
+        let blankBaseline = emptyLineBaselineFromTop
         while location < text.length && location <= end {
           let glyph = layoutManager.glyphIndexForCharacter(at: location)
           let line = layoutManager.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
-          let baseline = origin.y + line.minY + layoutManager.location(forGlyphAt: glyph).y
-          if baseline - Self.lineNumberFont.ascender <= rect.maxY {
+          // 빈 줄의 줄바꿈 글리프 자리는 글자 기준선보다 위에 잡혀서, 글자 줄과 같은 기준선을 쓴다.
+          let isBlank = Self.isLineBreak(text.character(at: location))
+          let baseline = origin.y + line.minY + (isBlank ? blankBaseline : layoutManager.location(forGlyphAt: glyph).y)
+          if (!isBlank || numbersBlankLines), baseline - Self.lineNumberFont.ascender <= rect.maxY {
             result.append(LineNumberPlacement(number: number, baselineY: baseline, rightX: rightX))
           }
           location = NSMaxRange(text.paragraphRange(for: NSRange(location: location, length: 0)))
@@ -65,7 +70,7 @@ extension ManuscriptTextView {
 
     // 끝이 엔터면(또는 빈 회차면) 그 아래 빈 줄에도 커서를 둘 수 있으니 번호를 단다.
     let extra = layoutManager.extraLineFragmentRect
-    if !extra.isEmpty || text.length == 0 {
+    if numbersBlankLines, !extra.isEmpty || text.length == 0 {
       let lineTop = origin.y + (extra.isEmpty ? 0 : extra.minY)
       let baseline = lineTop + emptyLineBaselineFromTop
       let lineHeight = max(extra.height, style.lineHeight)
@@ -77,10 +82,13 @@ extension ManuscriptTextView {
   }
 
   /// 빈 줄(글리프가 없는 줄)의 기준선이 줄 위에서 얼마나 내려오는지. 줄 높이를 고정해서 모든 줄이 같다.
-  /// 글자가 있으면 첫 글자의 실제 값을 쓰고, 빈 회차일 때만 식으로 구한다(테스트로 실제 줄과 비교).
+  /// 본문의 첫 글자(줄바꿈이 아닌 것)의 실제 값을 쓰고, 글자가 없을 때만 식으로 구한다. 식은 실제 값과 0.1pt쯤 다르다.
   var emptyLineBaselineFromTop: CGFloat {
-    if let layoutManager, let storage = textStorage, storage.length > 0 {
-      return layoutManager.location(forGlyphAt: layoutManager.glyphIndexForCharacter(at: 0)).y
+    if let layoutManager, let storage = textStorage {
+      let first = storage.mutableString.rangeOfCharacter(from: CharacterSet.newlines.inverted)
+      if first.location != NSNotFound {
+        return layoutManager.location(forGlyphAt: layoutManager.glyphIndexForCharacter(at: first.location)).y
+      }
     }
     let font = style.font
     return style.lineHeight + font.descender - style.baselineOffset

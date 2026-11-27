@@ -16,6 +16,7 @@ struct NovelEditorApp: App {
       ProjectCommands()
       EpisodeCommands()
       SearchCommands()
+      ViewCommands()
     }
 
     // 작품마다 작업 공간 창 하나. 창의 값은 작품 폴더 URL이다.

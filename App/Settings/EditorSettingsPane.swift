@@ -9,6 +9,7 @@ struct EditorSettingsPane: View {
   @AppStorage(AppSettingKey.statusBarHidesWhileTyping) private var hidesWhileTyping = false
   @AppStorage(AppSettingKey.statusBarHidesWhenIdle) private var hidesWhenIdle = true
   @AppStorage(AppSettingKey.showsLineNumbers) private var showsLineNumbers = false
+  @AppStorage(AppSettingKey.numbersBlankLines) private var numbersBlankLines = true
   @AppStorage(AppSettingKey.multiCursorEnabled) private var multiCursorEnabled = true
 
   var body: some View {
@@ -24,6 +25,11 @@ struct EditorSettingsPane: View {
         NumberSlider(title: "문단 간격", value: editor.$paragraphSpacing, setting: .paragraphSpacing) { String(format: "%.1f줄", $0) }
         NumberSlider(title: "본문 폭", value: editor.$lineWidthInCharacters, setting: .lineWidthInCharacters) { "\(Int($0))자" }
         Toggle("줄 번호 보이기", isOn: $showsLineNumbers)
+        Toggle(isOn: $numbersBlankLines) {
+          Text("빈 줄에도 번호 달기")
+          Text("끄면 빈 줄에는 번호를 그리지 않아요. 번호는 그대로 세어 스냅샷 비교 화면과 같아요.")
+        }
+        .disabled(!showsLineNumbers)
         Toggle(isOn: $multiCursorEnabled) {
           Text("같은 말 여러 커서")
           Text(multiCursorDescription)

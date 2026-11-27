@@ -46,6 +46,8 @@ enum AppSettingKey {
   static let lineWidthInCharacters = "lineWidthInCharacters"
   /// 편집기 왼쪽 여백에 줄 번호 (기본: 끔)
   static let showsLineNumbers = "showsLineNumbers"
+  /// 줄 번호를 켰을 때 빈 줄에도 번호를 그릴지 (기본: 켬). 꺼도 번호 세기는 같다(비교 화면과 맞춤)
+  static let numbersBlankLines = "numbersBlankLines"
   /// 같은 말 여러 커서(⌘D) 켜기 (기본: 켬). 실제 원고에서 이상이 보이면 바로 끌 수 있게
   static let multiCursorEnabled = "multiCursorEnabled"
   /// 커서 두께 pt. 1~4, 0.5 단위 (기본: 2)

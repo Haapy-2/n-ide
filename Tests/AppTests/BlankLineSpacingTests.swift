@@ -36,6 +36,11 @@ final class BlankLineSpacingTests: XCTestCase {
     XCTAssertEqual(lineHeights("\n가", style: style).first, style.lineHeight)
   }
 
+  func testWindowsLineEndings() {
+    let style = EditorStyle()
+    XCTAssertEqual(lineHeights("가\r\n\r\n나", style: style)[1], style.lineHeight)
+  }
+
   /// 띄어쓰기만 있는 줄은 빈 줄이 아니라 글 줄로 본다.
   func testSpaceOnlyLineKeepsSpacing() {
     let style = EditorStyle()

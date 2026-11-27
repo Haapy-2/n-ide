@@ -24,6 +24,9 @@ struct WorkspaceActions {
   var groupMarked: (() -> Void)?
   /// 지금 회차가 든 묶음을 푼다. 묶음 밖이면 nil.
   var ungroupSelected: (() -> Void)?
+  /// 보기 메뉴의 사이드바 가리기·보기(⌥⌘S)
+  var toggleSidebar: (() -> Void)? = nil
+  var isSidebarVisible = true
 }
 
 extension FocusedValues {

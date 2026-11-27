@@ -48,16 +48,16 @@ struct ShortcutsSettingsPane: View {
     let isLocked = settings.isLocked(command)
     return VStack(alignment: .trailing, spacing: 4) {
       HStack {
+        Text(command.title)
+          .foregroundStyle(isLocked ? .secondary : .primary)
+        Spacer()
         if command == .saveWithSnapshot {
-          // 켜면 이 칸의 키가 풀리고 지금 저장·스냅샷 찍기 칸이 잠긴다.
+          // 켜면 이 칸의 키가 풀리고 지금 저장·스냅샷 찍기 칸이 잠긴다. 다른 줄처럼 조작은 오른쪽에 둔다.
           Toggle(command.title, isOn: savesWithSnapshot)
             .labelsHidden()
             .toggleStyle(.switch)
             .controlSize(.small)
         }
-        Text(command.title)
-          .foregroundStyle(isLocked ? .secondary : .primary)
-        Spacer()
         if settings.isCustomized(command), !isLocked {
           Button("기본값") { update { $0.reset(command) } }
             .buttonStyle(.borderless)
@@ -103,7 +103,7 @@ struct ShortcutsSettingsPane: View {
   }
 
   private func lockedHelp(_ command: ShortcutCommand) -> String {
-    command == .saveWithSnapshot ? "왼쪽 스위치를 켜면 바꿀 수 있어요" : "‘저장하면서 스냅샷 찍기’가 켜져 있어 잠겼어요"
+    command == .saveWithSnapshot ? "옆 스위치를 켜면 바꿀 수 있어요" : "‘저장하면서 스냅샷 찍기’가 켜져 있어 잠겼어요"
   }
 
   /// 켜고 끌 때 녹화 중이던 칸과 안내는 그만둔다(잠기는 칸이 녹화 중일 수 있어서).

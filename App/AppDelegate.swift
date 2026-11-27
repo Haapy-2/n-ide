@@ -6,9 +6,15 @@ import AppKit
 /// "기기 설정"(nil)으로 되돌릴 때 이미 열린 창이 바뀌지 않는다.
 /// 입력 칸(설정 창의 목표 등) 밖을 누르면 입력을 끝내는 것도 여기서 한다. 맥은 원래 커서를 그대로 두고,
 /// SwiftUI에는 "창 어디든 누르면"을 받는 방법이 없다.
+/// 창 탭(여러 창을 탭 하나로 묶기)도 여기서 끈다. 켜 두면 보기 메뉴에 쓰지 않는 탭 항목만 생기고, SwiftUI에는 끄는 방법이 없다.
 final class AppDelegate: NSObject, NSApplicationDelegate {
   private var themeObserver: NSObjectProtocol?
   private var clickMonitor: Any?
+
+  func applicationWillFinishLaunching(_ notification: Notification) {
+    // 창이 생기기 전에 꺼야 보기 메뉴의 탭 항목이 처음부터 빠진다.
+    NSWindow.allowsAutomaticWindowTabbing = false
+  }
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     applyTheme()
