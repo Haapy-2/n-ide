@@ -669,7 +669,7 @@ REA의 전체 분석은 압축된 파일을 문법 분석하지 못했다(parse 
 | 14 | 이미 고친 것: 사이드바가 지금 회차로 스크롤하지 않음, 검색 패널을 닫으면 초점이 없음(묶음 C) | — | — |
 
 ### 3. 작가의 하루 시뮬레이션 테스트
-`Tests/AppTests/WriterDaySimulationTests.swift`: 실제 `WorkspaceView`를 창에 띄워 대본(1·2·3·4·6·7·8·9·12·13·14단계, 한글 두 입력 방식)을 돌리고 단계마다 모든 회차의 디스크 본문을 작가가 쓴 글과 비교한다. 키 입력·회차 전환·저장 시작이 메인 스레드를 50ms 넘게 막으면 실패. 위 2번의 끊김은 알려진 끊김으로 표시해 고치면 알려 준다. **아직 끝까지 돌지 못함**: 테스트가 끝날 때 테스트 앱이 Swift 동시성 할당 오류(`_swift_task_dealloc_specific` ← XCTest `_observeErrors`)로 죽는다(충돌 보고서 `~/Library/Logs/DiagnosticReports/NovelEditor-2026-11-26-*.ips`). async 테스트·`XCTExpectFailure`·던진 오류는 원인이 아님을 확인. 남은 의심: 테스트 안에서 Task를 띄우고 메인 런루프를 돌려 기다리는 `WriterDay.run`. 그래서 지금은 `NOVEL_WRITER_DAY=1`일 때만 돈다(`Scripts/test.sh`에서는 건너뜀). 다음: `run`을 없애고 async 테스트에서 `await`와 조건 기다림(`Task.sleep`)으로 바꾼 뒤 1·2단계만 돌려 좁힌다. 돌릴 때마다 충돌 창이 뜰 수 있으니 사용자에게 먼저 알린다.
+`Tests/AppTests/WriterDaySimulationTests.swift`: 실제 `WorkspaceView`를 창에 띄워 대본(1·2·3·4·6·7·8·9·12·13·14단계, 한글 두 입력 방식)을 돌리고 단계마다 모든 회차의 디스크 본문을 작가가 쓴 글과 비교한다. 키 입력·회차 전환·저장 시작이 메인 스레드를 50ms 넘게 막으면 실패. 위 2번의 끊김은 알려진 끊김으로 표시해 고치면 알려 준다. 끝까지 돌고 `Scripts/test.sh`에 들어 있다(2026-11-28). 전에 테스트 앱이 죽던 원인은 3단계가 묶음을 열지 않고 사이드바 되돌리기에 기록해 난 Objective-C 예외가 `WriterDay.run`의 Task를 건너 풀려 나간 것(`docs/log/log26-11-28.md`). 테스트에서 실제 앱을 흉내 낼 때 지킬 것: 사이드바 작업은 `sidebar {}`, ⌘Z는 묶음 밖에서, 두벌식 `.replacing`은 한 글자를 묶음 하나로, 닫기는 `willTerminate`를 보내고.
 
 
 ## 19. 삽화 (14-1, 2026-11-26 사용자 요청·결정 30~37·41)

@@ -15,12 +15,10 @@ final class WriterDaySimulationTests: XCTestCase {
   private var day: WriterDay!
 
   /// 동기 테스트로 돈다: AppKit 조작은 실제 이벤트처럼 작업(Task) 밖 메인 스레드에서 하고, 앱의 비동기 함수는
-  /// 따로 Task로 띄워 런루프를 돌리며 기다린다(`WriterDay.run`).
-  /// 테스트가 끝날 때 테스트 앱이 Swift 동시성 할당 오류로 죽는 원인을 아직 못 찾아, 이름을 짚어 켤 때만 돈다.
+  /// 따로 Task로 띄워 런루프를 돌리며 기다린다(`WriterDay.run`). 그 Task 안에서 Objective-C 예외가 나면 Task를 건너
+  /// 풀려 나가 메인 스레드가 Task를 돌리는 중으로 남고, 테스트 끝에 Swift 동시성 할당 오류로 테스트 앱이 죽는다.
+  /// 그래서 되돌리기 기록이 생기는 사이드바 작업은 꼭 `sidebar {}`(묶음을 연다)로 부른다.
   func testWriterDay() throws {
-    guard ProcessInfo.processInfo.environment["NOVEL_WRITER_DAY"] == "1" else {
-      throw XCTSkip("테스트 끝에 테스트 앱이 죽는 문제를 풀 때까지 NOVEL_WRITER_DAY=1 일 때만 돈다")
-    }
     day = try WriterDay.start()
     defer {
       day.end()
@@ -66,10 +64,10 @@ final class WriterDaySimulationTests: XCTestCase {
       },
 
       Step("3. 새 회차 만들고 이름 붙여 바로 쓰기") { day in
-        day.newEpisode = try day.run { try await day.model.addEpisode(after: day.ep2, undoManager: day.sidebarUndo) }
+        try day.sidebar { day.newEpisode = try await day.model.addEpisode(after: day.ep2, undoManager: day.sidebarUndo) }
         day.expected[day.newEpisode] = ""
         try day.pick(day.newEpisode)
-        try day.run { await day.model.renameEpisodes([day.newEpisode: "새벽의 손님"], reason: .single, undoManager: day.sidebarUndo) }
+        try day.sidebar { await day.model.renameEpisodes([day.newEpisode: "새벽의 손님"], reason: .single, undoManager: day.sidebarUndo) }
         day.knownBreak("findings 1·14: 새 회차를 고르고 이름을 바꾼 뒤 키보드 초점이 편집기가 아니다(⌘N·⇧⌘R 길은 테스트 창에서 닿지 않아 사이드바 길)", fixedWhen: day.editorHasFocus)
         day.clickEditor()
         try day.type("새벽에 손님이 왔다.", .marked)
@@ -134,7 +132,8 @@ final class WriterDaySimulationTests: XCTestCase {
         day.see(day.editor.string, edited, "세 곳이 함께 바뀐다")
         try day.saveNow()
         day.see(try day.disk(day.ep3), edited, "디스크에도 세 곳")
-        day.key { day.editor.undo(nil) }
+        // ⌘Z는 이벤트가 연 묶음을 먼저 닫는다. `key`가 연 묶음 안에서 부르면 groupsByEvent가 꺼진 관리자는 예외를 던진다.
+        day.editor.undo(nil)
         day.see(day.editor.string, original, "⌘Z 한 번에 세 곳이 돌아온다")
         day.key { day.editor.doCommand(by: #selector(NSResponder.cancelOperation(_:))) }
         day.see(day.editor.multiCursorRanges, nil, "esc로 커서 하나")
@@ -463,11 +462,14 @@ private final class WriterDay {
     editor.episodeUndoManager.groupsByEvent = false
   }
 
-  /// 창을 닫는다. 편집기가 사라질 때 지금 자리를 기억한다(앱 종료 때 `willTerminate`가 하는 일과 같다).
+  /// 앱을 끄듯 창을 닫는다. 편집기는 `willTerminate`를 받아 지금 자리를 기억한다.
   func closeWorkspace() throws {
     guard let window else { return }
     let open = openEpisode
     let place = editor?.viewState()
+    // 앱을 끌 때처럼 알린다. 테스트 안에서는 자동 해제 풀이 테스트가 끝나야 비워져, 닫기만 해서는 편집기가 그때서야
+    // 해체되고 자리도 그때서야 기억된다.
+    NotificationCenter.default.post(name: NSApplication.willTerminateNotification, object: NSApp)
     window.contentView = nil
     window.close()
     self.window = nil
@@ -552,9 +554,25 @@ private final class WriterDay {
     let before = NSString(string: editor.string)
     let selection = editor.selectedRange()
     let single = editor.multiCursorRanges == nil
+    // `.replacing`에서 글자를 고치는 키(update·commit)는 되돌리기 기록이 없다. 실제 앱은 기록이 생길 때만 묶음을 열지만
+    // 손으로 묶으면 빈 묶음이 남아 ⌘Z가 그것만 꺼내므로, 이 방식은 한 글자(첫 키~마지막 키)를 묶음 하나로 친다.
+    let undo = editor.episodeUndoManager
+    var letterOpen = false
     for event in HangulKeys.events(for: text) {
-      key { apply(event, input) }
+      guard input == .replacing else {
+        key { apply(event, input) }
+        continue
+      }
+      switch event {
+      case .update, .commit: break
+      case .start, .next, .literal:
+        if letterOpen { undo.endUndoGrouping() }
+        undo.beginUndoGrouping()
+        letterOpen = true
+      }
+      samples.append((.key, clock.measure { apply(event, input) }))
     }
+    if letterOpen { undo.endUndoGrouping() }
     if single {
       see(editor.string, before.replacingCharacters(in: selection, with: text), "친 글이 커서 자리에")
     }
