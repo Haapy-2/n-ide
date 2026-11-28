@@ -181,9 +181,11 @@ NovelEditor/                 저장소 루트 (Claude Code 프로젝트 폴더)
 
 ```
 내작품.novel/
-  project.json        작품 제목, 회차 순서, 회차별 제목과 목표 글자 수, 설정값
+  project.json        작품 제목, 회차 순서, 회차별 제목과 목표 글자 수, 설정값, 그림 이름
   episodes/
-    <고유ID>.md        회차 본문 (순수 텍스트)
+    <고유ID>.md        회차 본문 (순수 텍스트). 그림 자리는 한 줄 ![](../images/<그림ID>.<확장자>)
+  images/
+    <그림ID>.<확장자>   삽화. 한 번 쓰면 고치지 않는다 (PLAN 19장, 결정 34·52)
   notes/
     <고유ID>.md        설정 노트 (인물, 장소 등)
   snapshots/

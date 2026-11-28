@@ -46,7 +46,8 @@ public enum TextSearch {
       var contentsEnd = 0
       text.getParagraphStart(nil, end: &end, contentsEnd: &contentsEnd, for: NSRange(location: start, length: 0))
       let paragraph = NSRange(location: start, length: contentsEnd - start)
-      var from = start
+      // 그림 줄의 경로 글자는 찾지도 바꾸지도 않는다("png"를 바꾸면 그림이 깨진다, G6).
+      var from = ImageLine.isImageLine(text, paragraph: paragraph) ? contentsEnd : start
       while from < contentsEnd {
         let hit = text.range(of: query, options: options, range: NSRange(location: from, length: contentsEnd - from))
         guard hit.location != NSNotFound, hit.length > 0 else { break }

@@ -22,12 +22,24 @@ public struct CharacterCount: Codable, Equatable, Hashable, Sendable {
     text.makeContiguousUTF8()
     var withSpaces = 0
     var withoutSpaces = 0
+    // 그림 줄은 통째로 세지 않는다(결정 32). 그림이 없는 본문은 줄을 나누지 않고 한 번에 훑는다.
+    if ImageLine.mayContainImageLine(text) {
+      for line in text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+      where ImageLine.parse(line) == nil {
+        Self.add(line, withSpaces: &withSpaces, withoutSpaces: &withoutSpaces)
+      }
+    } else {
+      Self.add(text[...], withSpaces: &withSpaces, withoutSpaces: &withoutSpaces)
+    }
+    self.init(withSpaces: withSpaces, withoutSpaces: withoutSpaces)
+  }
+
+  private static func add(_ text: Substring, withSpaces: inout Int, withoutSpaces: inout Int) {
     for character in text {
       if character.isNewline { continue }
       withSpaces += 1
       if !character.isWhitespace { withoutSpaces += 1 }
     }
-    self.init(withSpaces: withSpaces, withoutSpaces: withoutSpaces)
   }
 
   /// 목표 진행률에 쓰는 값.

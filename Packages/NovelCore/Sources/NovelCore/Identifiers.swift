@@ -33,6 +33,27 @@ public struct NoteID: Hashable, Codable, Sendable, CustomStringConvertible {
   }
 }
 
+/// 그림의 고유 ID. 파일 이름(`images/<ID>.<확장자>`)의 확장자 앞부분이다. 확장자는 원고 줄에 있다.
+public struct ImageID: Hashable, Codable, Sendable, CustomStringConvertible {
+  public let rawValue: String
+  public init(rawValue: String) { self.rawValue = rawValue }
+  public static func make() -> ImageID { ImageID(rawValue: UUID().uuidString.lowercased()) }
+  public var description: String { rawValue }
+
+  /// `images/` 안 파일 이름에서 ID(확장자 앞부분). 확장자가 없으면 이름 전체.
+  public init(fileName: String) {
+    rawValue = (fileName as NSString).deletingPathExtension
+  }
+
+  public init(from decoder: Decoder) throws {
+    rawValue = try decodeFileNameID(from: decoder)
+  }
+  public func encode(to encoder: Encoder) throws {
+    var container = encoder.singleValueContainer()
+    try container.encode(rawValue)
+  }
+}
+
 /// 회차 묶음의 고유 ID. 파일과는 상관없고 `project.json`에만 있다.
 public struct GroupID: Hashable, Codable, Sendable, CustomStringConvertible {
   public let rawValue: String

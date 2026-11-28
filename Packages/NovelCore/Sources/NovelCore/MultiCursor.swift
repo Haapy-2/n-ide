@@ -126,6 +126,8 @@ public struct MultiCursor: Equatable, Sendable {
       return false
     }
     guard text.rangeOfComposedCharacterSequences(for: hit) == hit else { return false }
+    // 그림 줄 안은 고를 수 없다. 경로 글자를 고치면 그림이 깨진다(G7).
+    guard !ImageLine.isImageLine(text, paragraph: Self.paragraphContents(at: hit.location, in: text)) else { return false }
     guard wholeWord else { return true }
     return !Self.isWordCharacter(before: hit.location, in: text) && !Self.isWordCharacter(at: NSMaxRange(hit), in: text)
   }
@@ -246,6 +248,11 @@ public struct MultiCursor: Equatable, Sendable {
     var contentsEnd = 0
     text.getParagraphStart(nil, end: &end, contentsEnd: &contentsEnd, for: NSRange(location: min(index, text.length), length: 0))
     return contentsEnd
+  }
+
+  private static func paragraphContents(at index: Int, in text: NSString) -> NSRange {
+    let start = paragraphStart(at: index, in: text)
+    return NSRange(location: start, length: paragraphEnd(at: index, in: text) - start)
   }
 
   // MARK: - 복사와 붙여 넣기 (E7)

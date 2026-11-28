@@ -11,13 +11,17 @@ public struct ProjectFile: Codable, Equatable, Sendable {
   /// 회차 묶음의 이름(형식 2). 어느 회차가 어느 묶음인지는 회차의 `group`에 있다.
   /// 묶음은 늘 이어진 회차들이고, 회원이 없는 묶음은 남기지 않는다(`EpisodeGrouping.normalized`).
   public var groups: [EpisodeGroup]
+  /// 작가가 보는 그림 이름(결정 52). 원고 줄과 그림 파일에는 이름이 없다. 순서는 뜻이 없다(보이는 순서는 원고에서 센다).
+  /// 비면 파일에 적지 않아 그림을 쓰지 않는 작품의 `project.json`은 그대로다.
+  public var images: [ImageMeta]
 
   public init(
     title: String,
     episodes: [EpisodeMeta] = [],
     notes: [NoteMeta] = [],
     settings: ProjectSettings = ProjectSettings(),
-    groups: [EpisodeGroup] = []
+    groups: [EpisodeGroup] = [],
+    images: [ImageMeta] = []
   ) {
     self.schemaVersion = ProjectFormat.currentSchemaVersion
     self.title = title
@@ -25,9 +29,10 @@ public struct ProjectFile: Codable, Equatable, Sendable {
     self.notes = notes
     self.settings = settings
     self.groups = groups
+    self.images = images
   }
 
-  private enum CodingKeys: String, CodingKey { case schemaVersion, title, episodes, notes, settings, groups }
+  private enum CodingKeys: String, CodingKey { case schemaVersion, title, episodes, notes, settings, groups, images }
 
   /// 형식 1에는 `groups`가 없다. 없으면 묶음 없음으로 읽는다(1 → 2 옮기기는 이것뿐).
   public init(from decoder: Decoder) throws {
@@ -42,6 +47,18 @@ public struct ProjectFile: Codable, Equatable, Sendable {
     notes = try container.decode([NoteMeta].self, forKey: .notes)
     settings = try container.decode(ProjectSettings.self, forKey: .settings)
     groups = Self.firstOfEach(try container.decodeIfPresent([EpisodeGroup].self, forKey: .groups) ?? [])
+    images = Self.firstOfEach(try container.decodeIfPresent([ImageMeta].self, forKey: .images) ?? [])
+  }
+
+  public func encode(to encoder: Encoder) throws {
+    var container = encoder.container(keyedBy: CodingKeys.self)
+    try container.encode(schemaVersion, forKey: .schemaVersion)
+    try container.encode(title, forKey: .title)
+    try container.encode(episodes, forKey: .episodes)
+    try container.encode(notes, forKey: .notes)
+    try container.encode(settings, forKey: .settings)
+    try container.encode(groups, forKey: .groups)
+    if !images.isEmpty { try container.encode(images, forKey: .images) }
   }
 
   private static func firstOfEach<Item: Identifiable>(_ items: [Item]) -> [Item] {
@@ -58,6 +75,23 @@ public struct EpisodeGroup: Codable, Equatable, Sendable, Identifiable {
   public init(id: GroupID = .make(), title: String) {
     self.id = id
     self.title = title
+  }
+}
+
+/// 그림 하나의 이름. 이름을 바꿔도 원고 줄과 그림 파일은 그대로다(결정 52).
+public struct ImageMeta: Codable, Equatable, Sendable, Identifiable {
+  public let id: ImageID
+  public var name: String
+
+  public init(id: ImageID, name: String) {
+    self.id = id
+    self.name = name
+  }
+
+  /// 넣은 원본 파일 이름에서 처음 이름(확장자 뺌). 비면 "그림".
+  public static func name(fromOriginalFileName fileName: String) -> String {
+    let name = (fileName as NSString).deletingPathExtension.trimmingCharacters(in: .whitespacesAndNewlines)
+    return name.isEmpty ? "그림" : name
   }
 }
 
