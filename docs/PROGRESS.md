@@ -15,7 +15,7 @@
 
 14-1 ③b 끝(그림 넣기). 다음은 **③-1 사이드바 구역(회차/그림)과 그림 칸**(PLAN 19장 8번): 이름은 `project.json` `images`(③b에서 넣을 때 원래 파일 이름으로 채움, `ProjectModel.addImageNames`), 썸네일 28pt는 `EditorImages`와 같은 ImageIO 방식, "쓰인 회차"는 메인 밖 색인. 그림 칸에서 본문으로 끌어 놓기는 `ManuscriptTextView.insertImages`와 같은 넣기 순서를 쓰되 파일 복사 없이 줄만. 코드 자리: 넣기 `App/Editor/ImageInsertion.swift`·`ImageImporter.swift`, NovelCore `ImageImport.swift`. 손 확인 거리(끌어 놓기·열기 창·깨진 상자 메뉴)는 [checklist-manual.md](checklist-manual.md) ③b. 실험 코드 `build/experiments/image-line/`(git 밖)은 지워도 된다.
 
-**그림 기능 남은 위험(따로 한 단계, 사용자와 순서 정하기)**: E 썸네일 캐시가 화면 밖 그림도 계속 들고 있음(1600×900 그림 20장 76MB, 목표 +20MB, PLAN 19장 4번 "보이는 것 ± 한 화면"), F `EditorImages.status`가 iCloud에서 내려받지 않은 그림 머리를 메인 스레드에서 읽음(재현 못 함, 내려받기 상태를 먼저 보고 메인 밖에서 받게), G 스냅샷 비교의 그림 줄(G14).
+**찾았지만 아직 안 고친 것(사용자와 순서 정하기, 자세한 건 [log26-11-28](log/log26-11-28.md) 마지막 항목)**: 스냅샷 이름이 기기 시간대 시각이라 시간대가 바뀌면 최신 스냅샷이 먼저 정리됨(재현), 줄 나눔이 U+2028 등이면 글자 수가 편집기와 어긋남(재현, 드묾), 그림 붙여 넣은 직후 ⌘Q면 줄이 안 들어갈 수 있음. 그림 기능: E 썸네일 캐시가 화면 밖 그림도 계속 들고 있음(1600×900 그림 20장 76MB, 목표 +20MB, PLAN 19장 4번 "보이는 것 ± 한 화면"), F `EditorImages.status`가 iCloud에서 내려받지 않은 그림 머리를 메인 스레드에서 읽음(재현 못 함, 내려받기 상태를 먼저 보고 메인 밖에서 받게), G 스냅샷 비교의 그림 줄(G14).
 
 ## 다음 할 일
 
