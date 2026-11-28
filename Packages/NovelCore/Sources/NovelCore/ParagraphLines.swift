@@ -1,19 +1,19 @@
 import Foundation
 
-/// "줄"을 나누는 규칙 하나. 편집기 줄 번호와 비교 화면 줄 번호가 같은 줄을 가리키게 하려고 한곳에 둔다.
+/// The single rule for splitting "lines". Kept in one place so editor line numbers and diff line numbers point at the same lines.
 ///
-/// 줄 = 문단. 엔터가 넣는 `\n`과, 다른 편집기에서 온 `\r\n`·`\r`, 유니코드 문단 구분(U+2029)에서 나눈다.
-/// NSTextView(NSString 문단)와 같은 규칙이다. U+2028(줄 구분)은 화면에서만 줄을 넘기고 문단은 나누지 않고,
-/// U+0085(NEL)는 NSString이 문단으로 보지 않아서 여기서도 나누지 않는다(테스트로 확인).
+/// Line = paragraph. Split at Return's `\n`, `\r\n`/`\r` from other editors, and the Unicode paragraph separator (U+2029).
+/// Same rule as NSTextView (NSString paragraphs). U+2028 (line separator) only breaks lines on screen without splitting paragraphs,
+/// and U+0085 (NEL) isn't a paragraph to NSString, so it doesn't split here either (verified by tests).
 ///
-/// Swift `String`은 `\r\n`을 글자 하나로 묶어서 `split(separator: "\n")`로는 나뉘지 않는다.
-/// 그래서 UTF-16 단위로 직접 센다.
+/// Swift `String` groups `\r\n` into one character, so `split(separator: "\n")` doesn't split it.
+/// So count UTF-16 units directly.
 public enum ParagraphLines {
   static let lineFeed: UInt16 = 0x0A
   static let carriageReturn: UInt16 = 0x0D
   static let paragraphSeparator: UInt16 = 0x2029
 
-  /// 이 UTF-16 단위가 줄을 끝내는가. `\r\n`은 `\r` 쪽을 끝으로 보지 않고 `\n` 쪽에서 한 번만 센다.
+  /// Whether this UTF-16 unit ends a line. For `\r\n`, the `\r` isn't an end; it's counted once at the `\n`.
   @inline(__always)
   static func endsLine(_ unit: UInt16, next: UInt16?) -> Bool {
     switch unit {
@@ -23,8 +23,8 @@ public enum ParagraphLines {
     }
   }
 
-  /// 줄로 나눈다. 줄 끝 문자는 빼고, 끝에 줄바꿈이 있으면 마지막에 빈 줄이 하나 붙는다.
-  /// 빈 글은 줄이 없다(빈 글 → 새 글이면 모두 "넣은 줄").
+  /// Split into lines. Line terminators are dropped; a trailing newline adds one empty line at the end.
+  /// Empty text has no lines (empty → new text means all "inserted lines").
   public static func split(_ text: String) -> [String] {
     if text.isEmpty { return [] }
     let units = Array(text.utf16)
@@ -50,8 +50,8 @@ public enum ParagraphLines {
     return lines
   }
 
-  /// `offset`(UTF-16 위치) 앞에 끝난 줄 수. 그 위치가 들어 있는 줄의 번호는 이 값 + 1.
-  /// 편집기가 화면에 보이는 첫 문단의 번호를 구할 때 쓴다. 본문을 복사하지 않고 조각씩 읽는다.
+  /// Number of lines ended before `offset` (UTF-16). The line number containing that offset is this + 1.
+  /// Used by the editor to get the number of the first visible paragraph. Reads chunk by chunk without copying the body.
   public static func lineBreaks(in text: NSString, before offset: Int) -> Int {
     let end = min(max(offset, 0), text.length)
     var count = 0
@@ -66,7 +66,7 @@ public enum ParagraphLines {
         let unit = buffer[index]
         guard unit == lineFeed || unit == carriageReturn || unit == paragraphSeparator else { continue }
         if unit == carriageReturn {
-          // 다음 단위가 \n이면 그쪽에서 센다. 다음 단위가 조각 밖이면 본문에서 직접 본다.
+          // If the next unit is \n, count it there. If the next unit is outside the chunk, look it up in the body directly.
           let nextLocation = location + index + 1
           let next: UInt16? = index + 1 < length
             ? buffer[index + 1]
@@ -80,7 +80,7 @@ public enum ParagraphLines {
     return count
   }
 
-  /// 전체 줄 수. 빈 글도 편집기에서는 1번 줄이 보이므로 1. 끝이 줄바꿈이면 그 뒤 빈 줄까지 센다.
+  /// Total line count. Empty text still shows line 1 in the editor, so 1. A trailing newline counts the empty line after it.
   public static func lineCount(in text: NSString) -> Int {
     lineBreaks(in: text, before: text.length) + 1
   }

@@ -22,7 +22,7 @@ struct CharacterCountTests {
     #expect(count == CharacterCount(withSpaces: 3, withoutSpaces: 2))
   }
 
-  /// 화면에 보이는 한 글자는 한 글자: 자모를 풀어 쓴 한글(NFD), 이모지, 결합 문자.
+  /// One visible character counts as one: decomposed Hangul (NFD), emoji, combining characters.
   @Test func countsVisibleCharacters() {
     let decomposed = "한글".decomposedStringWithCanonicalMapping
     #expect(decomposed.unicodeScalars.count == 6)
@@ -41,7 +41,7 @@ struct CharacterCountTests {
     #expect(count.value(for: .withoutSpaces) == 98)
   }
 
-  /// 글자 수가 없는 옛 project.json도 그대로 열리고, 센 값은 저장했다 다시 읽힌다.
+  /// Old project.json without counts still opens, and counted values survive a save and reload.
   @Test func storedWithEpisodeAndOptional() throws {
     let folder = try TestFolder()
     defer { folder.remove() }

@@ -1,26 +1,26 @@
 import Foundation
 
-/// 본문 한 곳에서 찾은 문구.
+/// A phrase found at one spot in a body.
 public struct SearchMatch: Equatable, Sendable {
-  /// 본문 전체에서의 자리(UTF-16 단위). 편집기 선택(NSRange)에 그대로 쓴다.
+  /// Position in the whole body (UTF-16 units). Used directly as the editor selection (NSRange).
   public let location: Int
   public let length: Int
-  /// 1부터. 엔터(문단)마다 하나로, 편집기 줄 번호와 같다.
+  /// From 1. One per Return (paragraph), same as editor line numbers.
   public let line: Int
-  /// 그 줄의 글. 길면 일치한 곳 앞뒤만 남기고 `…`로 자른다.
+  /// That line's text. Long lines keep only the area around the match, cut with `…`.
   public let preview: String
-  /// `preview` 안에서 일치한 곳(UTF-16 단위)
+  /// Match position within `preview` (UTF-16 units)
   public let previewMatch: Range<Int>
 }
 
-/// 한 본문에서 문구 찾기. 입력한 문구 그대로, 문단을 넘지 않고, 영문 대소문자 구분은 고른다(SPEC 7장).
-/// 정규화 비교를 써서 자모를 따로 적은 한글(NFD)도 같은 글자로 찾는다.
+/// Find a phrase in one body. The phrase as typed, never across paragraphs, Latin case sensitivity selectable (SPEC ch.7).
+/// Uses normalized comparison so decomposed Hangul (NFD) matches the same characters.
 public enum TextSearch {
-  /// 미리 보기에서 일치한 곳 앞에 남길 글자 수(UTF-16). 사이드바 폭에 맞춰 앞쪽을 짧게 둔다.
+  /// Characters (UTF-16) kept before the match in previews. Kept short in front to fit the sidebar width.
   static let previewLead = 20
   static let previewTrail = 60
 
-  /// `limit`개까지만 찾는다. 줄을 넘는 문구(줄바꿈이 든 문구)와 빈 문구는 찾지 않는다.
+  /// Finds up to `limit`. Phrases spanning lines (containing newlines) and empty phrases aren't searched.
   public static func matches(of query: String, in text: String, caseSensitive: Bool, limit: Int = .max) -> [SearchMatch] {
     guard limit > 0 else { return [] }
     let text = text as NSString
@@ -32,8 +32,8 @@ public enum TextSearch {
     return found
   }
 
-  /// 찾은 곳마다 `body(자리, 줄 번호, 그 문단)`을 부른다. false를 돌려주면 멈춘다.
-  /// 찾기와 바꾸기가 이 하나로 같은 곳을 고르게 한다.
+  /// Calls `body(position, line number, its paragraph)` for each match. Returning false stops.
+  /// Find and replace both use this one function so they pick the same spots.
   static func forEachHit(
     of query: String, in text: NSString, caseSensitive: Bool, _ body: (NSRange, Int, NSRange) -> Bool
   ) {
@@ -46,7 +46,7 @@ public enum TextSearch {
       var contentsEnd = 0
       text.getParagraphStart(nil, end: &end, contentsEnd: &contentsEnd, for: NSRange(location: start, length: 0))
       let paragraph = NSRange(location: start, length: contentsEnd - start)
-      // 그림 줄의 경로 글자는 찾지도 바꾸지도 않는다("png"를 바꾸면 그림이 깨진다, G6).
+      // Path characters of image lines are neither found nor replaced (replacing "png" would break the image, G6).
       var from = ImageLine.isImageLine(text, paragraph: paragraph) ? contentsEnd : start
       while from < contentsEnd {
         let hit = text.range(of: query, options: options, range: NSRange(location: from, length: contentsEnd - from))
@@ -60,7 +60,7 @@ public enum TextSearch {
     }
   }
 
-  /// 찾을 수 있는 문구인지. 줄바꿈이 들면 문단 안에서는 절대 맞지 않는다.
+  /// Whether the phrase is searchable. One containing a newline can never match within a paragraph.
   public static func isSearchable(_ query: String) -> Bool {
     !query.isEmpty && query.rangeOfCharacter(from: .newlines) == nil
   }
@@ -80,7 +80,7 @@ public enum TextSearch {
       shown.length -= trail - previewTrail
       suffix = "…"
     }
-    // 자른 자리가 이모지 같은 두 단위 글자 가운데면 한 글자 단위로 넓힌다.
+    // If the cut lands inside a two-unit character like an emoji, widen to whole characters.
     shown = text.rangeOfComposedCharacterSequences(for: shown)
     let body = text.substring(with: shown)
     let matchStart = (prefix as NSString).length + hit.location - shown.location
@@ -96,19 +96,19 @@ public struct ProjectSearchResult: Equatable, Sendable {
     public let matches: [SearchMatch]
   }
 
-  /// 찾은 것이 있는 회차만, 회차 순서대로
+  /// Only episodes with matches, in episode order
   public var episodes: [Episode] = []
-  /// 상한에 닿아 뒤쪽은 찾지 않았다.
+  /// Hit the cap; later ones weren't searched.
   public var isTruncated = false
-  /// 본문을 읽지 못한 회차(파일 없음, UTF-8 아님 등)
+  /// Episodes whose body couldn't be read (missing file, not UTF-8 etc.)
   public var unreadable: [EpisodeID] = []
 
   public var matchCount: Int { episodes.reduce(0) { $0 + $1.matches.count } }
 }
 
 extension ProjectStore {
-  /// 회차들을 순서대로 찾는다. `texts`에 든 회차는 파일 대신 그 글을 찾는다(열린 회차의 편집기 글, 저장 못 한 글).
-  /// 회차 하나를 끝낼 때마다 취소를 확인한다. 메인 스레드 밖에서 부른다.
+  /// Search episodes in order. Episodes in `texts` are searched from that text instead of the file (open episode's editor text, unsaved text).
+  /// Checks for cancellation after each episode. Call off the main thread.
   public func search(
     _ query: String, in ids: [EpisodeID], texts: [EpisodeID: String] = [:],
     caseSensitive: Bool, limit: Int = 1_000
@@ -127,7 +127,7 @@ extension ProjectStore {
           continue
         }
       }
-      // 하나 더 찾아서 상한을 넘는지 안다.
+      // Find one more to know whether the cap is exceeded.
       let found = TextSearch.matches(of: query, in: text, caseSensitive: caseSensitive, limit: remaining + 1)
       guard !found.isEmpty else { continue }
       if found.count > remaining {

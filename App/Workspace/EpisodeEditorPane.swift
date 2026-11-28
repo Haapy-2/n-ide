@@ -1,25 +1,25 @@
 import NovelCore
 import SwiftUI
 
-/// 편집 영역: 선택한 회차의 본문만 백그라운드에서 읽어 편집기에 올리고, 자동 저장기·글자 수 세기에 연결한다.
-/// 아래에는 상태 줄(글자 수·목표 진행률·저장 상태).
+/// Editor area: reads only the selected episode's body in the background, loads it into the editor, and connects autosave and counting.
+/// Below is the status bar (count, goal progress, save state).
 struct EpisodeEditorPane: View {
   let autosaver: EpisodeAutosaver
   let counter: CharacterCounter
   let episodeID: EpisodeID
   let goal: Int
-  /// 마지막으로 센 이 회차의 글자 수. 회차를 연 직후, 새로 세기 전까지 보여준다. 회차를 열 때만 읽는다.
+  /// This episode's last counted value. Shown right after opening until recounted. Read only when the episode opens.
   let knownCount: () -> CharacterCount?
-  /// 검색 결과로 가기. 이 회차의 본문이 올라간 뒤 편집기가 처리한다.
+  /// Go to a search result. Handled by the editor after this episode's body is loaded.
   var reveal: TextReveal?
-  /// 이 회차의 본문이 편집기에 올라간 뒤 한 번.
+  /// Once after this episode's body is loaded into the editor.
   var onShown: (EpisodeID) -> Void = { _ in }
-  /// 편집기가 작가에게 알릴 말(토스트).
+  /// Message the editor shows the writer (toast).
   var onNotice: (String) -> Void = { _ in }
   @State private var content: ManuscriptEditor.Content?
   @State private var errorMessage: String?
   @State private var fade = StatusBarFade()
-  /// 설정 창에서 바꾼 글꼴·크기·간격·폭. 바뀌면 열려 있는 편집 영역에 바로 반영된다.
+  /// Font, size, spacing and width changed in Settings. Changes apply to the open editor immediately.
   private var editorSettings = EditorStyleSettings()
   private var caretSettings = CaretStyleSettings()
   @AppStorage(AppSettingKey.characterCountInterval) private var countInterval = EditorSetting.characterCountInterval.defaultValue
@@ -34,7 +34,7 @@ struct EpisodeEditorPane: View {
 
   var body: some View {
     let style = editorSettings.style
-    // 상태 줄은 본문 위 아래쪽에 겹쳐 띄운다. 숨으면 바탕도 사라져 본문이 창 맨 아래까지 보인다.
+    // The status bar floats over the bottom of the body. When hidden its background goes too, so the body shows to the window bottom.
     ZStack(alignment: .bottom) {
       ZStack {
         Color.paper
@@ -51,7 +51,7 @@ struct EpisodeEditorPane: View {
               autosaver.textDidChange()
               fade.noteInput()
             },
-            // 본문 복사는 그 자리에서 한다(창이 닫히며 편집기가 먼저 사라질 수 있다). 끝나기는 기다리지 않는다.
+            // The body is copied in place (the editor may vanish first as the window closes). Completion isn't awaited.
             onFocusLost: { autosaver.startSave() },
             onFocusGained: { Task { await autosaver.checkExternalChange() } },
             onReady: {
@@ -71,7 +71,7 @@ struct EpisodeEditorPane: View {
       StatusBar(counter: counter, autosaver: autosaver, fade: fade, goal: goal, textWidth: style.textWidth)
     }
     .background(Color.paper)
-    // 마우스를 움직이면 흐려진 상태 줄이 다시 나타난다. 숨겨져 있을 때만 상태가 바뀐다.
+    // Moving the mouse brings back a faded status bar. State changes only while hidden.
     .onContinuousHover { phase in
       if case .active = phase { fade.show() }
     }
@@ -79,7 +79,7 @@ struct EpisodeEditorPane: View {
     .onChange(of: countInterval, initial: true) {
       counter.interval = .milliseconds(Int(EditorSetting.characterCountInterval.clamped(countInterval) * 1_000))
     }
-    // 바꾸면 바로 적용: 간격이나 켜기가 바뀌면 타이머를 다시 건다.
+    // Changes apply immediately: the timer restarts when the interval or toggle changes.
     .onChange(of: [snapshotMinutes, snapshotRetention, autoSnapshot ? 1 : 0], initial: true) {
       autosaver.snapshots.settings = EpisodeSnapshotter.Settings(
         autoEnabled: autoSnapshot, minutes: snapshotMinutes, retention: snapshotRetention)
@@ -91,14 +91,14 @@ struct EpisodeEditorPane: View {
     }
   }
 
-  /// 회차 전환은 기다림 없이 한 번에 한다: 떠나는 회차 저장은 뒤에서 시작만 하고,
-  /// 새 회차 본문(5,000자 안팎, 0.1ms 수준)은 바로 읽어 같은 화면 갱신 안에서 바꿔 넣는다.
-  /// 기다리는 동안 옛 본문이 한 박자 남아 있다가 바뀌면 끊겨 보이기 때문이다.
+  /// Episode switching happens in one go without waiting: saving the left episode only starts in the background,
+  /// and the new body (~5,000 chars, ~0.1 ms) is read immediately and swapped within the same refresh.
+  /// Waiting would leave the old body for a beat before switching, which looks choppy.
   private func switchEpisode() {
     autosaver.leaveEpisode()
     let id = episodeID
     do {
-      // 메모리에 남은 본문이 있으면 그것을, 없으면 디스크에서 읽고 그때의 파일 상태를 외부 변경 기준으로 넘긴다.
+      // Use the in-memory body if any; otherwise read from disk and pass that file state as the external-change baseline.
       let pending = autosaver.pendingText(for: id)
       let version = pending == nil ? try autosaver.store.readEpisodeVersion(id) : nil
       errorMessage = nil

@@ -25,7 +25,7 @@ extension ProjectError {
 }
 
 nonisolated extension WriteProblem {
-  /// 상태 줄에 짧게.
+  /// Short, for the status bar.
   var statusLabel: String {
     switch self {
     case .noPermission: "쓸 권한 없음"
@@ -37,7 +37,7 @@ nonisolated extension WriteProblem {
     }
   }
 
-  /// 사용자가 할 수 있는 일.
+  /// What the user can do.
   var advice: String {
     switch self {
     case .noPermission:

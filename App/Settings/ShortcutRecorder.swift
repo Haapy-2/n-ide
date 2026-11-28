@@ -1,15 +1,15 @@
 import AppKit
 import SwiftUI
 
-/// 단축키 칸. 누르면 "키를 누르세요"로 바뀌고, 다음 키 누름을 메뉴보다 먼저 받아 넘긴다.
-/// AppKit을 쓰는 이유: SwiftUI의 키 입력(onKeyPress)은 ⌘ 조합을 메뉴가 먼저 가져가서 받을 수 없다.
-/// 앱 전체 키 누름을 엿보는 감시(NSEvent 로컬 감시)는 기록하는 동안에만 켠다.
+/// Shortcut field. Clicking switches to "press a key" and intercepts the next key press before the menu does.
+/// Why AppKit: SwiftUI key input (onKeyPress) can't receive ⌘ combos because the menu takes them first.
+/// An app-wide key press monitor (NSEvent local monitor) is on only while recording.
 struct ShortcutRecorder: View {
   enum Outcome {
     case recorded(KeyCombo)
-    /// ⌫: 단축키 없애기
+    /// ⌫: remove the shortcut
     case cleared
-    /// Esc, 칸을 다시 누름, 창을 떠남
+    /// Esc, clicking the field again, leaving the window
     case cancelled
   }
 
@@ -28,7 +28,7 @@ struct ShortcutRecorder: View {
         .foregroundStyle(isRecording ? Color.accent : combo == nil ? .secondary : .primary)
         .frame(minWidth: 96)
     }
-    // 기다리는 칸이 평소 칸과 같아 보이면 키를 눌러도 되는지 알 수 없어서 강조색 테두리를 두른다.
+    // A waiting field that looks like a normal one gives no hint that a key can be pressed, so it gets an accent border.
     .overlay {
       if isRecording {
         RoundedRectangle(cornerRadius: 6).strokeBorder(Color.accent, lineWidth: 2)
@@ -65,16 +65,16 @@ struct ShortcutRecorder: View {
   }
 }
 
-/// 기록하는 동안 설정 창의 키 누름을 가로챈다(메뉴·입력 칸으로 가지 않게 삼킨다).
-/// 감시는 앱 전체에 걸리므로, 다른 창(원고 창)에서 누른 키는 삼키지 않고 기록을 취소한다.
-/// 안 그러면 설정 창을 기록 중으로 둔 채 원고 창으로 돌아갔을 때 ⌘S도 글자도 원고에 닿지 않는다.
+/// While recording, intercept Settings window key presses (swallow them so they don't reach menus or fields).
+/// The monitor is app-wide, so keys pressed in another window (manuscript) aren't swallowed; recording is cancelled instead.
+/// Otherwise, returning to the manuscript window with Settings still recording, neither ⌘S nor typing would reach the manuscript.
 @MainActor
 private final class KeyDownMonitor {
   private var token: Any?
 
   func start(_ handler: @escaping (NSEvent) -> Void, onOtherWindow: @escaping () -> Void) {
     stop()
-    // 칸을 누른 직후라 지금 키 창이 설정 창이다.
+    // Right after clicking the field, the key window is the Settings window.
     weak let window = NSApp.keyWindow
     token = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
       guard event.window === window else {

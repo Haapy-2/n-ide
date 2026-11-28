@@ -1,31 +1,31 @@
 import AppKit
 import NovelCore
 
-/// 원고 편집용 NSTextView. TextKit 1을 명시적으로 쓴다(SPEC 3장).
-/// 본문 폭을 고정하고 창이 넓으면 가운데 두며, 마지막 줄을 화면 가운데까지 올려 쓸 수 있게 아래 여백을 둔다.
+/// NSTextView for manuscript editing. Uses TextKit 1 explicitly (SPEC ch.3).
+/// Fixes the body width, centers it in wide windows, and adds bottom padding so the last line can be raised to mid-screen.
 final class ManuscriptTextView: NSTextView {
   var style = EditorStyle() {
     didSet { if style != oldValue { applyStyle() } }
   }
-  /// 커서 두께·높이·색(설정 › 커서, `CaretSettings.swift`). 그림만 바뀌어 조합 중에 바뀌어도 안전하다.
+  /// Caret width, height, color (Settings › Caret, `CaretSettings.swift`). Only drawing changes, so safe to change during composition.
   var caret = CaretStyle() {
     didSet {
       guard caret != oldValue else { return }
       insertionPointColor = caret.dynamicColor
-      // 옛 두께·높이로 그린 커서를 지우고 새 모양으로 바로 다시 그린다.
+      // Erase the caret drawn with the old width/height and redraw in the new shape immediately.
       if let last = lastCaretRect { eraseCaret(last) }
       lastCaretRect = nil
       updateInsertionPointStateAndRestartTimer(true)
     }
   }
-  /// 조합 중에 모양이 바뀌어 본문 전체에는 아직 못 입혔다. 조합이 끝나면 입힌다.
+  /// The style changed during composition and isn't applied to the whole body yet. Applied when composition ends.
   private var needsRestyle = false
-  /// 레이아웃 매니저의 delegate는 약한 참조라 여기서 붙잡아 둔다.
+  /// The layout manager's delegate is a weak reference, so it's retained here.
   private let blankLineSpacing = BlankLineSpacing()
-  /// 빈 회차 안내 글을 마지막으로 그렸을 때 본문이 비어 있었는지(`EmptyEpisodePlaceholder.swift`)
+  /// Whether the body was empty when the empty-episode hint was last drawn (`EmptyEpisodePlaceholder.swift`)
   var placeholderShown = true
 
-  /// 왼쪽 여백에 줄 번호(`LineNumberGutter.swift`). 그림만 바뀌고 본문·선택은 건드리지 않아 조합 중에 바뀌어도 안전하다.
+  /// Line numbers in the left margin (`LineNumberGutter.swift`). Only drawing changes, body/selection untouched, so safe during composition.
   var showsLineNumbers = false {
     didSet {
       guard showsLineNumbers != oldValue else { return }
@@ -33,15 +33,15 @@ final class ManuscriptTextView: NSTextView {
       needsDisplay = true
     }
   }
-  /// 줄 번호를 빈 줄에도 그릴지. 그림만 바뀐다.
+  /// Whether blank lines get numbers too. Only drawing changes.
   var numbersBlankLines = true {
     didSet { if numbersBlankLines != oldValue, showsLineNumbers { needsDisplay = true } }
   }
-  /// 전체 줄 수. 본문 글자가 바뀌면 다시 센다(`storageEditedForLineNumbers`).
+  /// Total line count. Recounted when body text changes (`storageEditedForLineNumbers`).
   private var lineCountCache: Int?
 
-  /// 마지막으로 그린 커서 칸. macOS는 원래 굵기(1pt) 칸만 지우거나, 창이 비활성화될 때 지우는 요청을 따로 보내지 않을 수 있어서
-  /// 굵은 커서가 남는다. 이 칸은 앱이 직접 지운다.
+  /// Last drawn caret rect. macOS may erase only a default-width (1 pt) rect, or not send an erase request on window deactivation,
+  /// leaving a thick caret behind. The app erases this rect itself.
   private(set) var lastCaretRect: NSRect?
 
   var currentLineCount: Int {
@@ -52,34 +52,34 @@ final class ManuscriptTextView: NSTextView {
   }
 
   private var isInsertingInput = false
-  /// 입력기가 지금 만들고 있는 한 글자의 되돌리기 기록.
+  /// Undo record for the single character the IME is currently building.
   private var currentInput: InputUndoUnit?
 
-  /// 같은 말 여러 커서(⌘D, `MultiCursorEditing.swift`). nil이면 보통 편집기 그대로다.
+  /// Same-word multi-cursor (⌘D, `MultiCursorEditing.swift`). nil = plain editor.
   var multiCursor: MultiCursorSession? {
     didSet { currentInput = nil }
   }
-  /// 여러 커서 코드가 본문·선택을 고치는 중. 이때 오는 선택·본문 바뀜은 여러 커서를 끝내지 않는다.
+  /// Multi-cursor code is editing body/selection. Selection/body changes arriving now don't end multi-cursor.
   var isApplyingMultiCursor = false
-  /// 커서만 있던 자리에서 ⌘D로 고른 단어. 다음 ⌘D가 단어 전체로 찾을지 정한다.
+  /// Word chosen by ⌘D from a bare caret. Decides whether the next ⌘D matches whole words.
   var wordFromCaret: NSRange?
-  /// 맨 앞 커서가 지금 화면에 그려져 있나. 다른 자리 커서도 이 값대로 그린다(`MultiCursorEditing.swift`).
+  /// Whether the leading caret is currently drawn. Other carets are drawn to match (`MultiCursorEditing.swift`).
   var extraCaretsOn = false
-  /// 설정 › 편집기 "같은 말 여러 커서". 끄면 ⌘D가 아무것도 하지 않고, 여러 커서 중이면 끝낸다.
-  /// 메뉴만 흐리게 하면 메뉴를 거치지 않는 호출(`sendSelectNextOccurrence`)이 남아 여기서도 막는다.
+  /// Settings › Editor "same-word multi-cursor". When off, ⌘D does nothing and active multi-cursor ends.
+  /// Only dimming the menu would leave calls that bypass it (`sendSelectNextOccurrence`), so blocked here too.
   var multiCursorEnabled = true {
     didSet { if !multiCursorEnabled { endMultiCursor() } }
   }
-  /// 커서 하나에서 여러 커서로 바뀌기 직전. 본문은 아직 그대로다(들어가기 전 스냅샷용).
+  /// Right before switching from one cursor to multi-cursor. Body is still unchanged (for the pre-entry snapshot).
   var onEnterMultiCursor: () -> Void = {}
-  /// 작가에게 짧게 알릴 말(토스트).
+  /// A short message for the writer (toast).
   var onNotice: (String) -> Void = { _ in }
 
-  /// 회차마다 따로 쓰는 실행 취소 기록. 회차를 바꾸면 비운다(PLAN.md 세부 기준).
+  /// Per-episode undo history. Cleared on episode switch (PLAN.md detailed criteria).
   let episodeUndoManager = UndoManager()
 
-  /// 창에 붙거나 다른 창으로 옮겨질 때마다. SwiftUI가 뷰를 창에 붙이는 시점은 정해져 있지 않아서
-  /// "조금 뒤에 한 번" 하는 대신 AppKit이 알려 주는 이 순간에 초점과 창 감시를 건다.
+  /// On every attach to a window or move to another. When SwiftUI attaches a view to a window isn't defined, so
+  /// instead of "once, a little later", focus and window observation are set at this moment AppKit reports.
   var onMoveToWindow: (NSWindow) -> Void = { _ in }
 
   override func viewDidMoveToWindow() {
@@ -88,7 +88,7 @@ final class ManuscriptTextView: NSTextView {
   }
 
   static func make() -> ManuscriptTextView {
-    // TextKit 1: NSTextStorage → NSLayoutManager → NSTextContainer 를 직접 연결한다.
+    // TextKit 1: wire NSTextStorage → NSLayoutManager → NSTextContainer directly.
     let storage = NSTextStorage()
     let layoutManager = NSLayoutManager()
     storage.addLayoutManager(layoutManager)
@@ -111,8 +111,8 @@ final class ManuscriptTextView: NSTextView {
     isContinuousSpellCheckingEnabled = false
     isGrammarCheckingEnabled = false
     isVerticallyResizable = true
-    // 높이 한도를 두지 않는다. 기본값이면 처음 잡힌 높이가 한도가 되어, 더 긴 회차로 바꾼 직후
-    // 아직 배치가 안 된 아래쪽으로는 프로그램이 스크롤하지 못한다(검색 결과로 가기).
+    // No height limit. By default the first height becomes the limit, so right after switching to a longer episode
+    // the program can't scroll into the not-yet-laid-out lower part (search-result jump).
     maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
     isHorizontallyResizable = false
     autoresizingMask = [.width]
@@ -131,13 +131,13 @@ final class ManuscriptTextView: NSTextView {
       name: NSTextStorage.didProcessEditingNotification, object: textStorage)
   }
 
-  // MARK: - 줄 번호 다시 그리기
+  // MARK: - Line number redraw
 
-  /// 줄 수가 바뀌면(엔터·줄 지우기·붙여 넣기·회차 전환) 보이는 번호를 모두 다시 그린다.
-  /// 줄 수가 같으면 아무것도 안 한다. 글자만 친 줄은 아래 `setNeedsDisplay`가 번호 칸까지 넓혀 다시 그린다.
-  /// 읽기만 하므로 조합 중에도 안전하다.
+  /// When the line count changes (Return, deleting lines, paste, episode switch), redraw all visible numbers.
+  /// Same count → nothing. Lines where only characters were typed get redrawn by `setNeedsDisplay` below, widened to the number column.
+  /// Read only, so safe during composition.
   @objc private func storageEditedForLineNumbers(_ notification: Notification) {
-    // 여러 커서는 자리마다 따로 고쳐 이 알림이 커서 수만큼 온다. 그때는 다 고친 뒤 한 번만 센다.
+    // Multi-cursor edits each spot separately, so this notification arrives once per cursor. Count once after all edits then.
     guard !isApplyingMultiCursor, let storage = textStorage, storage.editedMask.contains(.editedCharacters) else { return }
     recountLines()
   }
@@ -157,15 +157,15 @@ final class ManuscriptTextView: NSTextView {
     if multiCursor != nil { drawMultiCursorSelections(in: rect) }
   }
 
-  // 시스템은 커서를 끌 때 `drawInsertionPoint(turnedOn: false)`를 부르지 않고 그 칸을 다시 그리기만 한다.
-  // 그래서 맨 앞 커서 칸을 다시 그리면 꺼진 것으로 본다. 켜진 때면 이 그리기 바로 뒤에 시스템이 다시 켠다.
+  // When turning the caret off the system doesn't call `drawInsertionPoint(turnedOn: false)`; it just redraws that rect.
+  // So redrawing the leading caret rect counts as off. If it should be on, the system turns it back on right after this draw.
   override func draw(_ dirtyRect: NSRect) {
     if multiCursor != nil, let last = lastCaretRect, needsToDraw(last) { extraCaretsOn = false }
     super.draw(dirtyRect)
     if multiCursor != nil { drawMultiCursorCarets(in: dirtyRect) }
   }
 
-  // 커서 모양은 `InsertionCaret.swift`. 끌 때(깜빡임)는 원래 칸 전체를 지워 흔적이 남지 않게 한다.
+  // Caret shape: `InsertionCaret.swift`. When off (blink), erase the whole original rect so no trail remains.
   override func drawInsertionPoint(in rect: NSRect, color: NSColor, turnedOn flag: Bool) {
     if flag {
       let caret = caretRect(in: rect)
@@ -181,7 +181,7 @@ final class ManuscriptTextView: NSTextView {
     }
   }
 
-  /// 창이 비활성화되거나 앱이 뒤로 가면 커서는 그려지지 않아야 한다. 남아 있는 칸을 지운다.
+  /// The caret must not be drawn when the window deactivates or the app goes to the background. Erase the remaining rect.
   @objc private func eraseCaretOnDeactivate(_ notification: Notification) {
     if let window = notification.object as? NSWindow, window !== self.window { return }
     if multiCursor != nil { turnOffExtraCarets() }
@@ -191,14 +191,14 @@ final class ManuscriptTextView: NSTextView {
   }
 
   private func eraseCaret(_ rect: NSRect) {
-    // 반올림·안티에일리어싱으로 가장자리가 반 픽셀 남지 않게 1pt씩 넓혀 다시 그린다.
+    // Widen by 1 pt on each side so rounding/antialiasing doesn't leave a half-pixel edge.
     setNeedsDisplay(rect.insetBy(dx: -1, dy: -1))
   }
 
-  // 글자를 고치면 NSTextView는 본문 칸 안만 다시 그리게 한다. 번호 칸은 그 왼쪽 여백이라, 줄이 밀려 내려가도
-  // 옛 번호가 남는다. 줄 번호를 켰을 때만 다시 그릴 곳을 왼쪽 끝까지 넓힌다(본문 칸은 그대로라 비용은 여백 조금).
-  // 커서 자국을 막으려고 가는 칸은 커서 두께만큼 넓힌다(`InsertionCaret.swift`).
-  // 맨 앞 커서 칸을 다시 그리라는 요청에는 다른 자리 커서 칸도 붙여, 깜빡임이 같은 그리기에서 같이 바뀌게 한다.
+  // On text edits NSTextView redraws only inside the text container. The number column is in the left margin, so when lines shift down
+  // old numbers remain. Only with line numbers on, widen the dirty rect to the left edge (container unchanged, so the cost is a bit of margin).
+  // Thin rects are widened by the caret width to prevent caret trails (`InsertionCaret.swift`).
+  // Requests to redraw the leading caret rect also include the other carets' rects so blinking changes together in the same draw.
   override func setNeedsDisplay(_ invalidRect: NSRect) {
     let rect = widenedForCaret(invalidRect)
     super.setNeedsDisplay(showsLineNumbers ? widenedToGutter(rect) : rect)
@@ -220,7 +220,7 @@ final class ManuscriptTextView: NSTextView {
     let attributes = style.textAttributes
     typingAttributes = attributes
     defaultParagraphStyle = style.paragraphStyle
-    // 조합 중에는 텍스트 저장소를 건드리지 않는다(한글 입력 보호). 조합이 끝난 직후(`didChangeText`)에 입힌다.
+    // No text storage changes during composition (Hangul input protection). Applied right after composition ends (`didChangeText`).
     if hasMarkedText() {
       needsRestyle = true
     } else if let storage = textStorage, storage.length > 0 {
@@ -232,10 +232,10 @@ final class ManuscriptTextView: NSTextView {
     updateInsets()
   }
 
-  /// 본문 텍스트 전체를 바꾼다(회차 전환). 실행 취소 기록도 비운다.
+  /// Replace the whole body text (episode switch). Also clears undo history.
   func replaceAllText(with text: String) {
-    // 조합을 확정하고 입력기에도 끝났다고 알린다. unmarkText만 하면 입력기는 아직 조합 중이라 여겨,
-    // 다음 키가 앞 회차의 자모와 합쳐져 새 본문에 들어갈 수 있다.
+    // Commit composition and tell the IME it ended. With only unmarkText the IME still thinks it's composing,
+    // and the next key could merge with the previous episode's jamo into the new body.
     finishComposition()
     forgetInputInProgress()
     dropMultiCursor()
@@ -246,8 +246,8 @@ final class ManuscriptTextView: NSTextView {
     scroll(.zero)
   }
 
-  /// 스냅샷으로 되돌리기: 본문 전체를 실행 취소 한 단위로 바꾼다. 회차 전환과 달리 기록을 비우지 않아 ⌘Z 한 번으로 돌아간다.
-  /// 바꿨으면 true. 커서는 같은 자리(본문이 짧아졌으면 끝)에 둔다.
+  /// Restore from snapshot: replace the whole body as one undo unit. Unlike episode switch, history isn't cleared, so one ⌘Z goes back.
+  /// True if changed. The caret stays at the same offset (or the end if the body got shorter).
   func replaceAllUndoably(with text: String, actionName: String) -> Bool {
     finishComposition()
     endMultiCursor()
@@ -257,7 +257,7 @@ final class ManuscriptTextView: NSTextView {
     let undo = episodeUndoManager
     undo.beginUndoGrouping()
     defer { undo.endUndoGrouping() }
-    // shouldChangeText가 실행 취소 기록을 남기고, didChangeText가 바뀜 알림(자동 저장·글자 수)을 보낸다.
+    // shouldChangeText records undo, and didChangeText sends the change notification (autosave, count).
     guard shouldChangeText(in: full, replacementString: text) else { return false }
     forgetInputInProgress()
     textStorage?.replaceCharacters(in: full, with: NSAttributedString(string: text, attributes: style.textAttributes))
@@ -268,9 +268,9 @@ final class ManuscriptTextView: NSTextView {
     return true
   }
 
-  /// 고칠 자리만 실행 취소 한 단위로 고친다(전체 바꾸기·되돌리기). 본문을 통째로 갈지 않아서 커서는 같은 글자 자리에 남고
-  /// 화면 맨 위 글줄도 그대로다(위쪽에서 줄 수가 바뀌어도). 자리는 앞에서부터, 겹치지 않아야 한다. 고쳤으면 true.
-  /// 조합 중이면 손대지 않고 false: 조합을 끊지 않으려는 것이라, 부르는 쪽이 조합이 끝난 뒤 다시 부른다.
+  /// Edit only the target spots as one undo unit (replace all / revert). The body isn't swapped wholesale, so the caret stays on the same character
+  /// and the top line on screen stays too (even if line counts change above). Spots in order, non-overlapping. True if edited.
+  /// During composition, don't touch it and return false: to avoid breaking composition, the caller retries after it ends.
   func replaceOccurrences(_ changes: [TextChange], actionName: String) -> Bool {
     guard !changes.isEmpty, !hasMarkedText(), let textStorage else { return false }
     endMultiCursor()
@@ -292,7 +292,7 @@ final class ManuscriptTextView: NSTextView {
     didChangeText()
     undo.setActionName(actionName)
 
-    // 고친 자리 앞의 글자는 그대로, 뒤의 글자는 늘고 준 만큼 민다. 고친 자리 안이면 새 말 끝으로.
+    // Characters before an edited spot stay; those after shift by the length change. Inside an edited spot → end of the new text.
     func moved(_ location: Int) -> Int {
       var shift = 0
       for change in changes {
@@ -316,16 +316,16 @@ final class ManuscriptTextView: NSTextView {
     return true
   }
 
-  /// 앱이 본문을 직접 고치기 전에: 입력기가 "표시된 글자 없이" 이어 가던 글자를 놓게 한다.
-  /// 이 방식은 조합 중에도 `hasMarkedText`가 false라, 고친 뒤 입력기가 옛 자리를 `replacementRange`로 고쳐 쓰거나
-  /// 한 글자 기록(`currentInput`)이 어긋난 범위로 늘어나 ⌘Z가 엉뚱한 글자를 지울 수 있다.
+  /// Before the app edits the body directly: make the IME let go of a character it was continuing "without displayed text".
+  /// In that mode `hasMarkedText` is false even while composing, so after the edit the IME may rewrite the old spot via `replacementRange`,
+  /// or the single-character record (`currentInput`) may grow to a misaligned range and ⌘Z may delete the wrong characters.
   private func forgetInputInProgress() {
     guard currentInput != nil else { return }
     currentInput = nil
     inputContext?.discardMarkedText()
   }
 
-  /// 글자가 놓인 줄의 위 끝(편집기 좌표)
+  /// Top edge of the line holding the character (editor coordinates)
   private func lineTop(of index: Int) -> CGFloat {
     guard let layoutManager, layoutManager.numberOfGlyphs > 0 else { return 0 }
     let glyph = layoutManager.glyphIndexForCharacter(at: min(index, (string as NSString).length - 1))
@@ -333,11 +333,11 @@ final class ManuscriptTextView: NSTextView {
     return layoutManager.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil).minY + textContainerOrigin.y
   }
 
-  /// 앱 밖에서 바뀐 본문으로 갈아 끼운다. 회차 전환과 달리 커서와 스크롤 위치를 되도록 그대로 둔다.
-  /// 실행 취소 기록은 비운다: 옛 본문 기준의 기록을 새 본문에 적용하면 엉뚱한 곳이 바뀐다.
+  /// Swap in a body changed outside the app. Unlike episode switch, keep caret and scroll position where possible.
+  /// Undo history is cleared: applying records based on the old body to the new body would change the wrong places.
   func reloadText(with text: String) {
-    // 조합을 확정하고 입력기에도 끝났다고 알린다. unmarkText만 하면 입력기는 아직 조합 중이라 여겨,
-    // 다음 키가 앞 회차의 자모와 합쳐져 새 본문에 들어갈 수 있다.
+    // Commit composition and tell the IME it ended. With only unmarkText the IME still thinks it's composing,
+    // and the next key could merge with the previous episode's jamo into the new body.
     finishComposition()
     forgetInputInProgress()
     dropMultiCursor()
@@ -351,8 +351,8 @@ final class ManuscriptTextView: NSTextView {
 
   override var undoManager: UndoManager? { episodeUndoManager }
 
-  // 편집 메뉴의 실행 취소(⌘Z)·다시 실행(⇧⌘Z)은 처리하는 곳을 응답 사슬에서 찾는데, 편집기가 받지 않으면 창까지 올라가
-  // 창의 기록(사이드바 회차 작업)을 쓴다. 입력은 회차 기록(`episodeUndoManager`)에 쌓이므로 여기서 직접 받는다.
+  // Edit menu undo (⌘Z) / redo (⇧⌘Z) look for a handler along the responder chain; if the editor doesn't take it, it reaches the window
+  // and uses the window's history (sidebar episode actions). Typing goes into the episode history (`episodeUndoManager`), so handle it here directly.
   @objc func undo(_ sender: Any?) {
     finishComposition()
     episodeUndoManager.undo()
@@ -363,10 +363,10 @@ final class ManuscriptTextView: NSTextView {
     episodeUndoManager.redo()
   }
 
-  /// 두벌식 입력기(macOS 27)는 표시된 글자 없이 "커서 앞 글자를 이 글로"(`replacementRange`)로 조합을 이어 가기도 한다
-  /// (ㄱ → 가 → 각 → 가 + 가). 이때는 `hasMarkedText`가 늘 false이고, NSTextView는 이 바꾸기들을 한 묶음으로 합치지 않아
-  /// ⌘Z가 조합 중간 글자("각")를 보여 준다. 그래서 입력기가 넣는 한 글자는 직접 한 단위로 기록하고, 입력기가 그 글자를
-  /// 고치는 동안은 같은 기록의 범위만 늘린다. 되돌릴 때는 LIFO라 그 사이의 다른 변경이 먼저 되돌려져 범위가 맞는다.
+  /// The 2-set IME (macOS 27) sometimes continues composing without displayed text via "replace the character before the caret with this" (`replacementRange`)
+  /// (ㄱ → 가 → 각 → 가 + 가). Then `hasMarkedText` is always false, and NSTextView doesn't coalesce these replacements,
+  /// so ⌘Z shows a mid-composition character ("각"). So each character the IME inserts is recorded as one unit directly, and while the IME
+  /// edits that character only the same record's range grows. Undo is LIFO, so other changes in between are undone first and ranges line up.
   override func insertText(_ string: Any, replacementRange: NSRange) {
     let text = (string as? NSAttributedString)?.string ?? (string as? String) ?? ""
     if multiCursor != nil, multiCursorInsertText(text, replacementRange: replacementRange) { return }
@@ -404,9 +404,9 @@ final class ManuscriptTextView: NSTextView {
     super.insertText(string, replacementRange: replacementRange)
   }
 
-  /// 한 글자 기록 되돌리기(다시 실행도 같은 함수). 바꾼 뒤의 범위와 바뀌기 전 글로 반대 기록을 직접 남긴다.
-  /// NSTextView가 `shouldChangeText`에서 스스로 남기는 기록은 끈다: 그 기록은 다시 실행 때 범위가 어긋나 앱을 죽였다.
-  /// 범위가 본문 밖이면(있어서는 안 되는 상태) 아무것도 바꾸지 않는다.
+  /// Undo of a single-character record (redo uses the same function). Records the inverse directly from the post-change range and pre-change text.
+  /// The record NSTextView leaves itself in `shouldChangeText` is disabled: its range went wrong on redo and crashed the app.
+  /// If the range is outside the body (a state that must not happen), change nothing.
   private func revert(_ unit: InputUndoUnit) {
     currentInput = nil
     let range = unit.range
@@ -428,8 +428,8 @@ final class ManuscriptTextView: NSTextView {
     setSelectedRange(NSRange(location: NSMaxRange(inverse.range), length: 0))
   }
 
-  /// 되돌리기 단위를 한 글자로 한다. NSTextView는 이어서 친 글자를 한 묶음으로 합쳐
-  /// ⌘Z 한 번에 문장째 지우므로, 고칠 때마다 묶음을 끊는다. 조합 중에는 끊지 않아 조합이 끝난 한 글자("한")가 한 단위가 된다.
+  /// Make the undo unit one character. NSTextView coalesces consecutive typing into one group,
+  /// so one ⌘Z would delete a whole sentence; break the group on every edit. Not during composition, so a finished character ("한") is one unit.
   override func didChangeText() {
     super.didChangeText()
     updatePlaceholderIfNeeded()
@@ -441,15 +441,15 @@ final class ManuscriptTextView: NSTextView {
     if needsRestyle { applyStyle() }
   }
 
-  /// 조합 중인 글자를 확정한다. 조합 중에 되돌리면 입력기와 텍스트 저장소가 서로 다른 글자를 가리켜 깨질 수 있다.
-  /// 여러 커서면 모든 자리의 조합을 확정한다(`unmarkText`).
+  /// Commit the composing character. Undoing mid-composition could make the IME and text storage point at different characters and break.
+  /// With multi-cursor, commit composition at every spot (`unmarkText`).
   func finishComposition() {
     guard hasMarkedText() else { return }
     unmarkText()
     inputContext?.discardMarkedText()
   }
 
-  // MARK: - 여러 커서일 때 입력기와의 약속 (`MultiCursorEditing.swift`)
+  // MARK: - IME contract during multi-cursor (`MultiCursorEditing.swift`)
 
   override func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
     let text = (string as? NSAttributedString)?.string ?? (string as? String) ?? ""
@@ -464,8 +464,8 @@ final class ManuscriptTextView: NSTextView {
     super.unmarkText()
   }
 
-  // 여러 커서의 조합 범위는 `NSTextView` 속 상태가 아니라 여기에 있다. 자동 저장·스타일 입히기 등이 이것으로 조합 중인지 본다.
-  // 우리가 선택을 옮기는 동안에는 조합이 없다고 답한다: 있다고 하면 `NSTextView`가 선택을 옮기며 조합을 끊는다.
+  // Multi-cursor composition ranges live here, not in `NSTextView`'s internal state. Autosave, styling etc. check this for composition.
+  // While we move the selection, answer that there's no composition: otherwise `NSTextView` breaks composition when moving the selection.
   override func hasMarkedText() -> Bool {
     guard let session = multiCursor else { return super.hasMarkedText() }
     return !isApplyingMultiCursor && session.marked != nil
@@ -501,8 +501,8 @@ final class ManuscriptTextView: NSTextView {
     super.pasteAsPlainText(sender)
   }
 
-  // 여러 커서 코드가 아닌 길(클릭, 전체 선택, 붙여 넣기, 다른 되돌리기 기록)이 선택이나 본문을 바꾸면 다른 자리는 낡는다.
-  // 그 길이 바꾸기 전에 여러 커서를 버린다(PLAN 16장 D3). 본문·선택은 그 길이 정한다.
+  // If a path other than multi-cursor code (click, select all, paste, another undo record) changes selection or body, other spots go stale.
+  // Drop multi-cursor before that path makes its change (PLAN ch.16 D3). That path decides body and selection.
   override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting: Bool) {
     if !isApplyingMultiCursor {
       dropMultiCursor()
@@ -521,8 +521,8 @@ final class ManuscriptTextView: NSTextView {
     return super.shouldChangeText(in: affectedCharRange, replacementString: replacementString)
   }
 
-  /// 떠 있는 판(⇧⌘S)을 열기 전: 조합을 끝내고 키보드 초점을 내려놓는다. 커서·선택은 그대로 남는다.
-  /// 판을 열 때 편집기가 초점을 갖고 있었는지 돌려준다(닫을 때 돌려줄지 정하려고).
+  /// Before opening the floating panel (⇧⌘S): end composition and release keyboard focus. Caret and selection stay.
+  /// Returns whether the editor had focus when the panel opened (to decide whether to give it back on close).
   func yieldFocusForPanel() -> Bool {
     finishComposition()
     guard let window, window.firstResponder === self else { return false }
@@ -530,8 +530,8 @@ final class ManuscriptTextView: NSTextView {
     return true
   }
 
-  /// 검색 결과로 가기: 찾은 곳을 선택해 화면 가운데로 올리고 초점을 받는다.
-  /// 검색 뒤 글이 바뀌어 그 자리에 문구가 없으면 가장 가까운 같은 문구로 간다. 문구가 아예 없으면 움직이지 않는다.
+  /// Go to a search result: select the match, scroll it to the middle, and take focus.
+  /// If the text changed after searching and the phrase is gone from that spot, go to the nearest same phrase. If none at all, don't move.
   func reveal(_ target: TextReveal) {
     finishComposition()
     endMultiCursor()
@@ -549,7 +549,7 @@ final class ManuscriptTextView: NSTextView {
     setSelectedRange(range)
     window?.makeFirstResponder(self)
     scrollRangeToVisible(range)
-    // 회차를 막 바꿨으면 아직 본문 높이가 다 잡히지 않았다. 한 차례 뒤에 가운데로 옮기고 노란 표시를 띄운다.
+    // Right after an episode switch the body height isn't fully known. Center and show the yellow highlight one turn later.
     DispatchQueue.main.async { [weak self] in
       guard let self, self.selectedRange() == range else { return }
       self.centerVertically(on: range)
@@ -562,8 +562,8 @@ final class ManuscriptTextView: NSTextView {
       scrollRangeToVisible(range)
       return
     }
-    // 회차를 막 바꾸면 글자 배치가 앞부분까지만 되어 있어 본문 높이가 실제보다 작다. 그대로 두면 스크롤이 그 높이에서 막힌다.
-    // 찾은 곳까지 배치를 끝내면 편집기 높이도 함께 늘어난다.
+    // Right after an episode switch, layout covers only the beginning, so the body height is smaller than real and scrolling stops there.
+    // Completing layout up to the match grows the editor height too.
     layoutManager.ensureLayout(forCharacterRange: NSRange(location: 0, length: NSMaxRange(range)))
     sizeToFit()
     let glyphs = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
@@ -574,7 +574,7 @@ final class ManuscriptTextView: NSTextView {
     enclosingScrollView?.reflectScrolledClipView(clip)
   }
 
-  /// 판을 닫은 뒤: 커서가 있던 자리로 초점을 돌려준다.
+  /// After the panel closes: return focus to where the caret was.
   func regainFocusAfterPanel() {
     window?.makeFirstResponder(self)
   }
@@ -592,14 +592,14 @@ final class ManuscriptTextView: NSTextView {
     }
   }
 
-  // MARK: - 회차 자리
+  // MARK: - Episode position
 
-  /// 지금 커서와 화면 맨 위 줄의 첫 글자.
+  /// Current caret and the first character of the top line on screen.
   func viewState() -> EpisodeViewState {
     EpisodeViewState(caret: selectedRange().location, top: topVisibleCharacter(), openedAt: Date())
   }
 
-  /// 커서와 화면을 기억한 자리로. 그사이 본문이 짧아졌으면 끝으로 맞춘다.
+  /// Move caret and scroll to the remembered position. Clamp to the end if the body got shorter meanwhile.
   func restoreViewState(_ state: EpisodeViewState) {
     let length = (string as NSString).length
     setSelectedRange(NSRange(location: min(max(state.caret, 0), length), length: 0))
@@ -613,8 +613,8 @@ final class ManuscriptTextView: NSTextView {
     return layoutManager.characterIndexForGlyph(at: glyph)
   }
 
-  /// 그 글자가 든 줄이 화면 맨 위에 오게. 그 앞까지는 배치를 끝내야 줄 위치를 알 수 있다
-  /// (회차를 막 바꾼 직후는 아직 배치 전이다).
+  /// Put the line containing that character at the top of the screen. Layout must be complete up to it to know line positions
+  /// (right after an episode switch it isn't yet).
   private func scrollToCharacter(_ index: Int) {
     guard let layoutManager, let clip = enclosingScrollView?.contentView, index > 0 else {
       scroll(.zero)
@@ -627,19 +627,19 @@ final class ManuscriptTextView: NSTextView {
     enclosingScrollView?.reflectScrolledClipView(clip)
   }
 
-  // MARK: - 폭과 여백
+  // MARK: - Width and margins
 
-  /// NSTextView는 텍스트 칸 오른쪽 끝보다 오른쪽 점을 자기 것으로 보지 않아, 오른쪽 여백 클릭이 뒤의 clip view로 가서
-  /// 커서가 움직이지 않는다. 본문 폭을 고정해 오른쪽 여백이 넓으므로 편집기 안이면 직접 받는다.
+  /// NSTextView doesn't treat points right of the text container's right edge as its own, so right-margin clicks go to the clip view behind
+  /// and the caret doesn't move. With a fixed body width the right margin is wide, so take clicks inside the editor directly.
   override func hitTest(_ point: NSPoint) -> NSView? {
     if let hit = super.hitTest(point) { return hit }
     guard !isHidden else { return nil }
     return frame.contains(point) ? self : nil
   }
 
-  /// 시스템은 크기 조절이 끝나면 커서를 화면 가운데로 끌어온다(`_centeredScrollRectToVisible`). 사이드바를 접고 펴는
-  /// 애니메이션도 크기 조절로 쳐서, 커서가 본문 끝에 있으면 본문이 밀려 첫 문단이 화면 위로 나갔다. 보던 자리를 그대로 둔다.
-  /// 본문 폭은 고정이라 대개 줄이 다시 꺾이지 않는다. 커서는 다음에 칠 때 시스템이 다시 보이게 한다.
+  /// After a resize the system pulls the caret to the screen center (`_centeredScrollRectToVisible`). The sidebar collapse/expand
+  /// animation counts as a resize too, so with the caret at the end the body shifted and the first paragraph went off the top. Keep the viewed position.
+  /// The body width is fixed, so lines usually don't rewrap. The system brings the caret back into view on the next keystroke.
   override func viewDidEndLiveResize() {
     guard let scrollView = enclosingScrollView else { return super.viewDidEndLiveResize() }
     let clip = scrollView.contentView
@@ -654,7 +654,7 @@ final class ManuscriptTextView: NSTextView {
 
   override func setFrameSize(_ newSize: NSSize) {
     var size = newSize
-    // 마지막 줄을 화면 가운데까지 끌어올릴 수 있도록 보이는 높이의 절반만큼 아래에 여유를 둔다.
+    // Leave half the visible height as bottom slack so the last line can be pulled up to mid-screen.
     if let visible = enclosingScrollView?.contentView.bounds.height {
       size.height = max(size.height, usedTextHeight + Self.topAndBottom(visible: visible))
     }
@@ -671,7 +671,7 @@ final class ManuscriptTextView: NSTextView {
     EditorStyle.topInset + visible / 2
   }
 
-  /// 본문 폭은 창 너비와 상관없이 고정하고, 남는 폭은 좌우 여백으로 나눈다.
+  /// Body width is fixed regardless of window width; leftover width is split into left/right margins.
   private func updateInsets() {
     let available = bounds.width
     let width = min(style.textWidth, max(available - EditorStyle.minimumSideInset * 2, 100))
@@ -684,7 +684,7 @@ final class ManuscriptTextView: NSTextView {
   }
 }
 
-/// 입력기가 넣은 한 글자(음절)의 되돌리기 기록. 입력기가 그 글자를 고치는 동안 범위가 바뀌므로 참조형이다.
+/// Undo record for one character (syllable) the IME inserted. A reference type because its range changes while the IME edits it.
 private final class InputUndoUnit {
   var range: NSRange
   let original: String

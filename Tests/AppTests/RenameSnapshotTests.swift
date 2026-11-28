@@ -3,7 +3,7 @@ import NovelCore
 import XCTest
 @testable import NovelEditor
 
-/// 이름이 바뀔 때마다 회차별 `rename` 스냅샷(그때 본문, 바뀌기 전 제목, 메모)을 남긴다.
+/// Every rename leaves a per-episode `rename` snapshot (body at that time, old title, memo).
 @MainActor
 final class RenameSnapshotTests: XCTestCase {
   private var folder: URL!
@@ -30,7 +30,7 @@ final class RenameSnapshotTests: XCTestCase {
       await model.renameEpisodes([id: title], reason: .single)
       ids.append(id)
     }
-    // 준비하며 생긴 이름 변경 스냅샷은 지운다(테스트는 그 뒤의 것만 본다).
+    // Rename snapshots created during setup are deleted (the test looks only at later ones).
     for id in ids { try? FileManager.default.removeItem(at: store.layout.snapshotFolder(id)) }
     return (model, ids)
   }
@@ -57,7 +57,7 @@ final class RenameSnapshotTests: XCTestCase {
     XCTAssertEqual(try renames(ids[2]).map(\.memo), ["'다' → (제목 없음) · 2개 회차 함께"])
   }
 
-  /// 창의 규칙은 지금 목록 순서대로 적용한다(고른 순서와 상관없이 번호가 목록 순서를 따른다).
+  /// The sheet's rule applies in current list order (numbers follow list order regardless of selection order).
   func testRuleAppliesInListOrder() async throws {
     let (model, ids) = try await makeModel(titles: ["가", "나", "다", "라"])
 
@@ -69,7 +69,7 @@ final class RenameSnapshotTests: XCTestCase {
     XCTAssertEqual(try renames(ids[2]).map(\.memo), ["'다' → '2 부' · 3개 회차 함께"])
   }
 
-  /// ⌘Z 한 번에 모두 되돌아가고, 되돌리기·다시 실행도 이름이 바뀌는 것이라 회차마다 스냅샷을 남긴다.
+  /// One ⌘Z reverts all, and undo/redo also leave a snapshot per episode since they change names too.
   func testUndoAndRedoAlsoSnapshot() async throws {
     let (model, ids) = try await makeModel(titles: ["가", "나"])
     let undo = UndoManager()
@@ -93,7 +93,7 @@ final class RenameSnapshotTests: XCTestCase {
     try await waitUntil { try self.store.loadProject().episodes.map(\.title) == ["A", "B"] }
   }
 
-  /// 열린 회차는 파일이 아니라 편집기의 지금 글(아직 저장 전)을 남긴다.
+  /// For the open episode, the editor's current text (not yet saved) is kept, not the file.
   func testOpenEpisodeUsesEditorText() async throws {
     let (model, ids) = try await makeModel(titles: ["가"])
     let textView = ManuscriptTextView.make()
@@ -108,7 +108,7 @@ final class RenameSnapshotTests: XCTestCase {
     XCTAssertEqual(try renames(ids[0]).map(\.memo), ["'가' → '새 이름'"])
   }
 
-  /// 메모가 붙어도 자동·떠날 때와 함께 보관 개수에 세고 오래된 것부터 지운다.
+  /// Even with a memo, counted with automatic/leave snapshots toward the keep count and pruned oldest first.
   func testRenameSnapshotsFollowRetention() async throws {
     let (model, ids) = try await makeModel(titles: ["가"])
     model.autosaver.snapshots.settings = .init(retention: 10)

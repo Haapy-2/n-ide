@@ -1,8 +1,8 @@
 import NovelCore
 import SwiftUI
 
-/// 판 왼쪽의 스냅샷 목록. 오늘/어제/날짜로 묶은 시각, 오른쪽에 회색 종류 이름, 시각 아래 회색 메모.
-/// 줄을 두 번 클릭하면 메모를 고친다(없으면 새로 단다). 엔터나 칸 밖을 누르면 저장, Esc는 그만두기.
+/// Snapshot list on the left of the panel. Times grouped by today/yesterday/date, gray kind name on the right, gray memo under the time.
+/// Double-click a row to edit its memo (or add one). Return or clicking outside saves, Esc cancels.
 struct SnapshotListView: View {
   let browser: SnapshotBrowser
   @Binding var editingID: String?
@@ -90,21 +90,21 @@ struct SnapshotListView: View {
     memoFocused = true
   }
 
-  /// 엔터와 칸 밖 누르기가 함께 올 수 있어 한 번만 저장한다.
+  /// Return and click-outside may both arrive, so save only once.
   private func commit(_ id: String) {
     guard editingID == id else { return }
     editingID = nil
     browser.updateMemo(id, to: draft)
   }
 
-  // MARK: - 묶음과 이름
+  // MARK: - Grouping and names
 
   private struct Group {
     let title: String
     let items: [SnapshotBrowser.Item]
   }
 
-  /// 목록은 최근 것부터라 같은 날끼리 이미 붙어 있다.
+  /// The list is newest first, so same-day entries are already adjacent.
   private var groups: [Group] {
     let calendar = Calendar.current
     var result: [Group] = []
@@ -128,7 +128,7 @@ struct SnapshotListView: View {
     return date.formatted(sameYear ? .dateTime.month().day() : .dateTime.year().month().day())
   }
 
-  /// 초까지 보인다. 같은 분에 여러 번 찍어도 구분되게.
+  /// Shown down to seconds, to distinguish several taken in the same minute.
   static func time(_ date: Date) -> String {
     date.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits).second(.twoDigits))
   }

@@ -1,14 +1,14 @@
 import AppKit
 
-/// 편집 영역 모양 값 (DESIGN.md 3장). 설정 값으로 만드는 방법은 `EditorSettings.swift`.
+/// Editor style values (DESIGN.md ch.3). How they're built from settings: `EditorSettings.swift`.
 struct EditorStyle: Equatable {
   var fontName = "Pretendard-Regular"
   var fontSize: CGFloat = 17
-  /// 줄 간격 배수
+  /// Line spacing multiplier
   var lineSpacing: CGFloat = 1.75
-  /// 문단 간격(줄 단위)
+  /// Paragraph spacing (in lines)
   var paragraphSpacing: CGFloat = 0.6
-  /// 한 줄에 들어가는 한글 글자 수
+  /// Hangul characters per line
   var lineWidthInCharacters: CGFloat = 40
 
   static let topInset: CGFloat = 36
@@ -18,10 +18,10 @@ struct EditorStyle: Equatable {
     NSFont(name: fontName, size: fontSize) ?? .systemFont(ofSize: fontSize)
   }
 
-  /// 줄 높이를 고정해 글꼴마다 기본 줄 높이가 달라도 줄 간격이 흔들리지 않게 한다.
+  /// Line height is fixed so spacing doesn't wobble with each font's natural line height.
   var lineHeight: CGFloat { (fontSize * lineSpacing).rounded() }
 
-  /// 한글 한 글자 폭을 1em(글자 크기)로 본다.
+  /// One Hangul character's width is taken as 1 em (font size).
   var textWidth: CGFloat { lineWidthInCharacters * fontSize }
 
   var paragraphStyle: NSParagraphStyle {
@@ -33,7 +33,7 @@ struct EditorStyle: Equatable {
     return style
   }
 
-  /// 고정한 줄 높이 안에서 글자가 아래로 붙지 않고 가운데쯤 오도록 올린다.
+  /// Raise glyphs so they sit near the middle of the fixed line height instead of the bottom.
   var baselineOffset: CGFloat {
     let font = font
     return ((lineHeight - (font.ascender - font.descender)) / 2).rounded()

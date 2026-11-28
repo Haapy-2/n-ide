@@ -2,14 +2,14 @@ import Foundation
 import NovelCore
 import Observation
 
-/// 작품 전체 바꾸기(PLAN 14장). `모두 바꾸기`를 누르면 끝까지 다시 세고(`prepare`), 확인을 받으면 회차마다 바꾼다(`confirm`).
-/// 검색 결과는 1,000곳에서 잘리므로 확인 창의 숫자는 검색 결과가 아니라 다시 센 것이다.
+/// Project-wide replace (PLAN ch.14). `모두 바꾸기` recounts fully (`prepare`), and on confirmation replaces per episode (`confirm`).
+/// Search results are capped at 1,000, so the confirmation's number is the recount, not the search result.
 @MainActor
 @Observable
 final class ProjectReplace {
-  /// 편집기와 창의 실행 취소 이름. 창의 ⌘Z가 이 이름이면 묻지 않고 되돌리기 창을 연다.
+  /// Undo action name for editor and window. If the window's ⌘Z has this name, the revert sheet opens without asking.
   static let actionName = "전체 바꾸기"
-  /// 확인을 기다리는 바꾸기. 실행은 이때 센 글을 기준으로 한다.
+  /// A replace awaiting confirmation. Execution is based on the text counted at this time.
   struct Pending {
     let plan: ReplacementPlan
     let query: String
@@ -30,43 +30,43 @@ final class ProjectReplace {
       return lines.joined(separator: "\n")
     }
 
-    /// 스냅샷 메모
+    /// Snapshot memo
     var memo: String {
       replacement.isEmpty ? "'\(query)' 모두 지우기" : "'\(query)' → '\(replacement)' 전체 바꾸기"
     }
   }
 
-  /// 끝난 바꾸기의 결과
+  /// Result of a finished replace
   struct Report: Equatable {
     struct Episode: Equatable {
       let id: EpisodeID
-      /// 이 회차에서 바꾼 곳 수(바꾸는 순간의 글 기준)
+      /// Spots replaced in this episode (based on the text at replace time)
       let count: Int
       let before: Snapshot?
     }
 
     var query = ""
     var replacement = ""
-    /// 바꾼 회차, 바꾼 차례대로(열린 회차가 맨 끝)
+    /// Replaced episodes, in replace order (the open episode last)
     var replaced: [Episode] = []
-    /// 외부 변경 충돌을 기다리는 회차
+    /// Episodes waiting on an external-change conflict
     var conflicted = 0
-    /// 바꾸기 전 스냅샷을 남기지 못한 회차
+    /// Episodes whose pre-replace snapshot couldn't be taken
     var snapshotFailed = 0
-    /// 읽고 쓰는 사이에 앱 밖에서 거듭 바뀐 회차
+    /// Episodes changed outside the app repeatedly between read and write
     var keptChanging = 0
-    /// 본문을 읽지 못한 회차
+    /// Episodes whose body couldn't be read
     var unreadable = 0
 
     var count: Int { replaced.reduce(0) { $0 + $1.count } }
     var skipped: Int { conflicted + snapshotFailed + keptChanging }
   }
 
-  /// 되돌릴 수 있는 전체 바꾸기 하나(PLAN 14장 5번). 창이 열려 있는 동안만 메모리에 둔다(본문은 들지 않고 스냅샷 자리만).
+  /// One revertible replace all (PLAN ch.14 #5). Kept in memory only while the window is open (snapshot locations only, no bodies).
   struct Record: Identifiable, Equatable {
     struct Entry: Equatable {
       let id: EpisodeID
-      /// `바꾸기 전` 스냅샷. 되돌릴 때 이 글에 같은 바꾸기를 다시 해 바꾼 자리를 알아낸다.
+      /// `바꾸기 전` snapshot. On revert, the same replace is reapplied to this text to locate the replaced spots.
       let before: Snapshot
     }
 
@@ -75,34 +75,34 @@ final class ProjectReplace {
     let replacement: String
     let caseSensitive: Bool
     let date: Date
-    /// 스냅샷 메모 앞부분(`'민준' → '도윤' 전체 바꾸기`)
+    /// Leading part of the snapshot memo (`'민준' → '도윤' 전체 바꾸기`)
     let memo: String
-    /// 바꾼 회차, 회차 순서대로
+    /// Replaced episodes, in episode order
     let entries: [Entry]
-    /// 바꾼 곳 수(되돌리기 창 머리글)
+    /// Number of replaced spots (revert sheet header)
     let count: Int
   }
 
-  /// 되돌리기 창의 한 줄: 지금 되돌리면 실제로 바뀌는 곳이 남은 회차
+  /// One row of the revert sheet: an episode that still has spots that would actually change if reverted now
   struct Candidate: Identifiable, Equatable {
     let id: EpisodeID
-    /// 되돌릴 곳
+    /// Spots to revert
     let count: Int
-    /// 그 뒤에 고쳐서 그대로 둘 곳
+    /// Spots edited since, to leave alone
     let kept: Int
   }
 
-  /// 되돌리기 창을 열 때 다시 감지한 것
+  /// What was re-detected when opening the revert sheet
   struct Undoable {
     let record: Record
     let candidates: [Candidate]
-    /// 이미 되돌렸거나 바꾼 자리를 모두 고쳐 목록에서 뺀 회차 수
+    /// Episodes dropped from the list because already reverted or all replaced spots were edited
     let excluded: Int
-    /// 바꾸기 전 스냅샷이나 본문을 읽지 못해 되돌릴 수 없는 회차 수(스냅샷 판에서 지웠거나 읽기 오류)
+    /// Episodes that can't be reverted because the pre-replace snapshot or body is unreadable (deleted in the snapshot panel or read error)
     let unreadable: Int
   }
 
-  /// 방금 되돌린 회차들. 다시 바꾸기는 이 회차만, 되돌리기 직전 글(`되돌리기 전` 스냅샷)로 되돌린 자리를 알아낸다.
+  /// Just-reverted episodes. Redo replace covers only these, locating reverted spots via the text right before the revert (`되돌리기 전` snapshot).
   struct Reverted {
     struct Entry {
       let id: EpisodeID
@@ -114,7 +114,7 @@ final class ProjectReplace {
     let entries: [Entry]
   }
 
-  /// 되돌리기·다시 바꾸기의 결과
+  /// Result of revert / redo replace
   struct RevertReport: Equatable {
     var episodes = 0
     var count = 0
@@ -125,13 +125,13 @@ final class ProjectReplace {
 
   var replacement = ""
   private(set) var pending: Pending?
-  /// 세거나 바꾸는 중. 그동안 버튼을 막는다.
+  /// Counting or replacing. Buttons are disabled meanwhile.
   private(set) var isWorking = false
-  /// 마지막으로 끝난 바꾸기. 검색 패널이 바꾼 회차 목록으로 보여 주고, 검색어를 고치거나 패널을 닫으면 비운다.
+  /// Last finished replace. The search panel shows it as the replaced-episodes list; cleared when the query changes or the panel closes.
   private(set) var finished: Report?
-  /// 되돌릴 수 있는 바꾸기, 오래된 것부터. 되돌리기는 최근 것부터 한다.
+  /// Revertible replaces, oldest first. Revert goes newest first.
   private(set) var history: [Record] = []
-  /// 다시 바꾸기를 기다리는 되돌리기
+  /// A revert awaiting redo
   private(set) var reverted: Reverted?
 
   @ObservationIgnored private let store: ProjectStore
@@ -149,7 +149,7 @@ final class ProjectReplace {
     self.recordCount = recordCount
   }
 
-  /// 메인 스레드 밖에서 끝까지 센다. 바꿀 곳이 있으면 `pending`이 채워져 확인 창이 뜬다.
+  /// Count fully off the main thread. If there are spots to replace, `pending` is filled and the confirmation appears.
   func prepare(query: String, caseSensitive: Bool) async {
     let replacement = replacement
     guard !isWorking, pending == nil, TextReplace.canReplace(query, with: replacement) else { return }
@@ -169,8 +169,8 @@ final class ProjectReplace {
     pending = nil
   }
 
-  /// 확인 창에서 바꾸기를 골랐다. 회차마다 지금 글에서 다시 찾아, 스냅샷을 남기고 바꾼다. 이미 바꾸는 중이면 nil.
-  /// 확인 창은 버튼을 누르면 바로 닫히며 `pending`을 비우므로, 창이 보여 준 것을 받아서 실행한다.
+  /// Replace was chosen in the confirmation. Re-find in each episode's current text, snapshot, then replace. nil if already replacing.
+  /// The confirmation closes as soon as a button is pressed and clears `pending`, so execute what the dialog showed.
   func confirm(_ pending: Pending) async -> Report? {
     guard !isWorking else { return nil }
     self.pending = nil
@@ -184,7 +184,7 @@ final class ProjectReplace {
     await rewriteEach(pending.plan.episodes.map(\.id), { _ in replacement }) { id, outcome in
       tally(outcome, for: id, into: &report)
     }
-    // 바꾼 회차 목록은 회차 순서대로(바꾼 차례는 열린 회차가 맨 끝이라 목록으로는 어색하다).
+    // The replaced-episodes list is in episode order (replace order puts the open episode last, which reads oddly as a list).
     let order = Dictionary(uniqueKeysWithValues: pending.plan.episodes.enumerated().map { ($1.id, $0) })
     finished = Report(
       query: report.query, replacement: report.replacement,
@@ -202,10 +202,10 @@ final class ProjectReplace {
     return report
   }
 
-  /// 회차마다 고쳐 쓰고 끝나는 대로 알린다. 열린 회차는 맨 끝에 따로: 글을 쓰는 중이면 조합이 끝나기를 기다리는 동안
-  /// 다른 회차가 먼저 끝나게. 나머지는 몇 개씩 겹쳐 돈다: 한 회차가 본문을 F_FULLFSYNC로 내리는 동안(3ms 남짓)
-  /// 다음 회차의 읽기·스냅샷을 한다. 회차 안의 순서(고치기 전 스냅샷 → 본문)는 그대로이고, 본문 쓰기는 저장 줄이 하나씩 한다.
-  /// 센 뒤 휴지통으로 간 회차는 알리지 않는다.
+  /// Rewrite each episode and report as each finishes. The open episode goes separately at the end: while waiting for composition to end there,
+  /// other episodes finish first. The rest run a few at a time: while one episode flushes its body with F_FULLFSYNC (~3 ms),
+  /// the next episode's read/snapshot happens. Per-episode order (pre-edit snapshot → body) is unchanged, and the save queue writes bodies one at a time.
+  /// Episodes trashed after counting aren't reported.
   private func rewriteEach(
     _ ids: [EpisodeID], _ job: (EpisodeID) -> EpisodeAutosaver.Rewrite,
     onDone: (EpisodeID, EpisodeAutosaver.RewriteOutcome) -> Void
@@ -229,10 +229,10 @@ final class ProjectReplace {
     }
   }
 
-  /// 동시에 바꾸는 회차 수. 더 늘려도 본문 쓰기는 하나씩이라 빨라지지 않고 메모리만 쓴다.
+  /// Number of episodes replaced concurrently. More doesn't help since bodies are written one at a time; it only uses memory.
   private static let overlap = 8
 
-  /// 센 뒤 휴지통으로 간 회차에 쓰면 지운 본문 파일이 되살아난다. 작가가 지운 회차라 건너뜀으로 세지 않는다(nil).
+  /// Writing to an episode trashed after counting would resurrect its deleted body file. The writer deleted it, so it doesn't count as skipped (nil).
   private func replaceIfListed(
     _ id: EpisodeID, _ job: EpisodeAutosaver.Rewrite
   ) async -> EpisodeAutosaver.RewriteOutcome? {
@@ -253,10 +253,10 @@ final class ProjectReplace {
     }
   }
 
-  // MARK: - 되돌리기·다시 바꾸기 (PLAN 14장 5번)
+  // MARK: - Revert / redo replace (PLAN ch.14 #5)
 
-  /// 최근 바꾸기부터, 지금 되돌리면 실제로 바뀌는 곳이 남은 것을 찾는다. 회차마다 지금 글에서 다시 감지한다
-  /// (편집기 ⌘Z로 이미 되돌렸거나 바꾼 자리를 모두 고쳤으면 목록에서 빠진다). 없으면 nil.
+  /// Newest replace first, find one that still has spots that would actually change if reverted now. Re-detected per episode in its current text
+  /// (dropped from the list if editor ⌘Z already reverted it or all replaced spots were edited). nil if none.
   func latestUndoable() async -> Undoable? {
     for record in history.reversed() {
       let found = await candidates(for: record)
@@ -288,7 +288,7 @@ final class ProjectReplace {
       unreadable: unreadable)
   }
 
-  /// 한 회차의 `지금 → 되돌린 뒤` 비교(되돌리기 창 오른쪽). 메인 스레드 밖에서 만든다.
+  /// One episode's `now → after revert` diff (right side of the revert sheet). Built off the main thread.
   func preview(_ record: Record, _ id: EpisodeID) async -> TextDiff? {
     guard let entry = record.entries.first(where: { $0.id == id }) else { return nil }
     let current = autosaver.searchTexts()[id]
@@ -308,9 +308,9 @@ final class ProjectReplace {
       current: current ?? store.readEpisode(before.episodeID))
   }
 
-  /// 고른 회차만 바꾼 자리를 되돌린다. 고르지 않은 회차는 건드리지 않고 기록에 남아 다음에 창을 열면 그 회차만 보인다.
+  /// Revert replaced spots only in the chosen episodes. Unchosen ones are untouched and stay recorded, so reopening the sheet shows only them.
   func revert(_ record: Record, _ ids: Set<EpisodeID>) async -> RevertReport {
-    // 다른 바꾸기·되돌리기가 도는 중이면 하지 않는다(그대로 두면 다시 바꾸기 기록만 지운다).
+    // Do nothing if another replace/revert is running (otherwise only the redo record would be erased).
     guard !isWorking else { return RevertReport() }
     let store = store
     let stamp = Self.stamp(record.date)
@@ -337,7 +337,7 @@ final class ProjectReplace {
     return report
   }
 
-  /// 방금 되돌린 회차만 같은 방식으로 다시 바꾼다. `바꾸기 전` 스냅샷을 새로 남긴다.
+  /// Redo the replace the same way on just-reverted episodes only. Takes a new `바꾸기 전` snapshot.
   func redo() async -> RevertReport? {
     guard let reverted, !isWorking else { return nil }
     self.reverted = nil
@@ -359,7 +359,7 @@ final class ProjectReplace {
     } onDone: { _, _ in }
   }
 
-  /// 되돌리기·다시 바꾸기를 회차마다 하고 센다.
+  /// Run revert / redo replace per episode and count.
   private func run(
     _ ids: [EpisodeID], job: (EpisodeID) -> EpisodeAutosaver.Rewrite,
     onDone: (EpisodeID, Snapshot?) -> Void
@@ -384,15 +384,15 @@ final class ProjectReplace {
     return report
   }
 
-  /// 되돌리기 메모의 바꾼 때: `11월 22일 15:02`
-  /// 날짜 서식은 지역 설정에 따라 `11. 22.`처럼 나와 메모에 맞지 않아 직접 만든다.
+  /// Replace time in the revert memo: `11월 22일 15:02`
+  /// Date formatting yields `11. 22.` depending on locale, which doesn't fit the memo, so it's built by hand.
   static func stamp(_ date: Date) -> String {
     let parts = Calendar.current.dateComponents([.month, .day], from: date)
     let time = date.formatted(.dateTime.hour(.twoDigits(amPM: .omitted)).minute(.twoDigits))
     return "\(parts.month ?? 0)월 \(parts.day ?? 0)일 \(time)"
   }
 
-  /// 되돌리기·다시 바꾸기가 끝난 뒤 토스트
+  /// Toast after revert / redo replace finishes
   static func summary(of report: RevertReport, redo: Bool) -> String {
     var parts: [String] = []
     if report.episodes > 0 {
@@ -410,7 +410,7 @@ final class ProjectReplace {
     finished = nil
   }
 
-  /// 끝난 뒤 토스트에 띄울 한 줄. 0인 항목은 띄우지 않는다.
+  /// One line for the post-finish toast. Zero items aren't shown.
   static func summary(of report: Report) -> String {
     var parts = [report.count > 0 ? "\(report.count.formatted())곳을 바꿨어요" : "바꾼 곳이 없어요"]
     if report.skipped > 0 { parts.append("\(report.skipped)개 회차는 건너뛰었어요") }

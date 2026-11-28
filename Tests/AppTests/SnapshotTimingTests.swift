@@ -39,7 +39,7 @@ final class SnapshotTimingTests: XCTestCase {
 
   private func snapshots() throws -> [Snapshot] { try store.snapshots(of: episode) }
 
-  // MARK: - 설정
+  // MARK: - Settings
 
   func testDefaultsAndClamping() {
     let defaults = EpisodeSnapshotter.Settings()
@@ -54,7 +54,7 @@ final class SnapshotTimingTests: XCTestCase {
     XCTAssertEqual(EpisodeSnapshotter.Settings(retention: 47).retention, 40, "10 단위로 맞춘다")
   }
 
-  // MARK: - 떠날 때
+  // MARK: - On leave
 
   func testLeaveAfterEditingTakesSnapshot() async throws {
     type(" 둘째")
@@ -81,9 +81,9 @@ final class SnapshotTimingTests: XCTestCase {
     XCTAssertFalse(autosaver.hasWorkBeforeQuit)
   }
 
-  // MARK: - 여러 커서 전
+  // MARK: - Before multi-cursor
 
-  /// 여러 커서로 들어갈 때 그 직전 글을 남긴다. 같은 글로 다시 들어가면 더 찍지 않고, 종료는 쓰기를 기다린다.
+  /// Entering multi-cursor keeps the text right before it. Re-entering with the same text takes no more, and quit waits for the write.
   func testEnteringMultiCursorSnapshotsTextBefore() async throws {
     let none = NSRange(location: NSNotFound, length: 0)
     textView.replaceAllText(with: "민준 가 민준 나 민준")
@@ -112,7 +112,7 @@ final class SnapshotTimingTests: XCTestCase {
     XCTAssertEqual(try store.readSnapshot(taken[1]), "서윤 가 서윤 나 민준")
   }
 
-  // MARK: - 자동
+  // MARK: - Automatic
 
   func testAutoTickOnlyWhenEdited() async throws {
     autosaver.snapshots.autoTick()
@@ -134,7 +134,7 @@ final class SnapshotTimingTests: XCTestCase {
     XCTAssertTrue(try snapshots().isEmpty)
   }
 
-  /// 간격을 바꾸면 새 간격으로 타이머를 다시 건다(시험용으로 아주 짧게).
+  /// Changing the interval restarts the timer at the new interval (very short for testing).
   func testTimerUsesNewInterval() async throws {
     var settings = autosaver.snapshots.settings
     settings.interval = .milliseconds(50)
@@ -160,7 +160,7 @@ final class SnapshotTimingTests: XCTestCase {
     XCTAssertEqual(taken.filter { $0.kind == .manual }.count, 1)
   }
 
-  // MARK: - 직접
+  // MARK: - Manual
 
   func testManualSavesFirstAndAlwaysTakes() async throws {
     type(" 둘째")
@@ -177,7 +177,7 @@ final class SnapshotTimingTests: XCTestCase {
     XCTAssertEqual(try snapshots().count, 2, "직접 찍은 뒤 고치지 않았으면 떠날 때 찍지 않는다")
   }
 
-  /// 저장하면서 스냅샷 찍기(⌘S): 글이 마지막 스냅샷과 같으면 찍지 않아 ⌘S를 자주 눌러도 쌓이지 않는다.
+  /// Snapshot on save (⌘S): not taken if the text equals the last snapshot, so frequent ⌘S doesn't pile up.
   func testSaveWithSnapshotSkipsUnchanged() async throws {
     type(" 둘째")
     let first = try await autosaver.takeManualSnapshot(skipIfUnchanged: true)
@@ -192,7 +192,7 @@ final class SnapshotTimingTests: XCTestCase {
     XCTAssertEqual(try snapshots().map(\.kind), [.manual, .manual])
   }
 
-  /// 스냅샷을 못 썼으면 고친 표시를 되돌려, 쓸 수 있게 된 뒤 다음 간격에 다시 찍는다.
+  /// If the snapshot couldn't be written, the edited mark is restored so it's taken at the next interval once writing works.
   func testFailedAutoSnapshotIsRetried() async throws {
     let snapshotsFolder = store.layout.snapshotsFolder.path(percentEncoded: false)
     try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: snapshotsFolder)

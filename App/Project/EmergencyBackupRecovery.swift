@@ -1,13 +1,13 @@
 import Foundation
 import NovelCore
 
-/// 작품을 열 때 지난번에 작품 폴더에 쓰지 못한 원고(비상 백업)가 있으면 묻고 되살린다(PLAN 17장 1번).
-/// 회차를 화면에 띄우기 전에 파일을 고쳐 두므로, 편집기는 되살린 글을 처음부터 읽는다.
+/// When opening a project, if manuscripts that couldn't be written to the project folder last time exist (emergency backup), ask and restore them (PLAN ch.17 #1).
+/// Files are fixed before the episode is shown, so the editor reads the restored text from the start.
 @MainActor
 enum EmergencyBackupRecovery {
   nonisolated static let snapshotMemo = "비상 백업에서 되살리기 전"
 
-  /// 되살린 회차의 글자 수를 고친 작품 정보를 돌려준다. 백업이 없으면 그대로.
+  /// Returns project info with corrected counts for restored episodes. Unchanged if there's no backup.
   static func run(
     _ backup: EmergencyBackup, project: ProjectFile, root: URL,
     ask: @MainActor ([String]) -> SystemDialogs.BackupChoice = SystemDialogs.offerBackupRestore(episodeNames:),
@@ -15,7 +15,7 @@ enum EmergencyBackupRecovery {
   ) async -> ProjectFile {
     let ids = Set(project.episodes.map(\.id))
     let store = ProjectStore(root: root)
-    // 파일에 이미 같은 글이 있으면(저장은 됐는데 백업을 못 지움) 묻지 않고 지운다.
+    // If the file already has the same text (saved, but the backup wasn't deleted), delete it without asking.
     let entries = await Task.detached(priority: .userInitiated) {
       backup.entries(for: ids).filter { entry in
         guard (try? store.readEpisode(entry.episodeID)) == entry.text else { return true }
@@ -32,8 +32,8 @@ enum EmergencyBackupRecovery {
         return await restore(entries, backup: backup, store: store, project: project)
       case .export:
         let manuscripts = zip(entries, names).map { (title: $1, text: $0.text) }
-        // 폴더 창을 닫았으면 아무것도 고르지 않은 것이라 다시 묻는다. 백업을 남긴 채 열면 그 회차를 새로 저장한 뒤에도
-        // 다음에 열 때 옛 글로 되살리자고 한다.
+        // Closing the folder dialog means nothing was chosen, so ask again. Opening with the backup left would, even after that episode is saved anew,
+        // offer to restore the old text on the next open.
         guard export(manuscripts) else { continue }
         trash(entries, backup: backup)
         return project
@@ -70,7 +70,7 @@ enum EmergencyBackupRecovery {
     return project
   }
 
-  /// 지우지 않고 시스템 휴지통으로 옮긴다(되돌릴 수 있게).
+  /// Moved to the system Trash instead of deleted (so it can be undone).
   private static func trash(_ entries: [EmergencyBackup.Entry], backup: EmergencyBackup) {
     for entry in entries {
       for url in backup.files(of: entry.episodeID) {

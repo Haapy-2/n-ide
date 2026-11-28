@@ -1,19 +1,19 @@
 import Foundation
 import NovelCore
 
-/// 회차를 다시 열 때 돌아갈 자리: 커서와 화면 맨 위에 있던 글자(UTF-16 위치). 픽셀이 아니라 글자 위치라
-/// 글꼴·크기·창 폭이 바뀌어도 같은 문장으로 돌아간다. `openedAt`으로 작품을 다시 열 때 마지막 회차를 고른다.
+/// Where to return when reopening an episode: the caret and the character at the top of the screen (UTF-16 offsets). Character offsets, not pixels,
+/// so it returns to the same sentence even if font, size or window width changed. `openedAt` picks the last episode when reopening a project.
 struct EpisodeViewState: Codable, Equatable {
   var caret: Int
   var top: Int
   var openedAt: Date
 }
 
-/// 회차마다의 자리를 이 맥 설정(UserDefaults)에 둔다. 작품 파일에는 쓰지 않는다(원고가 아니고 맥마다 다름).
-/// 회차 ID로 찾으므로 Finder에서 작품을 옮겨도 이어진다. 오래 안 연 회차부터 지워 `limit`개만 남긴다.
+/// Per-episode positions live in this Mac's settings (UserDefaults), not in project files (not manuscript, differs per Mac).
+/// Keyed by episode ID, so it survives moving the project in Finder. Oldest-opened entries are dropped to keep `limit`.
 @MainActor
 final class EpisodeViewStates {
-  /// 측정·테스트 실행에서는 기억만 하고 이 맥 설정에 쓰지 않는다.
+  /// In measurement/test runs, remember only in memory and don't write to this Mac's settings.
   static let shared = EpisodeViewStates(defaults: LaunchProbe.isMeasuring ? nil : .standard)
 
   private let defaults: UserDefaults?
@@ -44,7 +44,7 @@ final class EpisodeViewStates {
     }
   }
 
-  /// 이 회차들 가운데 마지막으로 연 회차. 기록이 없으면 nil.
+  /// The most recently opened of these episodes. nil if no record.
   func lastOpened(among ids: [EpisodeID]) -> EpisodeID? {
     ids.compactMap { id in states[id.rawValue].map { (id, $0.openedAt) } }.max { $0.1 < $1.1 }?.0
   }

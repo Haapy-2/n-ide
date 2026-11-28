@@ -25,7 +25,7 @@ final class StabilityTests: XCTestCase {
       autosaveDelay: .milliseconds(20), countDelay: .milliseconds(20), countSaveDelay: .seconds(60))
   }
 
-  /// 같은 작품 폴더는 어떤 모양의 경로로 열어도 같은 창 값이 된다(끝의 `/`, `..`).
+  /// The same project folder gives the same window value whatever shape the path has (trailing `/`, `..`).
   func testSameProjectGetsSameWindowValue() {
     let plain = URL(filePath: "/Users/me/글/작품.novel")
     let slash = URL(filePath: "/Users/me/글/작품.novel/", directoryHint: .isDirectory)
@@ -48,7 +48,7 @@ final class StabilityTests: XCTestCase {
     XCTAssertFalse(model.autosaver.hasWorkBeforeQuit)
   }
 
-  /// 미뤄 둔 글자 수 저장(여기서는 60초 뒤)도 종료 전에 쓴다.
+  /// Deferred count saves (60 s later here) are written before quit too.
   func testQuitWritesPendingCounts() async throws {
     let model = try makeModel()
     let id = try await model.addEpisode()
@@ -61,7 +61,7 @@ final class StabilityTests: XCTestCase {
     XCTAssertEqual(try store.loadProject().episodes[0].characterCount, CharacterCount(withSpaces: 12, withoutSpaces: 10))
   }
 
-  /// 글자 수가 바뀌어도 `project`(작업 공간 전체가 보는 값)는 그대로고, 그 회차의 칸만 바뀐다.
+  /// When a count changes, `project` (the value the whole workspace watches) stays the same; only that episode's box changes.
   func testCountChangeDoesNotTouchProject() async throws {
     let model = try makeModel()
     let id = try await model.addEpisode()
@@ -76,7 +76,7 @@ final class StabilityTests: XCTestCase {
     XCTAssertEqual(model.episode(id)?.characterCount?.withSpaces, 7)
   }
 
-  /// 조합 중에 설정이 바뀌면 본문에는 조합이 끝난 뒤에 입힌다(조합 중에는 텍스트 저장소를 건드리지 않는다).
+  /// If settings change during composition, the body gets them after composition ends (text storage isn't touched during composition).
   func testStyleChangedDuringCompositionAppliesAfterIt() throws {
     let textView = ManuscriptTextView.make()
     textView.replaceAllText(with: "첫 문장")
@@ -107,7 +107,7 @@ final class StabilityTests: XCTestCase {
     XCTAssertEqual(ProjectLauncher.windowValue(for: link), ProjectLauncher.windowValue(for: real))
   }
 
-  /// 떠날 때 본문을 못 받으면 "찍을 것이 남음"을 지우지 않는다(종료 때 기다릴 일로 남는다).
+  /// If the body can't be obtained on leave, "snapshots pending" isn't cleared (it remains as work to await at quit).
   func testLeaveWithoutTextKeepsPendingFlag() throws {
     let snapshotter = EpisodeSnapshotter(store: store)
     snapshotter.settings.autoEnabled = false

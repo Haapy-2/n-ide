@@ -2,13 +2,13 @@ import SwiftUI
 
 extension Color {
   static let rowSelected = Color.ink.opacity(0.08)
-  /// 마우스를 올린 줄의 회색 칸. 선택 칸과 헷갈리지 않게 절반 진하기.
+  /// Gray rect for the hovered row. Half intensity so it isn't confused with the selection.
   static let rowHovered = Color.ink.opacity(0.04)
 }
 
-/// 사이드바 회차 목록과 작품 선택 창이 함께 쓰는 줄 배경: 선택이면 진한 회색 칸, 마우스를 올리면 연한 회색 칸.
+/// Row background shared by the sidebar episode list and the project picker: darker gray when selected, lighter gray on hover.
 ///
-/// 마우스 상태를 줄마다 따로 두어서, 마우스가 움직일 때 목록 전체가 아니라 그 줄만 다시 그려진다.
+/// Hover state is kept per row, so mouse movement redraws only that row, not the whole list.
 private struct RowHighlight: ViewModifier {
   let isSelected: Bool
   @State private var isHovered = false

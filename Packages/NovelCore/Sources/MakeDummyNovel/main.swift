@@ -1,7 +1,7 @@
-// 성능 측정용 한국어 더미 작품을 만든다.
-// 사용법: make-dummy-novel <작품 폴더 경로> [회차 수=500] [긴 회차 수=10] [짧은 회차 글자 수=300]
-// 앞의 "긴 회차"는 5,000자, 나머지는 짧게 만든다. 전부 5,000자로 만들려면 긴 회차 수를 회차 수와 같게 준다.
-// 같은 인자로 실행하면 항상 같은 내용이 나온다(측정 조건을 매번 같게 하려고).
+// Creates a Korean dummy project for performance measurement.
+// Usage: make-dummy-novel <project folder path> [episodes=500] [long episodes=10] [short episode chars=300]
+// The leading "long episodes" are 5,000 chars, the rest short. For all 5,000 chars, pass long episodes equal to episodes.
+// The same arguments always produce the same content (to keep measurement conditions identical).
 import Foundation
 import NovelCore
 
@@ -35,7 +35,7 @@ let lines = ["\"여기서 뭐 해요?\"", "\"늦었군.\"", "\"다시는 그러�
 func makeEpisodeText(seed: UInt64, length charactersPerEpisode: Int) -> String {
   var random = SeededGenerator(state: seed)
   var text = ""
-  var length = 0  // text.count를 매번 세면 느려서 따로 센다
+  var length = 0  // Counted separately since recounting text.count each time is slow
   func append(_ piece: String) {
     text += piece
     length += piece.count
@@ -69,7 +69,7 @@ do {
     let length = index < longEpisodeCount ? longEpisodeLength : shortEpisodeLength
     let text = makeEpisodeText(seed: UInt64(index + 1), length: length)
     try store.writeEpisode(text, id: project.episodes[index].id)
-    // 앱이 저장하는 것처럼 글자 수도 project.json에 넣어 둔다(사이드바가 본문을 읽지 않고 보여준다).
+    // Counts are put into project.json just as the app saves them (the sidebar shows them without reading bodies).
     project.episodes[index].characterCount = CharacterCount(counting: text)
   }
   try store.saveProject(project)

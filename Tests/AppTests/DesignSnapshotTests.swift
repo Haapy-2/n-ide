@@ -4,8 +4,8 @@ import SwiftUI
 import XCTest
 @testable import NovelEditor
 
-/// 화면을 라이트/다크로 그려 docs/design-snapshots/에 PNG로 저장한다.
-/// 평소 테스트에서는 건너뛰고, Scripts/snapshots.sh로 실행할 때만 만든다.
+/// Renders screens in light/dark and saves PNGs to docs/design-snapshots/.
+/// Skipped in normal tests; generated only when run via Scripts/snapshots.sh.
 @MainActor
 final class DesignSnapshotTests: XCTestCase {
   private let stage = "10"
@@ -27,7 +27,7 @@ final class DesignSnapshotTests: XCTestCase {
     }
   }
 
-  /// 편집기 줄 번호(왼쪽 여백 끝에서 20pt). 긴 문단은 첫 줄에만 번호가 붙는다.
+  /// Editor line numbers (20 pt from the left margin edge). Long paragraphs are numbered on their first line only.
   func testRenderLineNumbers() throws {
     guard ProcessInfo.processInfo.environment["NOVEL_SNAPSHOTS"] == "1" else {
       throw XCTSkip("Scripts/snapshots.sh로 실행할 때만 스냅샷을 만든다")
@@ -39,7 +39,7 @@ final class DesignSnapshotTests: XCTestCase {
     }
   }
 
-  /// 토스트 두 가지(문구만, 글자 버튼 있음). 유리 바탕은 화면 밖 그리기에서 하얗게 찍히므로 실제 앱에서도 본다.
+  /// Two toast variants (text only, with a text button). The glass background renders white off-screen, so check in the real app too.
   func testRenderToasts() throws {
     guard ProcessInfo.processInfo.environment["NOVEL_SNAPSHOTS"] == "1" else {
       throw XCTSkip("Scripts/snapshots.sh로 실행할 때만 스냅샷을 만든다")
@@ -56,7 +56,7 @@ final class DesignSnapshotTests: XCTestCase {
     }
   }
 
-  /// 스냅샷 판: 과거 원고와 고친 지금 원고를 실제처럼 비교해 띄운다.
+  /// Snapshot panel: shows a realistic diff between a past manuscript and an edited current one.
   func testRenderSnapshotPanel() async throws {
     guard ProcessInfo.processInfo.environment["NOVEL_SNAPSHOTS"] == "1" else {
       throw XCTSkip("Scripts/snapshots.sh로 실행할 때만 스냅샷을 만든다")
@@ -132,7 +132,7 @@ final class DesignSnapshotTests: XCTestCase {
   private static let myungjoStyle = EditorStyle(
     font: .appleMyungjo, fontSize: 19, lineSpacing: 2, paragraphSpacing: 0.8, lineWidthInCharacters: 34)
 
-  /// 진행률 모양 세 가지(고리, 꽉 찬 원, 막대) × 97%·48%·112%.
+  /// Three progress styles (ring, full circle, bar) × 97%·48%·112%.
   private static var progressStyles: some View {
     VStack(alignment: .trailing, spacing: 10) {
       ForEach(GoalProgressStyle.allCases, id: \.self) { style in
@@ -154,19 +154,19 @@ final class DesignSnapshotTests: XCTestCase {
     RecentProject(path: NSHomeDirectory() + "/Desktop/시험용 단편.novel", title: "시험용 단편", episodeCount: 3, lastOpened: .now.addingTimeInterval(-86_400 * 8)),
   ]
 
-  /// 실제 창에 띄운 뒤 창 전체(툴바 포함)를 이미지로 뜬다.
+  /// Show in a real window, then capture the whole window (including the toolbar) as an image.
   private func render(_ view: some View, name: String, size: CGSize, dark: Bool, stage: String? = nil) throws {
     let window = NSWindow(
       contentRect: NSRect(origin: .zero, size: size),
       styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
       backing: .buffered, defer: false)
-    window.isReleasedWhenClosed = false  // ARC가 관리하므로 닫을 때 한 번 더 해제되지 않게
+    window.isReleasedWhenClosed = false  // ARC manages it, so avoid an extra release on close
     window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
     window.contentView = NSHostingView(rootView: view)
     window.setContentSize(size)
     window.orderFront(nil)
     defer { window.close() }
-    // SwiftUI가 레이아웃과 그리기를 마치도록 잠깐 돌린다.
+    // Spin briefly so SwiftUI finishes layout and drawing.
     RunLoop.main.run(until: Date().addingTimeInterval(0.8))
 
     let frameView = try XCTUnwrap(window.contentView?.superview)
@@ -182,7 +182,7 @@ final class DesignSnapshotTests: XCTestCase {
     URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()  // AppTests
       .deletingLastPathComponent()  // Tests
-      .deletingLastPathComponent()  // 저장소 루트
+      .deletingLastPathComponent()  // Repository root
       .appendingPathComponent("docs/design-snapshots")
   }
 }

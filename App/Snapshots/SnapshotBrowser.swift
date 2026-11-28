@@ -2,17 +2,17 @@ import Foundation
 import NovelCore
 import Observation
 
-/// 떠 있는 판(⇧⌘S) 하나의 상태: 한 회차의 스냅샷 목록, 고른 스냅샷, 과거↔현재 비교 (PLAN 10장 5번).
-/// 목록·메모 읽기와 비교는 모두 메인 스레드 밖에서 한다. 다른 스냅샷을 고르면 하던 비교는 취소한다.
+/// State of one floating panel (⇧⌘S): one episode's snapshot list, the chosen snapshot, the past↔present diff (PLAN ch.10 #5).
+/// Reading the list/memos and diffing all happen off the main thread. Choosing another snapshot cancels the running diff.
 @MainActor
 @Observable
 final class SnapshotBrowser {
   struct Item: Identifiable, Equatable {
     let snapshot: Snapshot
     var memo: String?
-    /// 이름 변경 스냅샷의 바뀌기 전 제목. 되돌리면 제목도 이것으로.
+    /// Old title of a rename snapshot. Restoring restores the title too.
     var title: String?
-    /// 보관 개수로 지우지 않는 것인지(이름 변경 스냅샷만 따로 표시한다)
+    /// Whether it's exempt from keep-count pruning (only rename snapshots are marked separately)
     var isKept = false
     var id: String { snapshot.id }
   }
@@ -26,23 +26,23 @@ final class SnapshotBrowser {
 
 
   let episodeID: EpisodeID
-  /// 판을 열 때 편집기에서 한 번 복사한 지금 본문. 판이 열려 있는 동안은 편집기에 초점이 없어 바뀌지 않는다.
+  /// Current body copied once from the editor when the panel opened. While the panel is open the editor has no focus, so it doesn't change.
   let currentText: String
-  /// 판을 열 때의 회차 제목
+  /// Episode title when the panel opened
   let currentTitle: String
-  /// nil이면 아직 읽는 중
+  /// nil while still reading
   private(set) var items: [Item]?
   private(set) var selectedID: String?
   private(set) var comparison: Comparison = .idle
   private(set) var errorMessage: String?
-  /// 되돌리는 중(버튼을 두 번 누르지 않게)
+  /// Restoring (so the button isn't pressed twice)
   private(set) var isRestoring = false
-  /// 메모를 고친 이름 변경 스냅샷. 지킬지 묻는다.
+  /// A rename snapshot whose memo was edited. Ask whether to protect it.
   var askingToKeep: String?
 
   @ObservationIgnored private let store: ProjectStore
   @ObservationIgnored private var job: Task<TextDiff, any Error>?
-  /// 처음 고를 스냅샷(바꾼 회차 목록에서 열 때 `바꾸기 전`). 없거나 못 찾으면 가장 최근 것.
+  /// Snapshot to select initially (`바꾸기 전` when opened from the replaced-episodes list). Most recent if absent or not found.
   @ObservationIgnored private let preferredID: String?
 
   init(
@@ -57,7 +57,7 @@ final class SnapshotBrowser {
 
   var selected: Item? { items?.first { $0.id == selectedID } }
 
-  /// 목록과 메모를 읽고 처음 고를 것(없으면 가장 최근 것)을 고른다.
+  /// Read the list and memos, and select the initial one (most recent if none).
   func load() async {
     let store = store
     let id = episodeID
@@ -90,7 +90,7 @@ final class SnapshotBrowser {
     self.job = job
     Task {
       let result = await job.result
-      // 그사이 다른 스냅샷을 골랐으면 버린다.
+      // Discard if another snapshot was chosen meanwhile.
       guard self.job == job else { return }
       switch result {
       case .success(let diff): comparison = .ready(diff)
@@ -100,20 +100,20 @@ final class SnapshotBrowser {
     }
   }
 
-  /// 고른 스냅샷이 지금과 달라 되돌릴 수 있는지(본문, 또는 이름 변경 스냅샷의 제목). 비교가 끝나야 안다.
+  /// Whether the chosen snapshot differs from now and can be restored (body, or a rename snapshot's title). Known only after the diff finishes.
   var canRestore: Bool {
     guard !isRestoring, case .ready(let diff) = comparison else { return false }
     return diff.hasChanges || restoredTitle != nil
   }
 
-  /// 되돌리면 바뀔 제목. 이름 변경 스냅샷이고 지금 제목과 다를 때만.
+  /// Title that restoring would set. Only for rename snapshots differing from the current title.
   var restoredTitle: String? {
     guard let title = selected?.title, title != currentTitle else { return nil }
     return title
   }
 
-  /// 고른 스냅샷으로 회차 전체를 되돌린다. 본문을 먼저 되돌리고(못 하면 제목도 그대로), 이름 변경 스냅샷이면 제목도.
-  /// 되돌렸으면 true(판을 닫는다). 실패하면 판에 이유를 띄운다.
+  /// Restore the whole episode to the chosen snapshot. Body first (if that fails, the title stays too), then the title for rename snapshots.
+  /// True if restored (the panel closes). On failure, show the reason in the panel.
   func restoreSelected(
     with autosaver: EpisodeAutosaver, renameTo rename: (String) async -> Void
   ) async -> Bool {
@@ -144,13 +144,13 @@ final class SnapshotBrowser {
     return false
   }
 
-  /// 판을 닫을 때 하던 비교를 멈춘다.
+  /// Stop the running diff when the panel closes.
   func cancel() {
     job?.cancel()
     job = nil
   }
 
-  /// 앞뒤 공백을 다듬어 쓰고, 비우면 메모를 없앤다. 쓰기에 성공한 뒤에 목록을 바꾼다.
+  /// Trim surrounding whitespace before writing; an empty memo removes it. The list changes only after a successful write.
   func updateMemo(_ id: String, to text: String) {
     guard let index = items?.firstIndex(where: { $0.id == id }), let item = items?[index] else { return }
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -162,7 +162,7 @@ final class SnapshotBrowser {
         if let index = items?.firstIndex(where: { $0.id == id }) {
           items?[index].memo = trimmed.isEmpty ? nil : trimmed
         }
-        // 이름 변경 스냅샷은 메모가 있어도 지워지므로, 메모를 고쳐 남기려는 뜻인지 묻는다.
+        // Rename snapshots are pruned even with a memo, so ask whether the memo edit means to keep it.
         if item.snapshot.kind == .rename, !item.isKept, !trimmed.isEmpty { askingToKeep = id }
       } catch {
         errorMessage = "메모를 남기지 못했어요."
@@ -170,7 +170,7 @@ final class SnapshotBrowser {
     }
   }
 
-  /// 보관 개수로 지우지 않게 표시한다. 그사이 정리로 지워졌으면 표시도 남기지 않는다.
+  /// Mark it exempt from keep-count pruning. If pruning removed it meanwhile, don't leave the mark.
   func keep(_ id: String) {
     guard let item = items?.first(where: { $0.id == id }) else { return }
     let store = store

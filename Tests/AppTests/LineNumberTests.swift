@@ -2,7 +2,7 @@ import AppKit
 import XCTest
 @testable import NovelEditor
 
-/// 편집기 줄 번호. 켜고 꺼도 본문이 움직이지 않는지, 엔터마다 번호가 맞는지, 비교 화면과 같은 규칙인지 본다.
+/// Editor line numbers. Checks that toggling never moves the body, numbers match per Return, and the rule matches the diff view.
 @MainActor
 final class LineNumberTests: XCTestCase {
   private func makeEditor(_ text: String, width: CGFloat = 1300, height: CGFloat = 800, numbers: Bool = true) -> ManuscriptTextView {
@@ -37,7 +37,7 @@ final class LineNumberTests: XCTestCase {
     XCTAssertEqual(textView.textContainerInset, insetBefore)
   }
 
-  /// 빈 줄 번호도 글자 줄과 같은 기준선(줄 위에서 같은 거리). 줄바꿈 글리프 자리를 쓰면 위로 떠 보였다.
+  /// Blank line numbers share the text lines' baseline (same distance from the line top). Using the newline glyph position made them float up.
   func testBlankLineNumberSitsOnTextBaseline() {
     for text in ["가\n\n나", "\n가", "가\r\n\r\n나"] {
       let textView = makeEditor(text)
@@ -55,7 +55,7 @@ final class LineNumberTests: XCTestCase {
     }
   }
 
-  /// 빈 줄 번호를 끄면 빈 줄만 빠지고 번호 세기는 그대로(비교 화면과 같다).
+  /// Turning off blank-line numbers drops only blank lines; numbering stays the same (same as the diff view).
   func testBlankLineNumbersCanBeHidden() {
     let textView = makeEditor("가\n\n나\n")
     textView.numbersBlankLines = false
@@ -78,7 +78,7 @@ final class LineNumberTests: XCTestCase {
     let textView = makeEditor(String(repeating: "가나다라마바사 ", count: 60) + "\n짧은 문단")
     XCTAssertEqual(numbers(textView), [1, 2])
     let ys = baselines(textView)
-    // 첫 문단이 여러 줄이라 두 번호 사이가 한 줄 높이보다 훨씬 크다.
+    // The first paragraph wraps to several lines, so the gap between two numbers is much larger than one line height.
     XCTAssertGreaterThan(ys[1] - ys[0], textView.style.lineHeight * 3)
   }
 
@@ -96,7 +96,7 @@ final class LineNumberTests: XCTestCase {
     XCTAssertEqual(baselines(empty)[0], baselines(filled)[0], accuracy: 0.5)
   }
 
-  /// 다른 편집기에서 온 \r\n도 한 번만 센다(비교 화면과 같은 규칙).
+  /// \r\n from other editors counts once too (same rule as the diff view).
   func testWindowsLineEndings() {
     XCTAssertEqual(numbers(makeEditor("가\r\n나\r\n다")), [1, 2, 3])
   }
@@ -115,7 +115,7 @@ final class LineNumberTests: XCTestCase {
     XCTAssertEqual(numbers(textView), [])
   }
 
-  /// 아래쪽 일부만 다시 그릴 때 그 자리 문단의 번호가 맞다(앞 문단을 세어 시작 번호를 구함).
+  /// When redrawing only part of the bottom, that paragraph's number is right (the start number is computed by counting earlier paragraphs).
   func testPartialRectFarDownStartsAtRightNumber() {
     let text = (1...500).map { "\($0)번째 문단" }.joined(separator: "\n")
     let textView = makeEditor(text, height: 400)

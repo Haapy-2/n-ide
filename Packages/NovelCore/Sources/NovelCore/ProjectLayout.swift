@@ -1,14 +1,14 @@
 import Foundation
 
-/// 작품 폴더 안의 파일 위치. 경로는 밖에서 받은 작품 폴더 URL 하나로만 정해진다.
+/// File locations inside the project folder. Paths derive solely from the project folder URL passed in.
 ///
 /// ```
 /// 내작품.novel/
 ///   project.json
 ///   project.json.bak
-///   episodes/<회차ID>.md
-///   notes/<노트ID>.md
-///   snapshots/<회차ID>/<시각>-<종류>.md (+ 메모는 .memo)
+///   episodes/<episodeID>.md
+///   notes/<noteID>.md
+///   snapshots/<episodeID>/<time>-<kind>.md (+ memo in .memo)
 /// ```
 public struct ProjectLayout: Sendable {
   public let root: URL
@@ -16,7 +16,7 @@ public struct ProjectLayout: Sendable {
   public init(root: URL) { self.root = root }
 
   public var projectFile: URL { root.appending(path: "project.json", directoryHint: .notDirectory) }
-  /// 직전 정상본. `project.json`이 깨졌을 때 여기서 복구한다.
+  /// Last good copy. Recover from here when `project.json` is broken.
   public var projectBackupFile: URL { root.appending(path: "project.json.bak", directoryHint: .notDirectory) }
   public var episodesFolder: URL { root.appending(path: "episodes", directoryHint: .isDirectory) }
   public var notesFolder: URL { root.appending(path: "notes", directoryHint: .isDirectory) }

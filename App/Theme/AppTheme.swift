@@ -1,4 +1,4 @@
-/// 앱 화면 테마. 순서는 설정 창에 놓이는 순서다.
+/// App theme. Order is the order in Settings.
 enum AppTheme: String, CaseIterable {
   case dark
   case system
@@ -12,7 +12,7 @@ enum AppTheme: String, CaseIterable {
     }
   }
 
-  /// 설정 창 세그먼트의 SF Symbols 이름. 색 없이 시스템 보조 글자색으로 그린다.
+  /// SF Symbols names for the Settings segments. Drawn uncolored in the system secondary text color.
   var symbolName: String {
     switch self {
     case .dark: "moon"

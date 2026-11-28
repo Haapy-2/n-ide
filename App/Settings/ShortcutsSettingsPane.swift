@@ -1,12 +1,12 @@
 import SwiftUI
 
-/// 설정 창 "단축키": 메뉴 명령을 분류별로 보여 주고 단축키를 바꾼다(PLAN.md 12장).
+/// Settings "Shortcuts": shows menu commands by category and changes shortcuts (PLAN.md ch.12).
 struct ShortcutsSettingsPane: View {
-  /// 지금 키를 기다리는 명령. 한 번에 하나만.
+  /// Command currently waiting for a key. One at a time.
   @State private var recording: ShortcutCommand?
-  /// 고를 수 없던 조합의 안내. 해당 줄 아래에 보인다.
+  /// Hint about a combo that couldn't be chosen. Shown under that row.
   @State private var notice: (command: ShortcutCommand, text: String)?
-  /// 다른 명령이 쓰던 조합을 가져올지 묻는 중
+  /// Asking whether to take a combo another command was using
   @State private var pendingTake: PendingTake?
 
   private struct PendingTake {
@@ -52,7 +52,7 @@ struct ShortcutsSettingsPane: View {
           .foregroundStyle(isLocked ? .secondary : .primary)
         Spacer()
         if command == .saveWithSnapshot {
-          // 켜면 이 칸의 키가 풀리고 지금 저장·스냅샷 찍기 칸이 잠긴다. 다른 줄처럼 조작은 오른쪽에 둔다.
+          // When on, this field's key is freed and the save-now / take-snapshot fields lock. Controls sit on the right like other rows.
           Toggle(command.title, isOn: savesWithSnapshot)
             .labelsHidden()
             .toggleStyle(.switch)
@@ -74,7 +74,7 @@ struct ShortcutsSettingsPane: View {
           },
           onFinish: { finish($0, for: command) })
         .disabled(isLocked)
-        // 칸 글자가 .primary로 칠해져 있어 흐림이 잘 안 보여서 따로 흐리게 한다.
+        // The field text is painted .primary so dimming barely shows; dim it separately.
         .opacity(isLocked ? 0.45 : 1)
         .help(isLocked ? lockedHelp(command) : "")
       }
@@ -85,7 +85,7 @@ struct ShortcutsSettingsPane: View {
           .frame(maxWidth: .infinity, alignment: .leading)
           .fixedSize(horizontal: false, vertical: true)
       }
-      // 기본값일 때만 회차 메뉴가 사이드바 초점에 따라 ⌘⌫로 바꿔 보여서(EpisodeCommands), 표와 메뉴가 달라 보이지 않게 알린다.
+      // Only with defaults does the episode menu show ⌘⌫ depending on sidebar focus (EpisodeCommands), so note it to keep table and menu from looking inconsistent.
       if command == .trashEpisode, !settings.isCustomized(command) {
         Text("사이드바에서 회차를 고른 채로는 ⌘⌫로도 돼요. 편집기에서 ⌘⌫는 줄 앞까지 지우기예요.")
           .font(.footnote)
@@ -106,7 +106,7 @@ struct ShortcutsSettingsPane: View {
     command == .saveWithSnapshot ? "옆 스위치를 켜면 바꿀 수 있어요" : "‘저장하면서 스냅샷 찍기’가 켜져 있어 잠겼어요"
   }
 
-  /// 켜고 끌 때 녹화 중이던 칸과 안내는 그만둔다(잠기는 칸이 녹화 중일 수 있어서).
+  /// On toggle, stop any recording field and hint (the field being locked might be recording).
   private var savesWithSnapshot: Binding<Bool> {
     Binding(get: { settings.savesWithSnapshot }, set: { on in
       recording = nil

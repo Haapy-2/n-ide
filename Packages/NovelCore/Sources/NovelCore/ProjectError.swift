@@ -1,31 +1,31 @@
 import Foundation
 
-/// 작품 파일을 다루다 생기는 오류. 화면에 보여줄 설명은 앱 쪽에서 붙인다.
+/// Errors from handling project files. User-facing descriptions are added on the app side.
 public enum ProjectError: Error, Equatable, Sendable {
-  /// 같은 이름의 작품 폴더가 이미 있다. 덮어쓰지 않는다.
+  /// A project folder with the same name already exists. Never overwritten.
   case alreadyExists(URL)
   case missingProjectFile(URL)
-  /// `project.json`을 읽을 수 없다(형식이 깨짐).
+  /// `project.json` can't be read (corrupt format).
   case corruptProjectFile(URL)
-  /// 앱이 아는 것보다 새 형식이다. 고치지 않고 열기를 거부한다.
+  /// Newer format than the app knows. Refuses to open without modifying it.
   case newerSchemaVersion(found: Int, supported: Int)
-  /// 회차나 노트 본문 파일이 없다.
+  /// An episode or note body file is missing.
   case missingTextFile(URL)
   case notUTF8(URL)
   case writeFailed(URL, reason: String, problem: WriteProblem = .other)
 }
 
-/// 저장이 실패한 까닭을 사용자가 할 수 있는 일로 나눈 것. 앱이 알맞은 안내와 버튼을 고른다.
+/// Why saving failed, grouped by what the user can do. The app picks fitting guidance and buttons.
 public enum WriteProblem: Equatable, Sendable {
-  /// 쓸 권한이 없다(폴더 권한).
+  /// No write permission (folder permissions).
   case noPermission
-  /// 파일이나 폴더가 잠겨 있다(Finder "잠김").
+  /// The file or folder is locked (Finder "Locked").
   case locked
-  /// 읽기 전용 디스크.
+  /// Read-only disk.
   case readOnlyVolume
-  /// 디스크 공간이 모자라다.
+  /// Not enough disk space.
   case diskFull
-  /// 작품 폴더나 그 안 폴더가 없다(외장 디스크가 빠졌거나 옮김).
+  /// The project folder or a folder inside it is missing (external disk ejected or moved).
   case missingFolder
   case other
 
@@ -40,7 +40,7 @@ public enum WriteProblem: Equatable, Sendable {
     }
   }
 
-  /// Foundation 오류에서. POSIX 코드가 들어 있으면 그것을, 아니면 Cocoa 파일 오류 코드를 본다.
+  /// From a Foundation error. Uses the POSIX code if present, otherwise the Cocoa file error code.
   public init(error: Error) {
     let error = error as NSError
     if error.domain == NSPOSIXErrorDomain {

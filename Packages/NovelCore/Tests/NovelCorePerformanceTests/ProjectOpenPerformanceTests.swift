@@ -2,8 +2,8 @@ import Foundation
 import NovelCore
 import XCTest
 
-/// 500회차 작품 열기: `project.json` 읽기(복구 확인 포함) + 첫 회차 본문 읽기.
-/// 더미 작품은 Scripts/perf.sh가 build/perf/에 미리 만든다. 경로는 NOVEL_PERF_PROJECT로 받는다.
+/// Opening a 500-episode project: read `project.json` (including the recovery check) + read the first episode body.
+/// The dummy project is prebuilt in build/perf/ by Scripts/perf.sh. The path comes from NOVEL_PERF_PROJECT.
 final class ProjectOpenPerformanceTests: XCTestCase {
   private var projectURL: URL {
     get throws {

@@ -1,7 +1,7 @@
 import Testing
 @testable import NovelCore
 
-/// 여러 회차 이름 바꾸기 규칙. 창의 미리 보기와 적용이 같은 결과를 쓰므로 여기 결과가 곧 바뀌는 이름이다.
+/// Batch episode rename rules. The sheet's preview and apply use the same result, so these results are exactly the resulting names.
 struct EpisodeTitleBatchTests {
   @Test func replaceFindsLikeSearch() {
     let titles = ["민준의 귀환", "MINJUN", "민준과 민준", "도윤"]
@@ -9,7 +9,7 @@ struct EpisodeTitleBatchTests {
     #expect(result == ["도윤의 귀환", "MINJUN", "도윤과 도윤", "도윤"])
     #expect(EpisodeTitleBatch.titles(["Minjun"], by: .replace(find: "minjun", with: "Doyun")) == ["Doyun"],
       "영문 대소문자는 무시")
-    // 자모를 따로 적은 한글(NFD)도 찾는다.
+    // Decomposed Hangul (NFD) is found too.
     let decomposed = "민준".decomposedStringWithCanonicalMapping + " 1화"
     #expect(EpisodeTitleBatch.titles([decomposed], by: .replace(find: "민준", with: "도윤")) == ["도윤 1화"])
   }

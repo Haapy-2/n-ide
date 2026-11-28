@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// 단축키 하나: 키 + 보조키. 설정에는 "ctrl+cmd+s" 같은 문자열로 남긴다.
+/// One shortcut: key + modifiers. Stored in settings as a string like "ctrl+cmd+s".
 struct KeyCombo: Hashable, Sendable {
   enum Key: Hashable, Sendable {
-    /// 영문 소문자·숫자·기호 한 글자
+    /// One lowercase letter, digit or symbol
     case character(Character)
     case upArrow, downArrow, leftArrow, rightArrow, delete, returnKey, escape, tab, space
   }
@@ -28,7 +28,7 @@ struct KeyCombo: Hashable, Sendable {
     self.init(.character(character), modifiers)
   }
 
-  // MARK: - 메뉴에 붙이기
+  // MARK: - Attaching to menus
 
   var keyboardShortcut: KeyboardShortcut {
     KeyboardShortcut(keyEquivalent, modifiers: eventModifiers)
@@ -58,7 +58,7 @@ struct KeyCombo: Hashable, Sendable {
     return result
   }
 
-  // MARK: - 보이기 (메뉴와 같은 순서 ⌃⌥⇧⌘)
+  // MARK: - Display (same order as menus: ⌃⌥⇧⌘)
 
   var displayText: String {
     var text = ""
@@ -81,7 +81,7 @@ struct KeyCombo: Hashable, Sendable {
     return text
   }
 
-  // MARK: - 저장 문자열
+  // MARK: - Storage string
 
   private static let modifierNames: [(Modifiers, String)] = [
     (.control, "ctrl"), (.option, "opt"), (.shift, "shift"), (.command, "cmd"),
@@ -121,10 +121,10 @@ struct KeyCombo: Hashable, Sendable {
     }
   }
 
-  // MARK: - 키 코드 → 키
+  // MARK: - Key code → key
 
-  /// 키보드의 키 위치(가상 키 코드, 미국식 배열 기준)로 키를 정한다.
-  /// 글자로 읽으면 한글 입력 중에는 S 자리가 "ㄴ"으로 들어와서, 입력 방식과 상관없는 키 위치를 쓴다.
+  /// Keys are identified by keyboard position (virtual key code, US layout).
+  /// Reading characters would give "ㄴ" at the S position during Hangul input, so use the input-source-independent key position.
   static func key(forKeyCode code: UInt16) -> Key? {
     if let character = characterKeyCodes[code] { return .character(character) }
     switch code {

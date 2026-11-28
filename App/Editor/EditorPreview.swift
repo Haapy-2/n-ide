@@ -1,8 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// 설정 창의 미리보기: 편집기와 같은 모양 값(`EditorStyle.textAttributes`)으로 짧은 원고를 종이 위에 보여준다.
-/// 고칠 수 없고, 폭은 설정 창에 맞춰 줄바꿈된다(본문 폭 설정은 숫자로만 보인다).
+/// Settings preview: shows a short manuscript on paper with the same style values as the editor (`EditorStyle.textAttributes`).
+/// Not editable; wraps to the Settings window width (the body width setting shows only as a number).
 struct EditorPreview: NSViewRepresentable {
   let style: EditorStyle
 
@@ -11,7 +11,7 @@ struct EditorPreview: NSViewRepresentable {
     "여기서 뭐 해요?" 돌아보니 젖은 소녀가 서 있었다.
     """
 
-  /// 종이 안쪽 여백
+  /// Inner padding of the paper
   private static let inset = NSSize(width: 20, height: 16)
 
   func makeNSView(context: Context) -> NSTextView {
@@ -36,9 +36,9 @@ struct EditorPreview: NSViewRepresentable {
     view.invalidateIntrinsicContentSize()
   }
 
-  /// 주어진 폭에서 미리보기 문장이 다 들어가는 높이.
-  /// 화면에 보이는 뷰의 글 상자를 건드리지 않고 따로 만든 글 상자로 잰다. 보이는 뷰의 폭을 바꿔 재면
-  /// 마지막으로 잰 폭(더 좁은 폭)이 남아 줄이 일찍 꺾이고, 높이는 넓은 폭 기준이라 아래가 잘린다.
+  /// Height that fits the whole preview text at the given width.
+  /// Measured with a separate text container instead of the visible view's. Resizing the visible view to measure
+  /// leaves the last measured (narrower) width behind, so lines wrap early while height uses the wide width and the bottom gets cut.
   func sizeThatFits(_ proposal: ProposedViewSize, nsView view: NSTextView, context: Context) -> CGSize? {
     let width = proposal.width ?? 400
     let storage = NSTextStorage(string: Self.sample, attributes: style.textAttributes)

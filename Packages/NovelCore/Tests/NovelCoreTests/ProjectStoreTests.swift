@@ -3,7 +3,7 @@ import Testing
 @testable import NovelCore
 
 struct ProjectStoreTests {
-  // MARK: - 작품 만들기
+  // MARK: - Creating projects
 
   @Test func createMakesFolderStructure() throws {
     let folder = try TestFolder()
@@ -15,7 +15,7 @@ struct ProjectStoreTests {
     #expect(try folder.fileNames(in: root) == ["episodes", "notes", "project.json", "snapshots"])
   }
 
-  /// 백업(project.json.bak)을 못 써도 본 저장은 한다. 백업은 덤이라 본 저장을 막으면 안 된다.
+  /// Even if the backup (project.json.bak) can't be written, the real save proceeds. The backup is a bonus and must not block the real save.
   @Test func saveProjectSucceedsWhenBackupCannotBeWritten() throws {
     let folder = try TestFolder()
     defer { folder.remove() }
@@ -60,8 +60,8 @@ struct ProjectStoreTests {
     #expect(try store.loadProject() == project)
   }
 
-  /// 손으로 고치거나 동기화가 꼬여 같은 묶음·같은 회차가 두 번 적혀 있어도 연다. 처음 나온 것을 남긴다.
-  /// (묶음 제목 줄을 만들 때 같은 묶음 ID가 둘이면 앱이 죽었다.)
+  /// Opens even if the same group or episode is listed twice (hand edits, sync glitches). The first occurrence is kept.
+  /// (A duplicate group ID crashed the app when building group header rows.)
   @Test func duplicateGroupsAndEpisodesKeepTheFirst() throws {
     let folder = try TestFolder()
     defer { folder.remove() }
@@ -91,7 +91,7 @@ struct ProjectStoreTests {
 
     let json = try String(contentsOf: store.layout.projectFile, encoding: .utf8)
 
-    // 다른 편집기로 열어도 읽을 수 있어야 한다: 한글이 \u 이스케이프 없이 그대로, 줄바꿈 들여쓰기.
+    // Must be readable in other editors: Hangul as is without \u escapes, newline-indented.
     #expect(json.contains("\"title\" : \"한글 제목\""))
     #expect(json.contains("\"schemaVersion\" : 2"))
     #expect(json.contains("\n"))
@@ -142,14 +142,14 @@ struct ProjectStoreTests {
     }
   }
 
-  // MARK: - 본문
+  // MARK: - Bodies
 
   @Test func episodeRoundTripKeepsTextExactly() throws {
     let folder = try TestFolder()
     defer { folder.remove() }
     let store = try ProjectStore.create(at: folder.url.appending(path: "작품.novel"), title: "x")
     let id = EpisodeID.make()
-    // 한글, 이모지, 조합형 문자, 빈 줄, 다른 편집기가 넣었을 CRLF까지 그대로 보존되어야 한다.
+    // Hangul, emoji, combining characters, blank lines, even CRLF inserted by other editors must be preserved exactly.
     let text = String(repeating: "가나다라마바사 ", count: 700)
       + "\n\n\"대사\" — 🗡️ e\u{301}\r\n마지막 줄"
 
@@ -202,7 +202,7 @@ struct ProjectStoreTests {
     defer { folder.remove() }
     let store = try ProjectStore.create(at: folder.url.appending(path: "작품.novel"), title: "x")
     let id = EpisodeID.make()
-    try Data([0xB0, 0xA1, 0xFF, 0xFE]).write(to: store.layout.episodeFile(id))  // EUC-KR 등 다른 인코딩 흉내
+    try Data([0xB0, 0xA1, 0xFF, 0xFE]).write(to: store.layout.episodeFile(id))  // Simulate another encoding such as EUC-KR
 
     #expect(throws: ProjectError.notUTF8(store.layout.episodeFile(id))) {
       try store.readEpisode(id)

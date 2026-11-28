@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 슬라이더 + 오른쪽 숫자. 숫자는 고정폭이라 끌 때 흔들리지 않는다.
+/// Slider + number on the right. The number is monospaced so it doesn't jitter while dragging.
 struct NumberSlider: View {
   let title: String
   @Binding var value: Double
@@ -10,7 +10,7 @@ struct NumberSlider: View {
   var body: some View {
     LabeledContent(title) {
       HStack(spacing: 10) {
-        // 저장된 값이 범위 밖이어도 슬라이더에는 맞춘 값을 보여준다.
+        // Even if the stored value is out of range, the slider shows the snapped value.
         Slider(value: Binding(get: { setting.clamped(value) }, set: { value = setting.clamped($0) }),
                in: setting.range, step: setting.step)
         Text(format(setting.clamped(value)))

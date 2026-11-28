@@ -1,7 +1,7 @@
 import XCTest
 @testable import NovelEditor
 
-/// 종료 때 저장이 늦으면 알림을 띄울지 정하는 기다림. 늦어도 저장 작업은 취소하지 않는다.
+/// The wait that decides whether to show the alert when saving is slow at quit. Even when late, the save task isn't cancelled.
 @MainActor
 final class QuitWaitTests: XCTestCase {
   func testQuickWorkFinishesWithinLimit() async {

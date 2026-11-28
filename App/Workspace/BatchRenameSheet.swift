@@ -1,8 +1,8 @@
 import NovelCore
 import SwiftUI
 
-/// 여러 회차 이름 변경 창(PLAN 15장). 세 방식 중 하나로 새 이름을 정하고, 아래에 `옛 이름 → 새 이름`을 보여 준다.
-/// 미리 보기와 적용은 같은 규칙(`EpisodeTitleBatch`)을 쓴다. 적용은 작업 공간이 그때의 목록 제목으로 다시 계산한다.
+/// Batch episode rename sheet (PLAN ch.15). Pick new names with one of three methods; `옛 이름 → 새 이름` is shown below.
+/// Preview and apply share the same rule (`EpisodeTitleBatch`). On apply the workspace recomputes from the list titles at that time.
 struct BatchRenameSheet: View {
   struct Request: Identifiable {
     let id = UUID()
@@ -72,8 +72,8 @@ struct BatchRenameSheet: View {
         Spacer()
         Button("취소", role: .cancel, action: onCancel)
           .keyboardShortcut(.cancelAction)
-        // 한글 조합 중에 엔터를 누르면 조합이 끝나 칸에 마지막 글자가 들어간 뒤에 적용한다.
-        // 창이 닫히기 전에 엔터가 한 번 더 눌리면 규칙이 두 번 적용되므로 한 번만 받는다.
+        // Return during Hangul composition applies after composition ends and the last character enters the field.
+        // Return pressed again before the sheet closes would apply the rule twice, so it's accepted only once.
         Button("이름 바꾸기") {
           guard !isApplying else { return }
           isApplying = true

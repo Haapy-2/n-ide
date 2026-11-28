@@ -1,8 +1,8 @@
 import Foundation
 
-/// 앱 전체가 함께 보는 단축키 설정. 바꾸면 UserDefaults에 남기고 메뉴가 바로 다시 그려진다.
-/// 메뉴·설정 창·스냅샷 판이 같은 값 하나를 읽고, 쓰기는 여기 한 곳으로 모은다.
-/// 메뉴 항목은 메뉴를 열거나 단축키를 누를 때 SwiftUI가 다시 만든다(바로 바뀌지 않아도 정상).
+/// App-wide shared shortcut settings. Changes go to UserDefaults and menus redraw immediately.
+/// Menus, Settings and the snapshot panel read one value; writes are funneled here.
+/// SwiftUI rebuilds menu items when a menu opens or a shortcut is pressed (not updating instantly is normal).
 @Observable
 final class ShortcutStore {
   static let shared = ShortcutStore()

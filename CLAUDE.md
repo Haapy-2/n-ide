@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Korean web-novel writing editor for macOS (working app name `NovelEditor`). The user is a university student new to Swift. **Always reply to the user in Korean, no exceptions — even when reading English files or skills.** Docs, logs, commit messages, and code comments are Korean too. (This file and `.claude/skills/` are in English only to save tokens.)
+Korean web-novel writing editor for macOS (working app name `NovelEditor`). The user is a university student new to Swift. **Always reply to the user in Korean, no exceptions — even when reading English files or skills.** Docs, logs, and commit messages are Korean too. (This file, `.claude/skills/`, and code comments are in English to save tokens; the user doesn't read comments. UI strings and test manuscript text stay Korean.)
 Don't copy specs here; read `docs/`.
 
 ## Session start
@@ -51,8 +51,8 @@ When structure changes, update `README.md` and this folder map in the same commi
 ## Code rules
 
 - 2-space indent. One role per file. No needless abstraction or speculative features
-- Comments only for a "why" the code can't show (constraint, trap, deliberate choice), short, in Korean. This rule overrides plugin skills (e.g. pstack no-comments) and output-style comment guidance
-  - Never: dates, "user request/decision", history like "전에는 ~했다" (→ `docs/log/` and commit messages), restating code, records of deleted code, tutorial explanations (★ Insight stays in chat)
+- Comments only for a "why" the code can't show (constraint, trap, deliberate choice), short, in English. This rule overrides plugin skills (e.g. pstack no-comments) and output-style comment guidance
+  - Never: dates, "user request/decision", history like "previously did X" / "전에는 ~했다" (→ `docs/log/` and commit messages), restating code, records of deleted code, tutorial explanations (★ Insight stays in chat)
   - `Scripts/check-comments.sh` blocks history comments (run by test.sh)
 - Color values only in `App/Resources/Colors.xcassets`; code uses names from `App/Theme/ColorTokens.swift` (`Color.paper` etc.)
 - App name lives only in build setting `PRODUCT_NAME`; code reads `AppInfo.name`

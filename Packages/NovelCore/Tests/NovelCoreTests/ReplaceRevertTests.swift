@@ -3,7 +3,7 @@ import Testing
 @testable import NovelCore
 
 struct ReplaceRevertTests {
-  /// 바꾸기 전 글에 바꾸기를 하고, `edit`으로 작가가 그 뒤에 고친 글을 만든 다음 되돌린다.
+  /// Apply the replace to the pre-replace text, build the writer's later edits with `edit`, then revert.
   private func revert(
     _ before: String, _ query: String = "민준", _ replacement: String = "도윤",
     edit: (String) -> String = { $0 }
@@ -22,7 +22,7 @@ struct ReplaceRevertTests {
     #expect(outcome.kept == 0)
   }
 
-  /// 바꾸기 전부터 있던 바꿀 말(`도윤`)은 바꾼 자리가 아니라 그대로 둔다.
+  /// Occurrences of the replacement (`도윤`) that existed before the replace aren't replaced spots, so they stay.
   @Test func wordThatWasAlreadyThereStays() throws {
     let outcome = try revert("도윤과 민준은 친구다.")
 
@@ -30,7 +30,7 @@ struct ReplaceRevertTests {
     #expect(outcome.applied.count == 1)
   }
 
-  /// 바꾼 뒤에 쓴 글(새로 쓴 `도윤` 포함)은 남기고 바꾼 자리만 돌린다.
+  /// Text written after the replace (including a newly written `도윤`) stays; only replaced spots revert.
   @Test func textWrittenAfterwardsStays() throws {
     let outcome = try revert("민준은 웃었다.\n민준이 왔다.") { after in
       after.replacingOccurrences(of: "웃었다.", with: "웃었다. 도윤은 늘 그랬다.") + "\n\n새 문단, 도윤이 말했다."
@@ -41,7 +41,7 @@ struct ReplaceRevertTests {
     #expect(outcome.kept == 0)
   }
 
-  /// 열린 회차는 편집기가 `changes`만 고친다. 그 결과가 `text`와 같아야 한다.
+  /// For the open episode the editor edits only `changes`. The result must equal `text`.
   @Test func changesAreInCurrentTextCoordinates() throws {
     let before = "민준".decomposedStringWithCanonicalMapping + "이 왔다.\nSWORD와 sword"
     let after = TextReplace.replacing("sword", with: "검", in: before, caseSensitive: false)!.text
@@ -65,14 +65,14 @@ struct ReplaceRevertTests {
     #expect(outcome.kept == 1)
   }
 
-  /// 바꾼 말 바로 뒤에 조사를 붙인 것은 바꾼 자리를 고친 것이 아니다.
+  /// Adding a particle right after the replaced word doesn't count as editing the replaced spot.
   @Test func particleAddedRightAfterStillReverts() throws {
     let outcome = try revert("민준 왔다.") { $0.replacingOccurrences(of: "도윤 ", with: "도윤이 ") }
 
     #expect(outcome.text == "민준이 왔다.")
   }
 
-  /// 바꿀 말이 원래 말의 일부일 때(`민준이` → `민준`), 작가가 `이`를 다시 붙였으면 `민준이이`가 되지 않게 건너뛴다.
+  /// When the replacement is part of the original (`민준이` → `민준`) and the writer re-added `이`, skip so it doesn't become `민준이이`.
   @Test func doesNotDoubleWhenReplacementIsPartOfOriginal() throws {
     let outcome = try revert("민준이 왔다. 민준이 웃었다.", "민준이", "민준") { after in
       after.replacingOccurrences(of: "민준 웃었다", with: "민준이 웃었다")
@@ -98,7 +98,7 @@ struct ReplaceRevertTests {
     #expect(try revert(before, "민준", "").text == before)
   }
 
-  /// 지운 자리에 작가가 글을 써 넣었으면 그 자리는 되살리지 않는다(어디에 넣을지 알 수 없다).
+  /// If the writer typed text into a deleted spot, that spot isn't restored (no way to know where to insert).
   @Test func deletionPlaceWrittenOverIsKept() throws {
     let outcome = try revert("아, 민준아.", "민준", "") { $0.replacingOccurrences(of: "아, 아.", with: "아, 그래 아.") }
 
@@ -106,7 +106,7 @@ struct ReplaceRevertTests {
     #expect(outcome.kept == 1)
   }
 
-  /// 자모로 풀어 쓴 원래 말(NFD)은 그 모양 그대로 돌아온다.
+  /// An original word written decomposed (NFD) comes back in that same form.
   @Test func decomposedOriginalComesBackAsItWas() throws {
     let before = "민준".decomposedStringWithCanonicalMapping + "이 왔다. 😀민준😀"
     let outcome = try revert(before)
@@ -125,7 +125,7 @@ struct ReplaceRevertTests {
       return lines.joined(separator: "\n")
     }
 
-    // 지운 문단의 한 곳만 못 따라간다. 문장 앞을 고쳐 쓴 문단도 이름 자리는 그대로라 되돌린다.
+    // Only one spot in a deleted paragraph can't be tracked. A paragraph with its sentence start rewritten still has the name spot intact, so it reverts.
     #expect(outcome.applied.count == 29)
     #expect(outcome.kept == 1)
     #expect(outcome.text.contains("새로 쓴 문단\n"))
@@ -136,11 +136,11 @@ struct ReplaceRevertTests {
   @Test func redoReplacesOnlyWhatWasReverted() throws {
     let before = "민준이 왔다. 민준은 웃었다."
     let after = TextReplace.replacing("민준", with: "도윤", in: before, caseSensitive: false)!.text
-    // 두 번째 자리를 고친 뒤 되돌림 → 첫 자리만 되돌아간다.
+    // After editing the second spot, revert → only the first spot reverts.
     let edited = after.replacingOccurrences(of: "도윤은", with: "도현은")
     let reverted = try ReplaceRevert.reverting(
       "민준", with: "도윤", caseSensitive: false, before: before, current: edited)
-    // 되돌린 뒤 글을 더 쓰고 다시 바꾼다.
+    // Write more after reverting, then redo the replace.
     let written = reverted.text + " 끝."
     let redone = try ReplaceRevert.redoing(
       "민준", with: "도윤", caseSensitive: false, before: before, revertedFrom: edited, current: written)
@@ -160,7 +160,7 @@ struct ReplaceRevertTests {
     #expect(tracking.track(NSRange(location: 4, length: 0)) == NSRange(location: 5, length: 0))
   }
 
-  /// 크게 고쳐 쓴 문단 묶음은 글자 단위로 비교하지 않고, 그 안의 자리를 못 따라간 것으로 본다(시간이 길이 × 바뀐 양으로 늘어서).
+  /// Heavily rewritten paragraph groups aren't compared by character; spots inside count as untrackable (time grows with length × amount changed).
   @Test func hugeRewrittenBlockIsNotComparedByCharacter() throws {
     let long = String(repeating: "가", count: TextTracking.characterLimit)
     let tracking = try TextTracking(old: "앞\n" + long + "\n뒤", new: "앞\n나" + long + "나\n뒤")
@@ -169,7 +169,7 @@ struct ReplaceRevertTests {
     #expect(tracking.track(NSRange(location: 0, length: 1)) == NSRange(location: 0, length: 1))
   }
 
-  /// 줄바꿈 없는 긴 문단 하나에서 한 곳만 고쳐도 나머지 자리는 따라간다.
+  /// Even with one edit in a single long paragraph without newlines, the other spots are tracked.
   @Test func longSingleParagraphWithOneEditStillTracks() throws {
     let before = String(repeating: "민준이 걸었다. ", count: 600)
     let outcome = try revert(before) { after in

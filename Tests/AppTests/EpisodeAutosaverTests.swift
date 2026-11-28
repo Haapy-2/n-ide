@@ -3,7 +3,7 @@ import NovelCore
 import XCTest
 @testable import NovelEditor
 
-/// 자동 저장. 원고 유실과 바로 이어지므로 실패 경우까지 확인한다.
+/// Autosave. Directly tied to manuscript loss, so failure cases are checked too.
 @MainActor
 final class EpisodeAutosaverTests: XCTestCase {
   private var folder: URL!
@@ -90,7 +90,7 @@ final class EpisodeAutosaverTests: XCTestCase {
     XCTAssertTrue(backup.entries(for: [episode]).isEmpty, "저장되면 백업을 지운다")
   }
 
-  /// 백업마저 쓰지 못했으면 "백업해 두었어요"라고 하면 안 된다(종료 안내·상태 줄). 실제로 써진 뒤에만 백업됐다고 본다.
+  /// If even the backup couldn't be written, it must not say "백업해 두었어요" (quit notice, status bar). Backed up only once actually written.
   func testBackupThatFailsToWriteIsNotReportedAsBackedUp() async throws {
     let backupFolder = folder.appending(path: "Backups")
     try FileManager.default.createDirectory(at: backupFolder, withIntermediateDirectories: true)
@@ -174,8 +174,8 @@ final class EpisodeAutosaverTests: XCTestCase {
     XCTAssertEqual(try store.readEpisode(episode), "첫 문장 지켜야 할 문장")
   }
 
-  /// 한글 조합 중에 저장해도 조합이 끊기지 않는다(텍스트 저장소를 읽기만 한다).
-  /// 되돌리기 알림이 없으면 입력해도 알림 값을 건드리지 않는다. 건드리면 키마다 상태 줄이 다시 그려진다.
+  /// Saving during Hangul composition doesn't break it (text storage is only read).
+  /// Without a restore notice, typing doesn't touch the notice value. Touching it would redraw the status bar on every keystroke.
   func testTypingWithoutRestoreNoticeLeavesNoticeObserversAlone() {
     nonisolated(unsafe) var notified = false
     withObservationTracking {
@@ -200,7 +200,7 @@ final class EpisodeAutosaverTests: XCTestCase {
     XCTAssertEqual(textView.markedRange().length, 1)
   }
 
-  /// 회차를 떠나면 저장을 기다리지 않고 바로 돌아오지만, 곧바로 다시 열어도 방금 쓴 본문이 보인다.
+  /// Leaving an episode returns immediately without waiting for the save, yet reopening right away still shows the just-written body.
   func testQuickReturnShowsLatestTextBeforeSaveFinishes() async throws {
     type(" 방금 쓴 문장")
 
@@ -212,7 +212,7 @@ final class EpisodeAutosaverTests: XCTestCase {
     XCTAssertNil(autosaver.pendingText(for: episode))
   }
 
-  /// 떠난 회차의 본문 기준을 계속 들고 있지 않는다(훑어본 회차만큼 메모리가 늘지 않게). 저장이 끝난 뒤에 놓는다.
+  /// The left episode's body baseline isn't held on to (so memory doesn't grow with browsed episodes). Released after the save finishes.
   func testReleasesBaselineAfterLeaving() async throws {
     let version = try store.readEpisodeVersion(episode)
     autosaver.begin(episode: episode, version: version)
@@ -224,7 +224,7 @@ final class EpisodeAutosaverTests: XCTestCase {
     XCTAssertFalse(autosaver.holdsBaseline(for: episode))
     XCTAssertEqual(try store.readEpisode(episode), "첫 문장 떠나기 전")
 
-    // 다시 열어 고치면 평소처럼 저장된다.
+    // Reopening and editing saves as usual.
     let again = try store.readEpisodeVersion(episode)
     textView.replaceAllText(with: again.text)
     autosaver.begin(episode: episode, version: again)
@@ -233,7 +233,7 @@ final class EpisodeAutosaverTests: XCTestCase {
     XCTAssertEqual(try store.readEpisode(episode), "첫 문장 떠나기 전 다시")
   }
 
-  /// 저장에 실패해 메모리에 남은 회차는 떠나도 기준을 놓지 않는다(다시 저장할 때 외부 변경을 확인해야 한다).
+  /// An episode left in memory after a failed save keeps its baseline even when left (external changes must be checked when re-saving).
   func testKeepsBaselineWhileUnsaved() async throws {
     let version = try store.readEpisodeVersion(episode)
     autosaver.begin(episode: episode, version: version)
@@ -247,8 +247,8 @@ final class EpisodeAutosaverTests: XCTestCase {
     XCTAssertEqual(autosaver.pendingText(for: episode), "첫 문장 못 쓴 문장")
   }
 
-  /// 저장이 실패한 뒤 더 새 본문을 쓰는 중에 돌아오면, 옛 실패 본문이 아니라 더 새 본문을 보여 준다.
-  /// 옛 본문을 보여 주면 이어 쓴 글이 그사이 쓴 글("둘")을 덮어 조용히 사라진다.
+  /// Returning while a newer body is being written after a failed save shows the newer body, not the old failed one.
+  /// Showing the old body would let continued typing overwrite what was written in between ("둘"), silently losing it.
   func testQuickReturnAfterFailedSaveShowsNewestText() async throws {
     let episodes = store.layout.episodesFolder.path(percentEncoded: false)
     try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: episodes)
@@ -256,12 +256,12 @@ final class EpisodeAutosaverTests: XCTestCase {
     await autosaver.flush()
     XCTAssertEqual(autosaver.pendingText(for: episode), "첫 문장 하나", "실패한 본문은 메모리에")
 
-    // 디스크가 돌아온 뒤 더 쓰고 떠난다. 새 저장은 시작만 했고 아직 안 끝났다.
+    // After the disk comes back, write more and leave. The new save has only started and isn't finished.
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: episodes)
     type(" 둘")
     autosaver.leaveEpisode()
 
-    // 바로 돌아와 이어 쓴다(회차 전환과 같은 순서).
+    // Come right back and keep writing (same order as an episode switch).
     let back = try XCTUnwrap(autosaver.pendingText(for: episode))
     XCTAssertEqual(back, "첫 문장 하나 둘")
     textView.replaceAllText(with: back)
@@ -274,8 +274,8 @@ final class EpisodeAutosaverTests: XCTestCase {
     XCTAssertEqual(autosaver.status, .idle)
   }
 
-  /// 창이 비활성화되거나 닫힐 때는 본문을 그 자리에서 복사해 저장을 시작한다.
-  /// `Task` 안으로 미루면 창 닫기 처리가 끝난 뒤에 돌아, 그사이 편집기가 사라지면 마지막 입력을 못 읽는다.
+  /// On window deactivation or close, the body is copied in place and saving starts.
+  /// Deferring into a `Task` would run after window-close handling; if the editor vanished meanwhile, the last input couldn't be read.
   func testStartSaveCopiesTextRightAway() async throws {
     type(" 닫기 직전")
 
@@ -286,9 +286,9 @@ final class EpisodeAutosaverTests: XCTestCase {
     XCTAssertEqual(try store.readEpisode(episode), "첫 문장 닫기 직전")
   }
 
-  // MARK: - 다른 회차의 저장 실패
+  // MARK: - Save failure in another episode
 
-  /// 이 회차 파일 자리에 비어 있지 않은 폴더를 둬서, 이 회차 저장만 실패하게 한다(폴더 권한을 막으면 모든 회차가 실패한다).
+  /// Put a non-empty folder where this episode's file goes so only this episode's save fails (blocking folder permissions would fail every episode).
   private func blockSaves(of id: EpisodeID) throws -> URL {
     let file = store.layout.episodeFile(id)
     try FileManager.default.removeItem(at: file)
@@ -297,7 +297,7 @@ final class EpisodeAutosaverTests: XCTestCase {
     return file
   }
 
-  /// 첫 회차 저장을 실패시킨 채 둘째 회차로 옮긴다. 첫 회차 본문은 메모리에만 있다.
+  /// Move to the second episode with the first episode's save failing. The first body exists only in memory.
   private func failFirstThenOpenSecond() async throws -> (blocked: URL, second: EpisodeID) {
     let second = EpisodeID.make()
     try store.writeEpisode("둘째 회차", id: second)
@@ -306,15 +306,15 @@ final class EpisodeAutosaverTests: XCTestCase {
     await autosaver.flush()
     guard case .failed = autosaver.status else { throw XCTSkip("저장 실패를 만들지 못했다: \(autosaver.status)") }
     autosaver.leaveEpisode()
-    // 떠날 때 시작한 저장(역시 실패)이 다 끝나길 기다린다. 안 기다리면 그 재시도가 막힘이 풀린 뒤 성공해 버려 이 상황이 재현되지 않는다.
+    // Wait for the save started on leave (also failing) to finish. Otherwise its retry succeeds after unblocking and the situation isn't reproduced.
     await autosaver.flush()
     textView.replaceAllText(with: "둘째 회차")
     autosaver.begin(episode: second)
     return (blocked, second)
   }
 
-  /// 창 닫기·휴지통·⌘S의 `flush`는 열린 회차만이 아니라 저장에 실패해 메모리에 남은 다른 회차도 다시 저장한다.
-  /// 열린 회차만 저장하면 다른 회차 본문은 창을 닫을 때 조용히 사라진다.
+  /// `flush` from window close, trash and ⌘S re-saves not only the open episode but also other episodes left in memory after failed saves.
+  /// Saving only the open episode would silently lose other episodes' bodies when the window closes.
   func testFlushRetriesFailedSaveOfAnotherEpisode() async throws {
     let (blocked, _) = try await failFirstThenOpenSecond()
     try FileManager.default.removeItem(at: blocked)
@@ -326,7 +326,7 @@ final class EpisodeAutosaverTests: XCTestCase {
     XCTAssertEqual(autosaver.status, .idle)
   }
 
-  /// 다른 회차가 저장되어도 앞 회차의 실패 표시는 남는다("저장 중"에 멈춰 실패가 가려지면 안 된다).
+  /// Even when another episode saves, the earlier episode's failure indicator remains (it must not hide behind a stuck "saving").
   func testFailureStaysVisibleWhileAnotherEpisodeSaves() async throws {
     let (_, second) = try await failFirstThenOpenSecond()
     type(" 둘째에 쓴 문장")
@@ -338,7 +338,7 @@ final class EpisodeAutosaverTests: XCTestCase {
     XCTAssertTrue(autosaver.hasUnsavedChanges)
   }
 
-  /// 끝내 저장하지 못한 원고를 다른 곳으로 내보낼 수 있게 제목과 본문을 내준다. 내보낸 뒤에는 남은 일이 없다.
+  /// Hands over titles and bodies so manuscripts that ultimately couldn't be saved can be exported elsewhere. Nothing remains after export.
   func testUnsavedManuscriptsCanBeRescued() async throws {
     _ = try await failFirstThenOpenSecond()
     autosaver.episodeTitle = { [episode] id in id == episode ? "1화" : "?" }

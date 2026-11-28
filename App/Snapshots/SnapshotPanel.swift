@@ -1,13 +1,13 @@
 import NovelCore
 import SwiftUI
 
-/// 작업 공간 위에 뜨는 스냅샷 판(⇧⌘S, PLAN 10장 5번, 참고 이미지 11-ref-floating-panel.png).
-/// 뒤를 살짝 어둡게 덮고, 판 바깥을 누르거나 Esc·✕로 닫는다. 왼쪽 스냅샷 목록, 오른쪽 과거↔현재 비교.
-/// 크기는 창 크기를 따라간다(고정 값 없이 실행 중에 잰 창 크기의 비율).
+/// Snapshot panel floating over the workspace (⇧⌘S, PLAN ch.10 #5, reference 11-ref-floating-panel.png).
+/// Lightly dims the background; closes on a click outside, Esc or ✕. Snapshot list on the left, past↔present diff on the right.
+/// Size follows the window (a ratio of the window size measured at runtime, no fixed values).
 struct SnapshotPanel: View {
   let browser: SnapshotBrowser
   let title: String
-  /// 외부 변경 충돌을 아직 고르지 않았으면 되돌리기를 막는다(PLAN 10장 6번).
+  /// Restore is blocked while an external-change conflict is unresolved (PLAN ch.10 #6).
   var hasConflict = false
   let onClose: () -> Void
   var onRestore: () -> Void = {}
@@ -26,8 +26,8 @@ struct SnapshotPanel: View {
       }
       .frame(width: proxy.size.width, height: proxy.size.height)
     }
-    // 판을 여는 동안 편집기는 초점을 내려놓아, ⌘Z가 창의 기록(사이드바 회차 작업)까지 올라가 확인 없이 되돌렸다.
-    // 판이 초점을 받아야 아래 명령이 판에 먼저 온다(초점이 창에만 있으면 onCommand까지 오지 않는다). 판이 떠 있는 동안엔 아무것도 하지 않는다.
+    // While the panel is open the editor releases focus, so ⌘Z climbed to the window's history (sidebar episode actions) and undid without confirmation.
+    // The panel must take focus so these commands reach it first (with focus only on the window, onCommand isn't reached). Nothing happens while the panel is up.
     .focusable()
     .focusEffectDisabled()
     .focused($hasFocus)
@@ -64,7 +64,7 @@ struct SnapshotPanel: View {
         .buttonStyle(.plain)
         .help("닫기 (Esc)")
         .accessibilityLabel("닫기")
-        // 메모를 고치는 중에는 Esc가 메모 고치기만 그만두게 한다.
+        // While editing a memo, Esc only cancels the memo edit.
         .keyboardShortcut(editingMemoID == nil ? .cancelAction : nil)
       }
       .padding(.leading, 16)
@@ -103,7 +103,7 @@ struct SnapshotPanel: View {
     .background(Color.paper)
     .clipShape(RoundedRectangle(cornerRadius: 12))
     .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.rule))
-    // 판 안의 빈 곳을 눌러도 뒤 막의 "누르면 닫기"가 받지 않게, 판 전체를 누를 수 있는 곳으로 둔다.
+    // The whole panel is made clickable so clicks on its blank areas aren't taken by the backdrop's "click to close".
     .contentShape(Rectangle())
   }
 

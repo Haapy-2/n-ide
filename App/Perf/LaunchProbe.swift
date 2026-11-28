@@ -1,10 +1,10 @@
 import Darwin
 import Foundation
 
-/// 성능 측정용 갈고리 (Scripts/perf.sh 전용). 환경 변수가 없으면 아무 일도 하지 않는다.
-/// - NOVEL_PERF_OPEN=<작품 경로>: 작품 선택 창 대신 그 작품을 바로 연다.
-/// - NOVEL_PERF_LAUNCH=1: 편집기가 처음 키 입력을 받을 수 있게 되면 프로세스 시작부터 걸린 시간을 찍고 끝낸다.
-/// - NOVEL_PERF_MEASURE=1: 측정 실행. 이 맥에 남는 기억(회차 자리)을 읽지도 쓰지도 않아, 지난번 측정이 다음 측정을 바꾸지 않게 한다.
+/// Performance measurement hooks (Scripts/perf.sh only). Do nothing without the environment variables.
+/// - NOVEL_PERF_OPEN=<project path>: open that project directly instead of the picker.
+/// - NOVEL_PERF_LAUNCH=1: once the editor can accept its first keystroke, print the time since process start and exit.
+/// - NOVEL_PERF_MEASURE=1: measurement run. Neither reads nor writes this Mac's remembered state (episode positions), so one run can't affect the next.
 enum LaunchProbe {
   static var isMeasuring: Bool {
     ProcessInfo.processInfo.environment["NOVEL_PERF_MEASURE"] == "1"
@@ -15,9 +15,9 @@ enum LaunchProbe {
     ProcessInfo.processInfo.environment["NOVEL_PERF_OPEN"].map { URL(filePath: $0, directoryHint: .isDirectory) }
   }
 
-  /// 메모리 측정 중이면(NOVEL_PERF_OPEN만 있고 NOVEL_PERF_LAUNCH는 없을 때) 작업 공간 창의 본문 영역 크기를 이 값으로 고정한다.
-  /// 창을 그리는 그래픽 버퍼가 창 넓이에 비례해서, macOS가 기억해 둔 창 크기에 따라 메모리 값이 90~112MB로 흔들렸다.
-  /// 실행 시간 측정에서는 쓰지 않는다: 창 크기를 바꾸면 화면을 한 번 더 배치해서 실행 시간이 늘어난다.
+  /// During memory measurement (NOVEL_PERF_OPEN without NOVEL_PERF_LAUNCH), fix the workspace window's content size to this value.
+  /// The graphics buffer drawing the window scales with window area, so memory swung 90–112 MB depending on the window size macOS remembered.
+  /// Not used for launch timing: resizing the window triggers another layout pass and lengthens launch time.
   static var windowContentSize: CGSize? {
     guard projectToOpen != nil, ProcessInfo.processInfo.environment["NOVEL_PERF_LAUNCH"] != "1" else { return nil }
     return CGSize(width: 1100, height: 760)
@@ -34,7 +34,7 @@ enum LaunchProbe {
     exit(0)
   }
 
-  /// 커널이 기록한 이 프로세스의 시작 시각.
+  /// This process's start time as recorded by the kernel.
   private static func processStartDate() -> Date {
     var info = kinfo_proc()
     var size = MemoryLayout<kinfo_proc>.size

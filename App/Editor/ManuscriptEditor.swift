@@ -2,14 +2,14 @@ import AppKit
 import NovelCore
 import SwiftUI
 
-/// SwiftUI에 원고 편집기(ManuscriptTextView)를 붙이는 다리.
+/// Bridge attaching the manuscript editor (ManuscriptTextView) to SwiftUI.
 ///
-/// 한글 입력 보호 규칙(SPEC 9장):
-/// - 본문의 원본은 NSTextView의 텍스트 저장소다. SwiftUI 상태로 본문을 흘려보내지 않는다.
-/// - `updateNSView`는 SwiftUI가 아무 때나 부르므로 여기서 텍스트를 다시 넣지 않는다.
-///   본문은 회차가 바뀌었을 때(`content.token`이 바뀔 때) 단 한 번만 넣는다.
+/// Hangul input protection rules (SPEC ch.9):
+/// - The source of truth for the body is NSTextView's text storage. The body is never piped through SwiftUI state.
+/// - SwiftUI calls `updateNSView` at arbitrary times, so text is never re-set here.
+///   The body is set exactly once, when the episode changes (`content.token` changes).
 struct ManuscriptEditor: NSViewRepresentable {
-  /// 화면에 올릴 회차 본문. token이 바뀔 때만 편집기에 들어간다.
+  /// Episode body to show. Enters the editor only when token changes.
   struct Content: Equatable {
     let token: UUID
     let episodeID: EpisodeID
@@ -22,20 +22,20 @@ struct ManuscriptEditor: NSViewRepresentable {
   var numbersBlankLines = true
   var multiCursorEnabled = true
   var caret = CaretStyle()
-  /// 검색 결과로 가기. 같은 회차의 본문이 올라간 뒤 token마다 한 번만 한다.
+  /// Go to a search result. Done once per token, after that episode's body is loaded.
   var reveal: TextReveal?
-  /// 사용자가 글을 고칠 때마다 (자동 저장용).
+  /// On every user edit (for autosave).
   var onTextChange: () -> Void = {}
-  /// 창이 비활성화될 때 (바로 저장용).
+  /// On window deactivation (for immediate save).
   var onFocusLost: () -> Void = {}
-  /// 창이 다시 활성화될 때 (외부 변경 확인용).
+  /// On window reactivation (for the external-change check).
   var onFocusGained: () -> Void = {}
-  /// 편집기가 만들어졌을 때 한 번.
+  /// Once, when the editor is created.
   var onReady: (ManuscriptTextView) -> Void = { _ in }
-  /// 작가에게 짧게 알릴 말(토스트). 여러 커서 한도에 닿았을 때.
+  /// A short message for the writer (toast). When the multi-cursor limit is hit.
   var onNotice: (String) -> Void = { _ in }
-  /// 회차 본문을 편집기에 넣은 뒤 한 번(바꾼 회차 목록에서 그 회차의 스냅샷 판을 열 때).
-  /// 화면 갱신 중에 상태를 바꾸지 않도록 한 차례 뒤에 부른다.
+  /// Once after an episode body is loaded into the editor (when opening that episode's snapshot panel from the changed-episodes list).
+  /// Called one turn later so state isn't changed during a view update.
   var onShown: (EpisodeID) -> Void = { _ in }
 
   func makeNSView(context: Context) -> NSScrollView {
@@ -67,12 +67,12 @@ struct ManuscriptEditor: NSViewRepresentable {
   func updateNSView(_ scrollView: NSScrollView, context: Context) {
     context.coordinator.parent = self
     guard let textView = context.coordinator.textView else { return }
-    // 조합 중이면 편집기가 본문에 입히는 것을 조합이 끝날 때까지 미룬다(ManuscriptTextView.applyStyle).
+    // During composition, the editor defers applying styles to the body until composition ends (ManuscriptTextView.applyStyle).
     if textView.style != style { textView.style = style }
-    // 그림만 바뀌어 조합 중에도 바로 넣어도 된다.
+    // Only drawing changes, so it can apply immediately even during composition.
     textView.showsLineNumbers = showsLineNumbers
     textView.numbersBlankLines = numbersBlankLines
-    // 끄면 여러 커서를 끝낸다. 조합 중이면 끝내기가 먼저 확정한다(`endMultiCursor`).
+    // Turning it off ends multi-cursor. During composition the ending commits it first (`endMultiCursor`).
     if textView.multiCursorEnabled != multiCursorEnabled { textView.multiCursorEnabled = multiCursorEnabled }
     if textView.caret != caret { textView.caret = caret }
     if context.coordinator.appliedToken != content.token {
@@ -87,8 +87,8 @@ struct ManuscriptEditor: NSViewRepresentable {
     textView.reveal(reveal)
   }
 
-  /// 떠나는 회차의 자리를 기억하고, 새 회차는 기억한 자리로 연다(PLAN 17장 3번). 화면 위치는 창에 붙어 폭이 잡힌 뒤
-  /// 한 차례 뒤에 맞춘다(처음 만들 때는 아직 폭이 없어 줄 위치가 다르다). 검색 결과로 가기가 있으면 그것이 이긴다.
+  /// Remember the left episode's position and open the new one at its remembered position (PLAN ch.17 #3). Scroll is restored one turn later,
+  /// after the view is in a window with a width (at creation there's no width yet, so line positions differ). A search-result jump wins.
   private func apply(_ content: Content, to textView: ManuscriptTextView, coordinator: Coordinator) {
     coordinator.rememberPlace()
     coordinator.appliedToken = content.token
@@ -99,7 +99,7 @@ struct ManuscriptEditor: NSViewRepresentable {
       textView.restoreViewState(place)
       let token = content.token
       let restored = textView.selectedRange()
-      // 그사이 첫 키가 먼저 왔으면(조합 중이거나 커서가 움직였으면) 옮기지 않는다: 조합 중 선택을 바꾸면 한글이 깨진다.
+      // If the first key arrived meanwhile (composing or caret moved), don't move: changing the selection during composition breaks Hangul.
       DispatchQueue.main.async { [weak textView, weak coordinator] in
         guard let textView, let coordinator, coordinator.appliedToken == token,
           !textView.hasMarkedText(), textView.selectedRange() == restored
@@ -109,7 +109,7 @@ struct ManuscriptEditor: NSViewRepresentable {
       }
     }
     coordinator.rememberPlace()
-    // 이미 창에 붙어 있으면(회차 전환) 지금 초점을 준다. 아직이면(처음 만들 때) viewDidMoveToWindow가 맡는다.
+    // If already in a window (episode switch), give focus now. If not yet (at creation), viewDidMoveToWindow handles it.
     if let window = textView.window { coordinator.attach(to: window) }
     let shown = onShown
     let id = content.episodeID
@@ -131,7 +131,7 @@ struct ManuscriptEditor: NSViewRepresentable {
 
     override init() {
       super.init()
-      // 앱을 끌 때는 창이 비활성화되지 않을 수 있어 따로 받는다.
+      // At quit the window may not deactivate, so this is received separately.
       terminateObserver = NotificationCenter.default.addObserver(
         forName: NSApplication.willTerminateNotification, object: nil, queue: .main
       ) { [weak self] _ in
@@ -139,7 +139,7 @@ struct ManuscriptEditor: NSViewRepresentable {
       }
     }
 
-    /// 지금 회차의 커서와 화면 위치를 이 맥에 기억한다.
+    /// Remember the current episode's caret and scroll position on this Mac.
     func rememberPlace() {
       guard let episodeID, let textView else { return }
       EpisodeViewStates.shared.record(textView.viewState(), for: episodeID)
@@ -148,13 +148,13 @@ struct ManuscriptEditor: NSViewRepresentable {
     private var resignObserver: NSObjectProtocol?
     private var becomeKeyObserver: NSObjectProtocol?
 
-    // 프로그램이 본문을 바꿀 때(회차 전환)는 불리지 않고, 사용자가 고칠 때만 불린다.
+    // Not called when the program replaces the body (episode switch), only on user edits.
     func textDidChange(_ notification: Notification) {
       parent?.onTextChange()
     }
 
-    /// 편집기가 창에 있을 때: 창 감시를 걸고, 아무도 키보드 초점을 갖고 있지 않으면 편집기가 받는다.
-    /// 사이드바처럼 다른 곳이 초점을 갖고 있으면 빼앗지 않는다(사이드바에서 ↑↓·↩·⌘⌫를 이어 쓰게).
+    /// When the editor is in a window: start window observation, and take keyboard focus if nobody has it.
+    /// Don't steal focus from elsewhere, like the sidebar (so ↑↓·↩·⌘⌫ keep working there).
     func attach(to window: NSWindow) {
       guard let textView else { return }
       if observedWindow !== window {
@@ -164,7 +164,7 @@ struct ManuscriptEditor: NSViewRepresentable {
       if window.firstResponder == nil || window.firstResponder === window {
         window.makeFirstResponder(textView)
       }
-      // 측정 신호는 한 차례 뒤에 찍는다. 창에 붙는 순간은 아직 화면을 그리기 전이라, 바로 찍으면 실행 시간이 실제보다 짧게 나온다.
+      // The measurement signal fires one turn later. At window attach nothing is drawn yet, so firing immediately would understate launch time.
       if window.firstResponder === textView { DispatchQueue.main.async { LaunchProbe.editorReady() } }
     }
 
@@ -174,7 +174,7 @@ struct ManuscriptEditor: NSViewRepresentable {
       if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
       if let becomeKeyObserver { NotificationCenter.default.removeObserver(becomeKeyObserver) }
       observedWindow = window
-      // 다른 앱에서 돌아오면 이 창이 다시 키 창이 된다. 그때 회차 파일이 앱 밖에서 바뀌었는지 본다.
+      // Returning from another app makes this the key window again. Then check whether the episode file changed outside the app.
       becomeKeyObserver = NotificationCenter.default.addObserver(
         forName: NSWindow.didBecomeKeyNotification, object: window, queue: .main
       ) { [weak self] _ in

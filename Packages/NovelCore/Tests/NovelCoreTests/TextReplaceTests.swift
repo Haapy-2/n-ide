@@ -10,7 +10,7 @@ struct TextReplaceTests {
     #expect(result?.count == 3)
   }
 
-  /// 찾은 자리를 차례로 바꾸면 `replacing`과 같은 본문이 된다(편집기가 찾은 자리만 바꿀 때와 파일에 쓸 때가 같게).
+  /// Replacing matches in order gives the same body as `replacing` (editor replacing only matches agrees with writing to file).
   @Test func rangesMatchWhatReplacingChanges() {
     let text = "Sword 민준 " + "민준".decomposedStringWithCanonicalMapping + "\n민준👍"
     let ranges = TextReplace.ranges(of: "민준", in: text, caseSensitive: false)
@@ -37,7 +37,7 @@ struct TextReplaceTests {
     #expect(TextReplace.replacing("sword", with: "검", in: text, caseSensitive: true)?.text == "Sword 검 SWORD")
   }
 
-  /// 자모를 따로 적은 한글(NFD)도 찾은 곳 통째로 바꾼다. 자모 일부가 남지 않는다.
+  /// Decomposed Hangul (NFD) matches are replaced whole. No partial jamo remain.
   @Test func replacesDecomposedHangulWhole() {
     let text = "이름: " + "서윤".decomposedStringWithCanonicalMapping + "이"
 
@@ -56,12 +56,12 @@ struct TextReplaceTests {
     #expect(TextReplace.replacing("검은", with: "x", in: text, caseSensitive: false)?.text == "끝에 검\r\n은 x")
   }
 
-  /// 바꿀 말에 찾는 말이 들어 있어도 한 번만 바꾼다(바꾼 글을 다시 찾지 않는다).
+  /// Even if the replacement contains the query, replace only once (replaced text isn't searched again).
   @Test func replacementContainingQueryIsNotReplacedAgain() {
     #expect(TextReplace.replacing("검", with: "검검", in: "검 검", caseSensitive: false)?.text == "검검 검검")
   }
 
-  /// 같은 본문에서 찾기와 바꾸기가 같은 곳을 고른다.
+  /// Find and replace pick the same spots in the same body.
   @Test func countMatchesSearch() {
     let text = "검은 검을 Sword\n검" + "검".decomposedStringWithCanonicalMapping
     for caseSensitive in [true, false] {
@@ -113,7 +113,7 @@ struct TextReplaceTests {
     await #expect(throws: CancellationError.self) { try await task.value }
   }
 
-  /// 장치 캐시를 비우지 않는 빠른 쓰기도 스냅샷·메모를 똑같이 남긴다(전체 바꾸기가 쓴다).
+  /// Fast writes that don't flush the device cache still keep snapshots and memos the same (used by replace all).
   @Test func snapshotWithoutFullSyncWritesTextAndMemo() throws {
     let folder = try TestFolder()
     defer { folder.remove() }

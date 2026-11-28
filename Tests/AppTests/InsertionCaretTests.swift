@@ -2,7 +2,7 @@ import AppKit
 import XCTest
 @testable import NovelEditor
 
-/// 커서 높이. 그리는 것 자체는 창이 앞에 있어야 해서 손 확인으로 본다.
+/// Caret height. Drawing itself needs the window in front, so it's checked by hand.
 @MainActor
 final class InsertionCaretTests: XCTestCase {
   private func makeEditor(_ style: EditorStyle = EditorStyle()) -> ManuscriptTextView {
@@ -16,7 +16,7 @@ final class InsertionCaretTests: XCTestCase {
     return textView
   }
 
-  /// 시스템이 주는 커서 칸처럼 둘째 줄 위에서 시작하는 줄 높이 칸.
+  /// A line-height rect starting at the top of the second line, like the caret rect the system provides.
   private func secondLineRect(_ textView: ManuscriptTextView) -> NSRect {
     let layoutManager = textView.layoutManager!
     let glyph = layoutManager.glyphIndexForCharacter(at: 4)
@@ -38,7 +38,7 @@ final class InsertionCaretTests: XCTestCase {
     }
   }
 
-  /// 커서 가운데가 그 줄 글자(한글) 몸통 가운데와 1pt 안으로 맞는다.
+  /// The caret's middle aligns within 1 pt of the middle of that line's (Hangul) glyph body.
   func testCaretIsCenteredOnGlyphs() {
     let textView = makeEditor()
     let line = secondLineRect(textView)
@@ -53,7 +53,7 @@ final class InsertionCaretTests: XCTestCase {
     XCTAssertEqual(caret.width, 2)
   }
 
-  /// 시스템이 지우는 1pt 칸을 커서 두께 + 1pt로 넓혀 자국이 남지 않게. 넓은 칸은 그대로.
+  /// The 1 pt rect the system erases is widened to caret width + 1 pt so no trail remains. Wide rects are unchanged.
   func testThinInvalidationsCoverWideCaret() {
     let textView = makeEditor()
     XCTAssertEqual(textView.widenedForCaret(NSRect(x: 100, y: 50, width: 1, height: 30)), NSRect(x: 100, y: 50, width: 3, height: 30))
@@ -61,7 +61,7 @@ final class InsertionCaretTests: XCTestCase {
     XCTAssertTrue(textView.widenedForCaret(.zero).isEmpty)
   }
 
-  /// 커서를 그린 자리를 기억했다가, 다른 자리로 옮기거나 끄거나 창이 비활성화되면 잊는다(그때 직접 지운다).
+  /// Remember where the caret was drawn and forget it when it moves, turns off or the window deactivates (then it's erased directly).
   func testRemembersAndForgetsDrawnCaret() {
     let textView = makeEditor()
     let first = secondLineRect(textView)
@@ -78,14 +78,14 @@ final class InsertionCaretTests: XCTestCase {
     textView.drawInsertionPoint(in: first, color: .red, turnedOn: true)
     image.unlockFocus()
     XCTAssertNotNil(textView.lastCaretRect)
-    // 다른 창의 알림은 무시, 앱이 뒤로 가면 지운다.
+    // Notifications from other windows are ignored; erased when the app goes to the background.
     NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: NSWindow())
     XCTAssertNotNil(textView.lastCaretRect)
     NotificationCenter.default.post(name: NSApplication.didResignActiveNotification, object: NSApp)
     XCTAssertNil(textView.lastCaretRect)
   }
 
-  /// 줄 간격을 가장 좁게(1.4) 해도 커서가 줄 칸 밖으로 나가지 않는다.
+  /// Even at the tightest line spacing (1.4), the caret doesn't leave the line rect.
   func testStaysInsideTightLine() {
     var style = EditorStyle()
     style.fontSize = 24

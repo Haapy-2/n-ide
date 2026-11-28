@@ -4,8 +4,8 @@ import SwiftUI
 import XCTest
 @testable import NovelEditor
 
-/// 편집기 성능 측정 (Scripts/perf.sh가 릴리스 빌드로 실행). 평소 테스트에서는 건너뛴다.
-/// 결과는 `NOVEL_PERF <이름> <값,값,...>` 줄로 출력하고 perf.sh가 표로 만든다.
+/// Editor performance measurement (run by Scripts/perf.sh in a release build). Skipped in normal tests.
+/// Results are printed as `NOVEL_PERF <name> <value,value,...>` lines that perf.sh turns into a table.
 @MainActor
 final class EditorPerformanceTests: XCTestCase {
   private var store: ProjectStore!
@@ -19,9 +19,9 @@ final class EditorPerformanceTests: XCTestCase {
     project = try store.loadProject()
   }
 
-  /// 키 입력: 5,000자 회차에서 1,000번. 한글 IME처럼 조합(setMarkedText) 두 번 + 확정(insertText) 한 번을 한 글자로.
-  /// 이벤트를 받은 때부터 글자가 반영되고 레이아웃과 그리기가 끝날 때까지.
-  /// 키 입력마다 함께 불리는 글자 수 세기(텍스트 저장소 알림)와 상태 줄 흐려짐도 붙여서 잰다.
+  /// Keystrokes: 1,000 in a 5,000-char episode. Each character is two compositions (setMarkedText) + one commit (insertText), like a Hangul IME.
+  /// From receiving the event until the character is applied and layout and drawing finish.
+  /// Character counting (text storage notification) and status bar fading, which run with every keystroke, are included too.
   func testKeystroke() throws {
     let (window, textView) = makeEditorWindow()
     defer { window.close() }
@@ -52,8 +52,8 @@ final class EditorPerformanceTests: XCTestCase {
     report("keystroke_ms", samples)
   }
 
-  /// 글자 수 갱신을 "실시간"으로 했을 때 가장 무거운 경우: 10만 자 회차에서 키 입력마다 본문을 복사해 세기를 맡긴다.
-  /// 메인 스레드에서 하는 일(입력, 본문 복사, 세기 작업 시작, 레이아웃·그리기)만 잰다. 세기 자체는 밖에서 돈다.
+  /// Heaviest case with count refresh "live": copy the body and dispatch counting on every keystroke in a 100k-char episode.
+  /// Only main-thread work is measured (input, body copy, starting the count task, layout/drawing). The counting itself runs elsewhere.
   func testKeystrokeRealtimeCount100k() throws {
     let (window, textView) = makeEditorWindow()
     defer { window.close() }
@@ -79,10 +79,10 @@ final class EditorPerformanceTests: XCTestCase {
     report("keystroke_realtime_100k_ms", samples)
   }
 
-  /// 같은 말 여러 커서: 10만 자 회차에 1,000자마다 놓은 표시어 100개를 ⌘D로 모두 고르고 300번.
-  /// 한 글자는 `testKeystroke`처럼 조합 두 번 + 확정 한 번. 자리가 본문 전체에 흩어져 있어야 고치는 곳이 넓게 퍼진 가장 무거운 경우가 된다.
-  /// 목표 줄은 화면 그리기까지다(보이는 곳만 바로 레이아웃). 본문 전체 레이아웃까지는 참고로 따로 잰다: 100곳이 본문 전체에
-  /// 흩어져 있어 매번 전체를 다시 배치하는데, 앱은 이것을 키 입력 중이 아니라 뒤에서 나눠 한다.
+  /// Same-word multi-cursor: select 100 markers placed every 1,000 chars in a 100k-char episode with ⌘D, then 300 keystrokes.
+  /// Each character is two compositions + one commit like `testKeystroke`. Spots must be spread across the body for the heaviest case of widely scattered edits.
+  /// The target row stops at screen drawing (only the visible area is laid out immediately). Full-body layout is measured separately for reference: with 100 spots spread across the body
+  /// everything is relaid out each time, but the app does that in the background in pieces, not during keystrokes.
   func testMultiCursorKeystroke100k() throws {
     let (window, textView) = makeEditorWindow()
     defer { window.close() }
@@ -125,8 +125,8 @@ final class EditorPerformanceTests: XCTestCase {
     report("multi_cursor_100_keystroke_full_layout_ms", fullLayout)
   }
 
-  /// 줄 번호를 켠 키 입력: 10만 자 회차 거의 끝(보이는 첫 문단 번호를 구하려고 앞을 가장 많이 셈)에서 300번.
-  /// 조합 두 번 + 확정 한 번을 한 글자로, 30번에 한 번은 엔터(줄 수가 바뀌어 보이는 번호를 모두 다시 그리는 가장 무거운 경우).
+  /// Keystrokes with line numbers on: 300 near the end of a 100k-char episode (where computing the first visible paragraph's number counts the most).
+  /// Each character is two compositions + one commit; every 30th is Return (line count changes, redrawing all visible numbers: the heaviest case).
   func testKeystrokeLineNumbers100k() throws {
     let (window, textView) = makeEditorWindow()
     defer { window.close() }
@@ -159,7 +159,7 @@ final class EditorPerformanceTests: XCTestCase {
     report("keystroke_line_numbers_100k_ms", samples)
   }
 
-  /// 회차 전환: 이번 실행에서 처음 여는 5,000자 회차를 읽어 편집기에 올리고 레이아웃·그리기를 마칠 때까지.
+  /// Episode switch: read a 5,000-char episode not yet opened this run, load it into the editor, and finish layout and drawing.
   func testEpisodeSwitch() throws {
     let (window, textView) = makeEditorWindow()
     defer { window.close() }
@@ -176,8 +176,8 @@ final class EditorPerformanceTests: XCTestCase {
     report("switch_ms", samples)
   }
 
-  /// 설정 창에서 슬라이더를 끌 때: 모양 값이 바뀌어 본문 전체에 새 속성을 입히고 보이는 곳을 다시 그리기까지.
-  /// 5,000자(보통 회차)와 10만 자(아주 긴 회차) 두 가지. 글자 크기를 17↔18로 번갈아 바꾼다.
+  /// Dragging a slider in Settings: style values change, new attributes are applied to the whole body, and the visible area redraws.
+  /// Two sizes: 5,000 chars (normal episode) and 100k chars (very long episode). Font size alternates 17↔18.
   func testStyleChange() throws {
     let (window, textView) = makeEditorWindow()
     defer { window.close() }
@@ -200,8 +200,8 @@ final class EditorPerformanceTests: XCTestCase {
     }
   }
 
-  /// 타이핑 중 글자 수가 바뀔 때: 작업 공간 전체(사이드바 500회차 + 편집기)가 떠 있는 채로
-  /// 지금 회차의 글자 수 하나가 바뀌어 화면이 다시 그려질 때까지. 치는 동안 0.2초마다 한 번 일어난다.
+  /// When the count changes while typing: with the whole workspace up (sidebar 500 episodes + editor),
+  /// until the screen redraws after the current episode's single count changes. Happens every 0.2 s while typing.
   func testSidebarCountUpdate() throws {
     let model = ProjectModel(project: project, store: store)
     let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 760),
@@ -219,7 +219,7 @@ final class EditorPerformanceTests: XCTestCase {
     for index in 0..<60 {
       let elapsed = clock.measure {
         model.recordCount(CharacterCount(withSpaces: 5_000 + index, withoutSpaces: 4_000 + index), for: id)
-        // SwiftUI는 런루프 한 바퀴 끝에 화면을 갱신한다. 한 바퀴 돌리고 그리기까지 마친다.
+        // SwiftUI updates the screen at the end of a run loop turn. Spin one turn and finish drawing.
         RunLoop.main.run(mode: .default, before: Date())
         window.displayIfNeeded()
         CATransaction.flush()
@@ -229,11 +229,11 @@ final class EditorPerformanceTests: XCTestCase {
     report("sidebar_count_ms", samples)
   }
 
-  // MARK: - 도구
+  // MARK: - Helpers
 
-  /// 스냅샷 판 열기: 스냅샷 50개 찬 회차에서 판을 열어 목록·메모를 읽고, 가장 최근 것과 비교가 끝날 때까지.
-  /// 읽기와 비교는 메인 스레드 밖이라, 메인 스레드가 막히는지는 키 입력 측정이 따로 본다. 여기서는 사용자가 기다리는 시간.
-  /// 5,000자(보통 회차)와 10만 자(아주 긴 회차). 측정용 작품은 build/tmp에 따로 만든다(더미 작품에 스냅샷을 쌓지 않게).
+  /// Opening the snapshot panel: on an episode with 50 snapshots, open the panel, read the list/memos, until the diff with the latest finishes.
+  /// Reading and diffing are off the main thread; whether the main thread blocks is covered by the keystroke measurement. This measures the user's wait.
+  /// 5,000 chars (normal episode) and 100k chars (very long episode). The measurement project is built separately in build/tmp (so snapshots don't pile up in the dummy project).
   func testSnapshotPanelOpen() async throws {
     let text = try store.readEpisode(project.episodes[0].id)
     let folder = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
@@ -246,7 +246,7 @@ final class EditorPerformanceTests: XCTestCase {
       for index in 0..<50 {
         _ = try scratch.writeSnapshot(body + "\(index)", episode: id, kind: .auto, memo: "메모 \(index)", at: start.addingTimeInterval(Double(index)))
       }
-      // 지금 글: 문단 몇 개를 고친 것(판을 여는 보통 경우).
+      // Current text: a few paragraphs edited (the usual case when opening the panel).
       let current = body.replacingOccurrences(of: "\n\n", with: "\n\n고친 문장. ", options: [], range: body.startIndex..<body.index(body.startIndex, offsetBy: body.count / 3))
       var samples: [Double] = []
       let clock = ContinuousClock()
@@ -263,7 +263,7 @@ final class EditorPerformanceTests: XCTestCase {
     }
   }
 
-  /// 스냅샷으로 되돌리기: 10만 자 본문을 실행 취소 한 단위로 통째 바꾸고 보이는 곳을 다시 그리기까지(메인 스레드).
+  /// Restore from snapshot: replace a 100k-char body wholesale as one undo unit and redraw the visible area (main thread).
   func testRestoreReplace100k() throws {
     let (window, textView) = makeEditorWindow()
     defer { window.close() }
@@ -284,8 +284,8 @@ final class EditorPerformanceTests: XCTestCase {
     report("restore_100k_ms", samples)
   }
 
-  /// 전체 바꾸기: 더미 500화의 사본에서 "그는" → "그녀석은"(미결정 20, 목표 2초). 회차마다 바꾸기 전 스냅샷 → 본문 쓰기 →
-  /// 바꾼 뒤 스냅샷. 확인 창 뒤 실행만 잰다(세기는 확인 창 전). 사본이라 다른 측정의 더미는 그대로다.
+  /// Replace all: "그는" → "그녀석은" in a copy of the 500-episode dummy (open question 20, target 2 s). Per episode: pre-replace snapshot → body write →
+  /// post-replace snapshot. Only execution after the confirmation is measured (counting happens before it). It's a copy, so other measurements' dummy is untouched.
   func testReplaceAll500() async throws {
     let copy = store.layout.root.deletingLastPathComponent().appending(path: "replace-\(UUID().uuidString).novel")
     try FileManager.default.copyItem(at: store.layout.root, to: copy)
@@ -298,7 +298,7 @@ final class EditorPerformanceTests: XCTestCase {
     replace.replacement = "그녀석은"
     await replace.prepare(query: "그는", caseSensitive: false)
     let pending = try XCTUnwrap(replace.pending)
-    // 사본 만들기와 앞선 측정이 남긴 쓰기를 먼저 디스크에 내린다. 안 그러면 첫 F_FULLFSYNC가 그것까지 떠안아 바꾸기에 얹힌다.
+    // Flush writes left by copying and earlier measurements to disk first. Otherwise the first F_FULLFSYNC would absorb them and inflate the replace.
     let barrier = try FileHandle(forUpdating: scratch.layout.projectFile)
     _ = fcntl(barrier.fileDescriptor, F_FULLFSYNC)
     try barrier.close()
@@ -309,7 +309,7 @@ final class EditorPerformanceTests: XCTestCase {
     print("NOVEL_PERF replace_all_episodes \(pending.plan.episodes.count)")
     self.report("replace_all_500_ms", [milliseconds(elapsed)])
 
-    // 되돌리기 창 열기(회차마다 바꾸기 전 스냅샷과 지금 글을 읽어 다시 감지)와 모두 되돌리기.
+    // Opening the revert sheet (re-detecting by reading each episode's pre-replace snapshot and current text) and revert all.
     let detectStart = ContinuousClock.now
     let found = await replace.latestUndoable()
     let detected = ContinuousClock.now - detectStart
@@ -323,8 +323,8 @@ final class EditorPerformanceTests: XCTestCase {
     self.report("revert_all_500_ms", [milliseconds(revertElapsed)])
   }
 
-  /// 여러 회차 이름 변경: 더미 500화 사본의 모든 회차를 `새 이름 + 번호`로. 회차마다 이름 변경 스냅샷(파일 읽기 →
-  /// 본문·제목·메모 쓰기 → 정리)까지 끝날 때까지와, 그동안 메인 스레드가 가장 오래 막힌 시간(화면이 멈춘 시간)을 잰다.
+  /// Batch rename: rename every episode in a copy of the 500-episode dummy to `new name + number`. Measures until each episode's rename snapshot (file read →
+  /// body/title/memo writes → prune) finishes, and the longest main-thread block meanwhile (how long the screen froze).
   func testBatchRename500() async throws {
     let copy = store.layout.root.deletingLastPathComponent().appending(path: "rename-\(UUID().uuidString).novel")
     try FileManager.default.copyItem(at: store.layout.root, to: copy)
@@ -370,7 +370,7 @@ final class EditorPerformanceTests: XCTestCase {
   }
 }
 
-/// 메인 스레드에서 1ms마다 깨어나, 깨어난 사이가 가장 길었던 시간을 잰다(그만큼 화면이 멈췄다).
+/// Wake on the main thread every 1 ms and record the longest gap between wakeups (the screen froze that long).
 @MainActor
 private final class MainThreadGaps {
   private(set) var longest: Duration = .zero

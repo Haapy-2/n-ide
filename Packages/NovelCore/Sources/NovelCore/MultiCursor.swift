@@ -1,15 +1,15 @@
 import Foundation
 
-/// 같은 말 여러 커서(⌘D, PLAN 16장)의 계산. 편집기와 상관없는 것만 둔다: 다음 일치 찾기, 여러 자리 한 번에 고치기,
-/// 입력기가 맨 앞 커서에 준 범위를 다른 자리로 옮기기.
-/// 자리는 본문의 UTF-16 범위(편집기 선택과 같은 단위)이고, 늘 앞에서부터 놓이며 서로 겹치지 않는다.
-/// 입력기와 이어진 커서는 늘 맨 앞 자리다: 입력기는 같은 키 이벤트 안에서 자기가 넣은 자리를 다시 묻지 않아서,
-/// 그보다 앞을 고치면 기억한 자리가 밀린다(16장 5번 실험).
+/// Computation for same-word multi-cursor (⌘D, PLAN ch.16). Only editor-independent parts: finding the next match, editing many spots at once,
+/// mapping the range the IME gave the leading caret onto other spots.
+/// Spots are UTF-16 ranges of the body (same unit as the editor selection), always in order and non-overlapping.
+/// The caret tied to the IME is always the leading spot: the IME doesn't re-query the spot it inserted at within the same key event,
+/// so editing anything before it shifts the remembered position (ch.16 #5 experiment).
 public struct MultiCursor: Equatable, Sendable {
-  /// 커서 수 한도(16장 P1). 넘으면 더 늘리지 않고 알린다.
+  /// Cursor count limit (ch.16 P1). Beyond it, no more are added and the user is told.
   public static let limit = 1_000
 
-  /// 한 자리의 선택. `anchor`는 ⇧로 늘릴 때 붙박인 끝, `head`는 움직이는 끝(커서가 깜빡이는 곳).
+  /// One spot's selection. `anchor` is the fixed end when extending with ⇧, `head` the moving end (where the caret blinks).
   public struct Selection: Equatable, Sendable {
     public var anchor: Int
     public var head: Int
@@ -19,7 +19,7 @@ public struct MultiCursor: Equatable, Sendable {
       self.head = head
     }
 
-    /// 앞에서 뒤로 고른 선택(⌘D, 입력 뒤)
+    /// Selection made front to back (⌘D, after typing)
     public init(_ range: NSRange) {
       self.init(anchor: range.location, head: NSMaxRange(range))
     }
@@ -29,12 +29,12 @@ public struct MultiCursor: Equatable, Sendable {
 
   public private(set) var selections: [Selection]
   public var ranges: [NSRange] { selections.map(\.range) }
-  /// 마지막으로 더한 자리(`ranges`의 번호). 다음 일치는 그 뒤에서 찾는다.
+  /// Most recently added spot (index into `ranges`). The next match is searched after it.
   public private(set) var newest: Int
-  /// 커서만 있던 자리에서 시작했으면 단어 전체로만 찾는다(VS Code와 같다).
+  /// When started from a bare caret, match whole words only (same as VS Code).
   public let wholeWord: Bool
 
-  /// 첫 ⌘D의 선택. 빈 선택이면 nil: 커서 아래 단어 고르기는 편집기가 한다(글자 배치가 정하는 단어 경계).
+  /// Selection of the first ⌘D. nil if empty: picking the word under the caret is the editor's job (word boundaries come from layout).
   public init?(selection: NSRange, wholeWord: Bool) {
     guard selection.length > 0, selection.location != NSNotFound else { return nil }
     selections = [Selection(selection)]
@@ -42,7 +42,7 @@ public struct MultiCursor: Equatable, Sendable {
     self.wholeWord = wholeWord
   }
 
-  /// 되돌리기로 돌아온 자리들. 합친 뒤 둘 이상이어야 여러 커서다.
+  /// Spots returned by undo. Multi-cursor only if two or more remain after merging.
   public init?(ranges: [NSRange], wholeWord: Bool) {
     let merged = Self.merged(ranges)
     guard merged.count > 1, merged.allSatisfy({ $0.location != NSNotFound && $0.location >= 0 }) else { return nil }
@@ -53,15 +53,15 @@ public struct MultiCursor: Equatable, Sendable {
 
   public enum Addition: Equatable, Sendable {
     case added(NSRange)
-    /// 더 찾을 곳이 없다(모두 골랐거나 처음부터 하나뿐).
+    /// Nothing more to find (all chosen, or only one to begin with).
     case noMore
     case limitReached
-    /// 고른 말이 비었거나 줄을 넘는다(검색과 같은 규칙).
+    /// The chosen text is empty or spans lines (same rule as search).
     case notSearchable
   }
 
-  /// ⌘D 한 번: 마지막으로 더한 자리 뒤에서 같은 말을 찾아 더한다. 끝까지 없으면 처음부터 찾는다.
-  /// 이미 고른 자리와 겹치는 곳, 한 글자(이모지·결합 글자)를 가르는 곳, 단어 전체가 아닌 곳은 건너뛴다.
+  /// One ⌘D: find the same text after the most recently added spot and add it. If none till the end, wrap to the start.
+  /// Skips matches overlapping chosen spots, splitting one character (emoji, combining characters), or not whole words.
   public mutating func addNext(in text: String) -> Addition {
     let text = text as NSString
     let last = ranges[newest]
@@ -78,20 +78,20 @@ public struct MultiCursor: Equatable, Sendable {
     return .added(found)
   }
 
-  /// 고친 뒤의 자리로 바꾼다. 겹치거나 맞닿은 같은 자리는 하나로 합친다(지우다 커서가 만나면).
+  /// Replace with post-edit spots. Overlapping or touching identical spots merge into one (when carets meet while deleting).
   public mutating func place(_ newRanges: [NSRange]) {
     replaceSelections(newRanges.map(Selection.init))
   }
 
-  /// 자리마다 움직이는 끝을 `heads[i]`로 옮긴다(앞에서부터 같은 순서). `extending`이면 붙박인 끝은 그대로(⇧),
-  /// 아니면 커서만 남는다. 만난 자리는 합친다: 하나만 남으면 부르는 쪽이 여러 커서를 끝낸다.
+  /// Move each spot's moving end to `heads[i]` (same order, front to back). With `extending` the fixed end stays (⇧),
+  /// otherwise only carets remain. Meeting spots merge: if only one remains, the caller ends multi-cursor.
   public mutating func move(to heads: [Int], extending: Bool) {
     guard heads.count == selections.count else { return }
     replaceSelections(zip(selections, heads).map { Selection(anchor: extending ? $0.anchor : $1, head: $1) })
   }
 
-  /// 겹치는 선택과 같은 자리 커서는 하나로. 합친 선택의 방향은 그 묶음의 첫 선택을 따른다
-  /// (⇧←로 맞닿은 선택은 계속 왼쪽으로, ⇧→는 오른쪽으로 늘어나게).
+  /// Overlapping selections and same-position carets become one. The merged selection's direction follows the group's first selection
+  /// (so touching ⇧← selections keep extending left, ⇧→ right).
   private mutating func replaceSelections(_ new: [Selection]) {
     let newestLocation = ranges[newest].location
     var result: [Selection] = []
@@ -126,7 +126,7 @@ public struct MultiCursor: Equatable, Sendable {
       return false
     }
     guard text.rangeOfComposedCharacterSequences(for: hit) == hit else { return false }
-    // 그림 줄 안은 고를 수 없다. 경로 글자를 고치면 그림이 깨진다(G7).
+    // Spots inside image lines can't be chosen. Editing path characters would break the image (G7).
     guard !ImageLine.isImageLine(text, paragraph: Self.paragraphContents(at: hit.location, in: text)) else { return false }
     guard wholeWord else { return true }
     return !Self.isWordCharacter(before: hit.location, in: text) && !Self.isWordCharacter(at: NSMaxRange(hit), in: text)
@@ -144,17 +144,17 @@ public struct MultiCursor: Equatable, Sendable {
     return CharacterSet.alphanumerics.contains(scalar) || scalar == "_"
   }
 
-  // MARK: - 여러 자리 고치기
+  // MARK: - Editing many spots
 
   public struct Edit: Equatable, Sendable {
-    /// 앞에서부터. 편집기는 뒤에서부터 고친다(앞을 먼저 고치면 뒤 자리가 밀린다).
+    /// Front to back. The editor edits back to front (editing the front first would shift later spots).
     public let changes: [TextChange]
-    /// 고친 뒤 자리마다 새 글이 놓인 범위(앞에서부터)
+    /// Per-spot range of the new text after the edit (front to back)
     public let inserted: [NSRange]
   }
 
-  /// 자리마다 `targets[i]`를 `texts[i]`로. 범위가 본문 밖이거나, 앞에서부터가 아니거나, 겹치거나, 같은 자리에서 시작하면 nil:
-  /// 낡은 자리로 고치면 앱이 죽거나(범위 밖) 다른 글이 섞인다(16장 D1). 그때 편집기는 고치지 않고 여러 커서를 끝낸다.
+  /// Replace each `targets[i]` with `texts[i]`. nil if a range is outside the body, out of order, overlapping, or starts at the same spot:
+  /// editing with stale spots crashes (out of range) or mixes in other text (ch.16 D1). The editor then doesn't edit and ends multi-cursor.
   public static func edit(_ targets: [NSRange], texts: [String], textLength: Int) -> Edit? {
     guard !targets.isEmpty, targets.count == texts.count else { return nil }
     var previous: NSRange?
@@ -175,8 +175,8 @@ public struct MultiCursor: Equatable, Sendable {
     return Edit(changes: zip(targets, texts).map { TextChange(range: $0, text: $1) }, inserted: inserted)
   }
 
-  /// 고친 뒤의 자리(`Edit.inserted`)를 다시 고칠 때(되돌리기). 맞닿은 선택을 지우면 빈 범위와 다음 범위가 한 점에서 시작하는데(E4),
-  /// `edit`은 같은 자리에서 시작하는 범위를 낡았다고 보고 받지 않는다. 그런 이웃을 하나로 합치고 글은 앞에서부터 잇는다.
+  /// For re-editing post-edit spots (`Edit.inserted`) (undo). Deleting touching selections yields an empty range and the next range starting at one point (E4),
+  /// which `edit` rejects as stale (same start). Such neighbors are merged into one and their texts joined front to back.
   public static func joinedAtMeetingPoints(_ ranges: [NSRange], texts: [String]) -> (ranges: [NSRange], texts: [String]) {
     var joinedRanges: [NSRange] = []
     var joinedTexts: [String] = []
@@ -192,10 +192,10 @@ public struct MultiCursor: Equatable, Sendable {
     return (joinedRanges, joinedTexts)
   }
 
-  /// 입력기가 맨 앞 자리(`anchors[0]`) 둘레의 `replacement`를 바꾸라고 할 때, 자리마다 같은 상대 범위
-  /// (자리 앞 N글자부터 자리 뒤 M글자까지). 자리마다 자기 길이를 쓰므로 자모를 따로 적은 한글처럼 길이가 다른 자리도 맞는다(E2).
-  /// `replacement`가 맨 앞 자리 둘레가 아니거나(재변환·한자 변환 등) 옮긴 범위가 본문 밖이거나 서로 겹치면 nil:
-  /// 다른 자리로 옮길 뜻이 없으니 편집기는 여러 커서를 끝내고 보통 입력으로 넘긴다(I2).
+  /// When the IME asks to replace `replacement` around the leading spot (`anchors[0]`), the same relative range at each spot
+  /// (from N chars before to M chars after the spot). Each spot uses its own length, so spots of differing lengths like decomposed Hangul work (E2).
+  /// nil if `replacement` isn't around the leading spot (reconversion, Hanja conversion etc.) or the mapped ranges fall outside the body or overlap:
+  /// there's no intent to map to other spots, so the editor ends multi-cursor and falls back to normal input (I2).
   public static func targets(
     forReplacement replacement: NSRange, around anchors: [NSRange], textLength: Int
   ) -> [NSRange]? {
@@ -213,8 +213,8 @@ public struct MultiCursor: Equatable, Sendable {
     return targets
   }
 
-  /// 지우기 키(⌫·⌦·⌥⌫·⌘⌫ 등): 선택이 있으면 그 선택, 커서만 있으면 커서와 `stops[i]` 사이(편집기가 키마다 정한 곳).
-  /// 앞 자리의 지울 곳과 겹치면(맞닿은 커서) 하나로 합친다.
+  /// Delete keys (⌫·⌦·⌥⌫·⌘⌫ etc.): the selection if any, otherwise between the caret and `stops[i]` (where the editor decided per key).
+  /// Merged with the previous spot's deletion if they overlap (touching carets).
   public static func deleteTargets(_ ranges: [NSRange], to stops: [Int]) -> [NSRange] {
     let targets = zip(ranges, stops).map { range, stop -> NSRange in
       guard range.length == 0 else { return range }
@@ -223,26 +223,26 @@ public struct MultiCursor: Equatable, Sendable {
     return merged(targets)
   }
 
-  // MARK: - 글자·문단 경계 (화살표·지우기)
+  // MARK: - Character/paragraph boundaries (arrows, delete)
 
-  /// 한 글자 뒤(이모지·결합 글자·자모를 따로 적은 한글은 통째로). 끝이면 그대로.
+  /// One character forward (emoji, combining characters, decomposed Hangul as a whole). Unchanged at the end.
   public static func characterEnd(after index: Int, in text: NSString) -> Int {
     guard index < text.length else { return text.length }
     return NSMaxRange(text.rangeOfComposedCharacterSequence(at: index))
   }
 
-  /// 한 글자 앞. 맨 앞이면 그대로.
+  /// One character back. Unchanged at the start.
   public static func characterStart(before index: Int, in text: NSString) -> Int {
     guard index > 0 else { return 0 }
     return text.rangeOfComposedCharacterSequence(at: min(index, text.length) - 1).location
   }
 
-  /// 문단 처음(⌃A, ⌥↑의 둘째 단계)
+  /// Paragraph start (⌃A, second step of ⌥↑)
   public static func paragraphStart(at index: Int, in text: NSString) -> Int {
     text.paragraphRange(for: NSRange(location: min(index, text.length), length: 0)).location
   }
 
-  /// 문단 끝, 줄바꿈 앞(⌃E, ⌥↓의 둘째 단계)
+  /// Paragraph end, before the newline (⌃E, second step of ⌥↓)
   public static func paragraphEnd(at index: Int, in text: NSString) -> Int {
     var end = 0
     var contentsEnd = 0
@@ -255,25 +255,25 @@ public struct MultiCursor: Equatable, Sendable {
     return NSRange(location: start, length: paragraphEnd(at: index, in: text) - start)
   }
 
-  // MARK: - 복사와 붙여 넣기 (E7)
+  // MARK: - Copy and paste (E7)
 
-  /// ⌘C·⌘X: 고른 글을 앞에서부터 줄바꿈으로 잇는다(VS Code). 빈 선택은 빼고, 모두 비었으면 nil(복사하지 않음).
+  /// ⌘C/⌘X: join selections front to back with newlines (VS Code). Empty selections are skipped; nil (no copy) if all are empty.
   public static func copiedText(_ ranges: [NSRange], in text: NSString) -> String? {
     let parts = ranges.filter { $0.length > 0 && NSMaxRange($0) <= text.length }.map { text.substring(with: $0) }
     return parts.isEmpty ? nil : parts.joined(separator: "\n")
   }
 
-  /// 붙여 넣을 글을 자리마다(VS Code `multiCursorPaste: spread`): 끝 줄바꿈 하나를 뗀 줄 수가 커서 수와 같으면
-  /// 한 줄씩, 아니면 모든 자리에 같은 글.
+  /// Text to paste per spot (VS Code `multiCursorPaste: spread`): if the line count after dropping one trailing newline equals the cursor count,
+  /// one line each; otherwise the same text everywhere.
   public static func pasteTexts(_ text: String, count: Int) -> [String] {
     var trimmed = text
-    // "\r\n"은 Swift에서 한 글자라 `hasSuffix("\n")`로는 안 잡힌다.
+    // "\r\n" is one Character in Swift, so `hasSuffix("\n")` misses it.
     if trimmed.hasSuffix("\r\n") || trimmed.hasSuffix("\n") || trimmed.hasSuffix("\r") { trimmed.removeLast() }
     let lines = trimmed.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: CharacterSet(charactersIn: "\n\r"))
     return lines.count == count ? lines : Array(repeating: text, count: count)
   }
 
-  /// 앞에서부터 놓고, 겹치는 범위와 같은 자리의 빈 범위는 하나로 합친다.
+  /// Ordered front to back; overlapping ranges and same-position empty ranges merge into one.
   public static func merged(_ ranges: [NSRange]) -> [NSRange] {
     var result: [NSRange] = []
     for range in ranges.sorted(by: { ($0.location, $0.length) < ($1.location, $1.length) }) {

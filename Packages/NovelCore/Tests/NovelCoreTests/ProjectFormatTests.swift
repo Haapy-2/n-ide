@@ -6,7 +6,7 @@ struct ProjectFormatTests {
     #expect(ProjectFormat.packageExtension == "novel")
   }
 
-  /// 2: 회차 묶음. 올리면 옛 형식을 읽는 테스트(EpisodeGroupingTests)도 함께 본다.
+  /// 2: episode groups. When bumping, also check the tests reading old formats (EpisodeGroupingTests).
   @Test func schemaVersionIsTwo() {
     #expect(ProjectFormat.currentSchemaVersion == 2)
   }

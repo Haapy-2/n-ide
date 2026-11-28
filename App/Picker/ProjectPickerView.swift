@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 앱을 열면 가장 먼저 뜨는 작품 선택 창 (Obsidian 볼트 선택처럼, DESIGN.md 4장).
+/// The project picker shown first on launch (like Obsidian's vault picker, DESIGN.md ch.4).
 struct ProjectPickerView: View {
   @Environment(\.openWindow) private var openWindow
   @Environment(\.dismissWindow) private var dismissWindow
@@ -8,7 +8,7 @@ struct ProjectPickerView: View {
   @State private var selection: RecentProject.ID?
   private let loadsRecentOnAppear: Bool
 
-  /// - Parameter recent: 미리보기·스냅샷용. nil이면 앱 설정에서 읽는다.
+  /// - Parameter recent: for previews/snapshots. nil reads from app settings.
   init(recent: [RecentProject]? = nil) {
     _recent = State(initialValue: recent ?? [])
     loadsRecentOnAppear = recent == nil
@@ -44,14 +44,14 @@ struct ProjectPickerView: View {
       if let url = LaunchProbe.projectToOpen { launcher.open(url) }
       if loadsRecentOnAppear { recent = RecentProjects.load() }
     }
-    // Finder에서 .novel을 두 번 클릭하면 여기로 들어온다.
+    // Double-clicking a .novel in Finder arrives here.
     .onOpenURL { url in
       if url.isFileURL { launcher.open(url) }
     }
   }
 
-  /// 선택 표시는 작업 공간 사이드바와 같은 직접 그린 회색 칸(시스템 파란 선택 대신, DESIGN.md 4장).
-  /// 한 번 클릭하면 선택, 두 번 클릭하면 열기, 선택한 채로 ↩를 눌러도 열린다.
+  /// Selection is the same custom-drawn gray rect as the workspace sidebar (instead of the system blue, DESIGN.md ch.4).
+  /// Single click selects, double click opens; ↩ on a selection also opens.
   private var recentList: some View {
     List {
       ForEach(recent) { project in
@@ -61,8 +61,8 @@ struct ProjectPickerView: View {
           .frame(maxWidth: .infinity, alignment: .leading)
           .rowHighlight(isSelected: project.id == selection)
           .contentShape(RoundedRectangle(cornerRadius: 6))
-          // 한 번 클릭 선택은 바로 처리한다. 두 제스처를 순서대로 붙이면 SwiftUI가 "두 번 클릭인지"
-          // 판정 시간(약 0.3~0.5초)을 기다린 뒤에야 선택해서 클릭이 굼떠 보인다.
+          // Single-click selection is handled immediately. Chaining the two gestures makes SwiftUI wait the
+          // double-click decision time (~0.3–0.5 s) before selecting, so clicks feel sluggish.
           .onTapGesture(count: 2) { launcher.open(project.url) }
           .simultaneousGesture(TapGesture().onEnded { selection = project.id })
           .contextMenu {
@@ -90,7 +90,7 @@ struct ProjectPickerView: View {
   }
 }
 
-/// 최근 작품 한 줄: 제목과 `212화 · 어제`, 아래에 폴더 경로.
+/// One recent-project row: title and `212화 · 어제`, folder path below.
 private struct RecentProjectRow: View {
   let project: RecentProject
 
@@ -114,7 +114,7 @@ private struct RecentProjectRow: View {
     .padding(.vertical, 3)
   }
 
-  /// 홈 폴더를 `~`로 줄이고, 폴더 경로 끝의 `/`는 뺀다.
+  /// Shorten the home folder to `~` and drop the trailing `/` of the folder path.
   private var abbreviatedPath: String {
     let home = FileManager.default.homeDirectoryForCurrentUser.path(percentEncoded: false)
     var path = project.path

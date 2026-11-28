@@ -10,13 +10,13 @@ final class UndoTests: XCTestCase {
     defaults = UserDefaults(suiteName: "UndoTests-\(UUID().uuidString)")
   }
 
-  /// 편집 메뉴의 실행 취소(`undo:`)가 편집기에서 처리되어 회차 기록으로 되돌리고, 다시 실행으로 되살린다.
+  /// Edit menu undo (`undo:`) is handled by the editor and reverts via the episode history; redo brings it back.
   func testEditorHandlesUndoAndRedoMenuActions() {
     let textView = ManuscriptTextView.make()
     textView.replaceAllText(with: "그는")
     textView.setSelectedRange(NSRange(location: 2, length: 0))
     textView.insertText(" 웃었다", replacementRange: NSRange(location: NSNotFound, length: 0))
-    // 입력 묶음은 한 차례가 끝나야 닫힌다.
+    // An input group closes only after a turn ends.
     RunLoop.main.run(until: Date().addingTimeInterval(0.05))
 
     XCTAssertTrue(textView.responds(to: #selector(ManuscriptTextView.undo(_:))))
@@ -26,17 +26,17 @@ final class UndoTests: XCTestCase {
     XCTAssertEqual(textView.string, "그는 웃었다")
   }
 
-  /// 한 번에 한 글자씩 되돌린다. 한글은 조합이 끝난 한 글자가 한 단위.
+  /// Undo one character at a time. For Hangul, one finished character is one unit.
   func testUndoRemovesOneCharacterAtATime() {
     let textView = ManuscriptTextView.make()
     textView.replaceAllText(with: "")
     let none = NSRange(location: NSNotFound, length: 0)
-    // 실제 앱에서는 키 입력마다 이벤트 한 차례가 끝나며 되돌리기 묶음이 닫힌다. 테스트에서는 그 경계를 직접 만든다.
+    // In the real app each keystroke's event turn ends and closes the undo group. Tests create that boundary directly.
     let undo = textView.episodeUndoManager
     undo.groupsByEvent = false
     for letter in ["가", "나", "다"] {
       undo.beginUndoGrouping()
-      // 입력기처럼 조합(자모) → 확정 순서로 넣는다.
+      // Insert in composition (jamo) → commit order like an IME.
       textView.setMarkedText("ㄱ", selectedRange: NSRange(location: 1, length: 0), replacementRange: none)
       textView.insertText(letter, replacementRange: none)
       undo.endUndoGrouping()
@@ -51,9 +51,9 @@ final class UndoTests: XCTestCase {
     XCTAssertEqual(textView.string, "가나")
   }
 
-  /// macOS 27 두벌식 입력기는 표시된 글자 없이 "커서 앞 한 글자를 이 글로"(replacementRange)로 조합을 이어 간다.
-  /// 실제 앱에서 기록한 호출 순서(ㄱ → 가 → 각 → 가 + 가)를 키마다 넣고, 되돌릴 때 조합 중간 글자("각", "ㄱ")가 나오지 않는지 본다.
-  /// 키마다 기록 묶음을 직접 여닫으면 아무것도 남기지 않은 키도 빈 묶음이 되어 ⌘Z 한 번을 먹으므로, 보이는 글이 바뀐 것만 센다.
+  /// The macOS 27 2-set IME continues composing without displayed text via "replace the one character before the caret with this" (replacementRange).
+  /// Feed the call order recorded in the real app (ㄱ → 가 → 각 → 가 + 가) per key, and check undo never shows mid-composition characters ("각", "ㄱ").
+  /// Opening/closing a group per key by hand would turn keys that leave nothing into empty groups eating a ⌘Z, so only changes to visible text are counted.
   func testUndoSkipsJamoStepsOfReplacementInput() {
     let textView = ManuscriptTextView.make()
     textView.replaceAllText(with: "")
@@ -87,8 +87,8 @@ final class UndoTests: XCTestCase {
     XCTAssertEqual(redone, ["", "가", "가가"])
   }
 
-  /// 실제 키 입력(keyDown)으로 친 글자도 한 글자씩 되돌린다. NSTextView는 키로 이어 친 글자를 한 묶음으로 합치므로
-  /// 이 테스트가 묶음 끊기를 확인한다. 숫자는 한글 입력기에서도 조합 없이 바로 들어간다.
+  /// Characters typed via real keystrokes (keyDown) also undo one at a time. NSTextView coalesces consecutive typed characters into one group,
+  /// so this test verifies the group breaking. Digits go in directly without composition even with the Hangul IME.
   func testTypedKeysUndoOneAtATime() throws {
     let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 300), styleMask: [.titled], backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false
@@ -133,7 +133,7 @@ final class UndoTests: XCTestCase {
     XCTAssertFalse(textView.validateUserInterfaceItem(item))
   }
 
-  // MARK: - 확인 창 쉬기
+  // MARK: - Confirmation rest
 
   func testPauseLastsChosenPeriod() {
     let now = Date(timeIntervalSince1970: 1_800_000_000)

@@ -3,7 +3,7 @@ import XCTest
 
 @MainActor
 final class ShortcutSettingsTests: XCTestCase {
-  /// 지금 저장과 저장하면서 스냅샷 찍기는 같은 ⌘S지만 동시에 쓰이지 않으므로(isActive) 쓰이는 명령끼리만 본다.
+  /// Save now and snapshot on save share ⌘S but are never active at once (isActive), so only active commands are compared.
   func testDefaultsHaveNoClashes() {
     for savesWithSnapshot in [false, true] {
       var settings = ShortcutSettings()
@@ -52,7 +52,7 @@ final class ShortcutSettingsTests: XCTestCase {
     XCTAssertEqual(settings.problem(with: KeyCombo("q", [.command]), for: .saveNow), .reserved("앱 종료"))
     XCTAssertEqual(settings.problem(with: KeyCombo("s", [.command, .option]), for: .takeSnapshot), .reserved("사이드바 보기·숨기기"))
     XCTAssertEqual(settings.problem(with: KeyCombo("n", [.command]), for: .saveNow), .usedBy(.newEpisode))
-    // 자기 자신이 쓰는 조합은 문제없다
+    // A combo used by the command itself is fine
     XCTAssertNil(settings.problem(with: KeyCombo("s", [.command]), for: .saveNow))
   }
 
@@ -64,7 +64,7 @@ final class ShortcutSettingsTests: XCTestCase {
     XCTAssertNil(settings.problem(with: KeyCombo("s", [.command]), for: .takeSnapshot))
   }
 
-  /// 한글 입력 중에도 키 위치로 읽어서 S 자리는 "s"다.
+  /// Read by key position even during Hangul input, so the S position is "s".
   func testKeyCodes() {
     XCTAssertEqual(KeyCombo.key(forKeyCode: 1), .character("s"))
     XCTAssertEqual(KeyCombo.key(forKeyCode: 45), .character("n"))
@@ -73,7 +73,7 @@ final class ShortcutSettingsTests: XCTestCase {
     XCTAssertNil(KeyCombo.key(forKeyCode: 122), "F1 같은 기능 키는 받지 않는다")
   }
 
-  // MARK: - 저장하면서 스냅샷 찍기
+  // MARK: - Snapshot on save
 
   func testLockedCellsFollowToggle() {
     var settings = ShortcutSettings()
@@ -105,17 +105,17 @@ final class ShortcutSettingsTests: XCTestCase {
   func testSaveWithSnapshotProblems() {
     var settings = ShortcutSettings()
     settings.setSavesWithSnapshot(true)
-    // 지금 저장은 쓰이지 않아 ⌘S를 그대로 써도 된다
+    // Save now is inactive, so ⌘S can be used as is
     XCTAssertNil(settings.problem(with: KeyCombo("s", [.command]), for: .saveWithSnapshot))
-    // 잠긴 스냅샷 찍기의 키는 가져올 수 없다
+    // The locked take-snapshot key can't be taken
     XCTAssertEqual(settings.problem(with: KeyCombo("s", [.command, .control]), for: .saveWithSnapshot), .usedByLocked(.takeSnapshot))
     XCTAssertEqual(settings.problem(with: KeyCombo("n", [.command]), for: .saveWithSnapshot), .usedBy(.newEpisode))
-    // 꺼져 있으면 전용 키는 다른 명령과 부딪치지 않는다
+    // When off, the dedicated key doesn't clash with other commands
     settings.setSavesWithSnapshot(false)
     XCTAssertNil(settings.problem(with: KeyCombo("s", [.command]), for: .saveNow))
   }
 
-  /// 켜 있는 동안 ⌘S를 다른 명령이 가져갔다면, 끌 때 지금 저장의 키를 비워 같은 키 두 개가 듣지 않게 한다.
+  /// If another command took ⌘S while it was on, turning it off clears save now's key so two items don't respond to one key.
   func testToggleClearsClashingKey() {
     var settings = ShortcutSettings()
     settings.setSavesWithSnapshot(true)

@@ -3,7 +3,7 @@ import NovelCore
 import XCTest
 @testable import NovelEditor
 
-/// 외부 변경 처리. 다른 편집기에서 고친 원고도, 앱에서 쓰던 원고도 잃지 않는지 본다.
+/// External change handling. Checks that neither a manuscript edited in another editor nor the one being written in the app is lost.
 @MainActor
 final class ExternalChangeTests: XCTestCase {
   private var folder: URL!
@@ -38,7 +38,7 @@ final class ExternalChangeTests: XCTestCase {
     autosaver.textDidChange()
   }
 
-  /// 다른 편집기가 저장한 것처럼 쓴다. 수정 시각이 같은 값으로 찍히지 않게 1초 뒤로 맞춘다.
+  /// Write as another editor would save. Shift the modification time by 1 s so it isn't stamped with the same value.
   private func externalWrite(_ text: String) throws {
     let url = store.layout.episodeFile(episode)
     let before = FileStamp(of: url)?.modified ?? Date()
@@ -47,7 +47,7 @@ final class ExternalChangeTests: XCTestCase {
       [.modificationDate: before.addingTimeInterval(1)], ofItemAtPath: url.path(percentEncoded: false))
   }
 
-  /// 앱 쪽 스냅샷을 다 남겨 물을 준비가 될 때까지 기다린다.
+  /// Wait until the app-side snapshot is fully kept and it's ready to ask.
   private func readyConflict() async throws -> EpisodeAutosaver.Conflict {
     for _ in 0..<200 {
       if let conflict = autosaver.conflicts[episode], conflict.isReady { return conflict }
@@ -73,8 +73,8 @@ final class ExternalChangeTests: XCTestCase {
     XCTAssertEqual(try snapshotFiles(), [], "앱 쪽에 잃을 내용이 없으니 스냅샷도 필요 없다")
   }
 
-  /// 스냅샷 판이 열린 동안은 바깥 내용을 불러오지 않는다(판의 "현재"는 판을 연 때의 본문이라 비교가 틀어진다).
-  /// 판을 닫을 때 한 번 확인해 불러온다.
+  /// While the snapshot panel is open, external content isn't loaded (the panel's "current" is the body at open time, so the diff would go wrong).
+  /// Checked once and loaded when the panel closes.
   func testSnapshotPanelHoldsExternalChangeUntilClosed() async throws {
     let panel = try XCTUnwrap(autosaver.beginPanel())
     try externalWrite("판이 열린 동안 바깥에서 고친 문장")
@@ -113,9 +113,9 @@ final class ExternalChangeTests: XCTestCase {
     XCTAssertTrue(autosaver.hasUnsavedChanges, "고를 때까지 종료하면 경고가 떠야 한다")
   }
 
-  // MARK: - 충돌을 고르지 않은 채 끌 때 (PLAN 미결정 27)
+  // MARK: - Quitting with an unresolved conflict (PLAN open question 27)
 
-  /// 앱 쪽 글이 충돌 스냅샷에 그대로 있으면 "저장 못 한 원고"가 아니다: 다시 시도·내보내기 대상에서 빠지고 따로 센다.
+  /// If the app-side text is intact in the conflict snapshot, it isn't an "unsaved manuscript": excluded from retry/export and counted separately.
   func testConflictKeptInSnapshotIsNotUnprotected() async throws {
     type(" 앱에서 쓴 문장")
     try externalWrite("다른 편집기에서 고친 문장")
@@ -128,8 +128,8 @@ final class ExternalChangeTests: XCTestCase {
     XCTAssertTrue(autosaver.unsavedManuscripts().isEmpty, "내보낼 원고가 아니다")
   }
 
-  /// 끄면서 한 저장이 외부 변경을 막 찾은 경우(⌘Q를 자동 저장 1초 안에 누름): 마무리가 충돌 스냅샷까지 기다려,
-  /// 종료 판단이 "내보낼 원고"가 아니라 "지켜진 충돌"로 본다.
+  /// When the save during quit just found an external change (⌘Q within 1 s of autosave): finishing waits for the conflict snapshot,
+  /// so the quit decision sees a "preserved conflict" rather than "a manuscript to export".
   func testConflictFoundWhileFinishingIsKeptBeforeQuitDecision() async throws {
     type(" 앱에서 쓴 문장")
     try externalWrite("다른 편집기에서 고친 문장")
@@ -141,7 +141,7 @@ final class ExternalChangeTests: XCTestCase {
     XCTAssertEqual(try store.readEpisode(episode), "다른 편집기에서 고친 문장", "바깥 글을 덮지 않는다")
   }
 
-  /// 충돌 뒤에 더 쓴 글은 스냅샷에 없으므로 지켜야 할 원고다.
+  /// Text written after the conflict isn't in the snapshot, so it's a manuscript to protect.
   func testTypingAfterConflictIsUnprotected() async throws {
     type(" 앱에서 쓴 문장")
     try externalWrite("다른 편집기에서 고친 문장")
@@ -154,7 +154,7 @@ final class ExternalChangeTests: XCTestCase {
     XCTAssertEqual(autosaver.conflictsKeptInSnapshots, 0)
   }
 
-  /// 충돌 스냅샷마저 남기지 못했으면 앱 쪽 글은 메모리에만 있다. 내보내기를 권해야 하고, 백업이 있다고 말하면 안 된다.
+  /// If even the conflict snapshot couldn't be kept, the app-side text is only in memory. Export must be offered, and it must not claim a backup exists.
   func testConflictWithoutSnapshotIsUnprotectedAndNotBackedUp() async throws {
     let snapshots = store.layout.snapshotFolder(episode)
     try FileManager.default.createDirectory(at: snapshots, withIntermediateDirectories: true)
@@ -173,7 +173,7 @@ final class ExternalChangeTests: XCTestCase {
     XCTAssertFalse(autosaver.unprotectedAreBackedUp)
   }
 
-  /// 충돌 스냅샷을 남기지 못한 채 "바깥 내용"을 고르면 앱 쪽 글이 어디에도 남지 않는다. 그때는 바꾸지 않는다.
+  /// Choosing "external content" without a conflict snapshot would leave the app-side text nowhere. Then nothing changes.
   func testChoosingDiskVersionWithoutAppSnapshotKeepsAppText() async throws {
     let snapshots = store.layout.snapshotFolder(episode)
     try FileManager.default.createDirectory(at: snapshots, withIntermediateDirectories: true)
@@ -194,7 +194,7 @@ final class ExternalChangeTests: XCTestCase {
     XCTAssertEqual(textView.string, "첫 문장 앱에서 쓴 문장")
     XCTAssertEqual(autosaver.unsavedManuscripts().map(\.text), ["첫 문장 앱에서 쓴 문장"], "내보낼 원고로 남는다")
 
-    // 스냅샷을 남길 수 있게 되면 다시 고를 수 있고, 앱 쪽 글은 스냅샷에 남는다.
+    // Once snapshots can be kept, it can be chosen again, and the app-side text stays in a snapshot.
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: snapshots.path(percentEncoded: false))
     await autosaver.useDiskVersion(episode)
 
@@ -203,7 +203,7 @@ final class ExternalChangeTests: XCTestCase {
     XCTAssertEqual(try conflictSnapshotTexts(), ["첫 문장 앱에서 쓴 문장"])
   }
 
-  /// 충돌 스냅샷 뒤에 더 친 글도 "바깥 내용"으로 바꾸기 전에 스냅샷으로 남긴다.
+  /// Text typed after the conflict snapshot is also snapshotted before switching to "external content".
   func testChoosingDiskVersionKeepsTextTypedAfterConflictSnapshot() async throws {
     type(" 앱에서 쓴 문장")
     try externalWrite("다른 편집기에서 고친 문장")
@@ -217,7 +217,7 @@ final class ExternalChangeTests: XCTestCase {
     XCTAssertTrue(try conflictSnapshotTexts().contains("첫 문장 앱에서 쓴 문장 더 쓴 문장"), "버린 쪽의 마지막 글이 스냅샷에 있다")
   }
 
-  /// "이 앱의 내용"을 고를 때 덮을 바깥 내용을 스냅샷으로 남기지 못하면 덮지 않는다.
+  /// When choosing "this app's content", if the external content to overwrite can't be snapshotted, don't overwrite.
   func testChoosingAppVersionWithoutExternalSnapshotDoesNotOverwrite() async throws {
     type(" 앱에서 쓴 문장")
     try externalWrite("다른 편집기에서 고친 문장")
@@ -300,7 +300,7 @@ final class ExternalChangeTests: XCTestCase {
     XCTAssertTrue(autosaver.conflicts.isEmpty)
   }
 
-  /// 여러 커서 중이면 "앱 쪽 변경 있음"으로 본다(16장 X4): 조용히 다시 읽어 커서들을 버리지 않고 묻는다.
+  /// During multi-cursor, treat it as "app-side changes" (ch.16 X4): ask instead of silently reloading and dropping the cursors.
   func testMultiCursorCountsAsAppChange() async throws {
     textView.multiCursor = MultiCursorSession(cursor: try XCTUnwrap(MultiCursor(
       ranges: [NSRange(location: 0, length: 0), NSRange(location: 2, length: 0)], wholeWord: false)))
@@ -313,8 +313,8 @@ final class ExternalChangeTests: XCTestCase {
     XCTAssertEqual(textView.multiCursorRanges?.count, 2)
   }
 
-  /// 바깥 내용으로 갈아 끼울 때, 표시된 글자 없이 이어 가던 입력기에도 그 글자를 놓으라고 알린다.
-  /// 알리지 않으면 입력기가 옛 본문의 자리를 `replacementRange`로 고쳐 쓴다.
+  /// When swapping in external content, also tell an IME continuing without displayed text to let go of that character.
+  /// Otherwise the IME rewrites the old body's spot via `replacementRange`.
   func testReloadTellsInputMethodToForgetCharacterInProgress() throws {
     let method = try XCTUnwrap(class_getInstanceMethod(NSTextInputContext.self, #selector(NSTextInputContext.discardMarkedText)))
     let original = method_getImplementation(method)

@@ -3,7 +3,7 @@ import NovelCore
 import XCTest
 @testable import NovelEditor
 
-/// 작품을 열 때 지난번에 쓰지 못한 원고(비상 백업)를 묻고 되살리기.
+/// On project open, ask about and restore manuscripts that couldn't be written last time (emergency backup).
 @MainActor
 final class EmergencyBackupRecoveryTests: XCTestCase {
   private var folder: URL!
@@ -18,8 +18,8 @@ final class EmergencyBackupRecoveryTests: XCTestCase {
     try? FileManager.default.removeItem(at: folder)
   }
 
-  /// 내보내기를 골랐다가 폴더 창을 닫으면 아무것도 고르지 않은 것이라 다시 묻는다.
-  /// 백업을 그대로 두고 열면, 그 회차를 새로 저장한 뒤에도 다음에 열 때 옛 글로 되살리자고 한다.
+  /// Choosing export and then closing the folder dialog means nothing was chosen, so ask again.
+  /// Opening with the backup left in place would, even after that episode is saved anew, offer to restore the old text next time.
   func testCancelledExportAsksAgain() async throws {
     let root = folder.appending(path: "작품.novel")
     let store = try ProjectStore.create(at: root, title: "작품")

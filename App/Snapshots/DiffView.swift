@@ -1,9 +1,9 @@
 import NovelCore
 import SwiftUI
 
-/// 판 오른쪽의 과거↔현재 두 칸 (PLAN 10장 5번, 참고 이미지 11-ref-diff.png).
-/// 한 줄(문단)마다 두 칸을 한 줄로 묶어 그려서, 긴 문단이 줄바꿈되어도 두 칸이 같은 높이에 놓인다.
-/// 과거 칸은 글자를 골라 복사할 수 있다(결정 11).
+/// The past↔present two columns on the right of the panel (PLAN ch.10 #5, reference 11-ref-diff.png).
+/// Each line (paragraph) draws both columns in one row, so long wrapped paragraphs keep both columns at the same height.
+/// The past column's text can be selected and copied (decision 11).
 struct DiffView: View {
   let diff: TextDiff
   let pastTitle: String
@@ -19,7 +19,7 @@ struct DiffView: View {
 
   var body: some View {
     let style = editorSettings.style
-    // 두 칸에 본문을 나란히 넣으므로 본문보다 조금 작게. 글꼴은 본문 글꼴.
+    // Two columns side by side, so slightly smaller than the body. Font is the body font.
     let font = Font.custom(style.fontName, size: max(13, style.fontSize - 2))
     let items = DiffDisplay.items(diff.rows, expanded: expanded)
     let widestNumber = String(max(diff.oldLines.count, diff.newLines.count, 1))
@@ -62,7 +62,7 @@ struct DiffView: View {
         .padding(.vertical, 8)
       }
     }
-    // 다른 스냅샷으로 바꾸면 펼친 것을 처음으로.
+    // Switching to another snapshot resets expansions.
     .onChange(of: diff) { expanded = [] }
   }
 
@@ -76,7 +76,7 @@ struct DiffView: View {
   }
 }
 
-/// 비교 한 줄: 왼쪽 과거 칸, 오른쪽 현재 칸.
+/// One diff row: past column on the left, present on the right.
 private struct DiffRow: View {
   let row: TextDiff.Row
   let diff: TextDiff
@@ -94,13 +94,13 @@ private struct DiffRow: View {
 
   private enum Side { case old, new }
 
-  /// 빗금·막대는 칸 높이를 따라가도록 겹쳐 그린다. 칸 안에 같이 늘어놓으면 글자 기준선 맞춤이 막대 아래 끝을 기준선으로 보고
-  /// 글자를 아래로 밀어낸다.
+  /// Hatching and bars are overlaid to follow the column height. Laid out inside the column, baseline alignment would treat the bar's bottom as the baseline
+  /// and push text down.
   private func cell(side: Side) -> some View {
     let line = lineIndex(side)
     let hasLine = line != nil
     return HStack(alignment: .firstTextBaseline, spacing: 8) {
-      // 가장 큰 번호를 숨겨 두고 그 폭에 맞춰, 번호 자릿수가 달라도 본문 시작선이 같다.
+      // The largest number is laid out hidden for width, so the text start line stays the same regardless of digit count.
       ZStack(alignment: .trailing) {
         Text(widestNumber).hidden()
         Text(line.map { String($0 + 1) } ?? "")
@@ -140,7 +140,7 @@ private struct DiffRow: View {
     }
   }
 
-  /// 이 칸이 바뀐 쪽인지(지운 줄의 과거 칸, 넣은 줄의 현재 칸, 고친 줄의 양쪽)
+  /// Whether this column is the changed side (past column of deleted lines, present column of inserted lines, both for modified lines)
   private func isChanged(_ side: Side, hasLine: Bool) -> Bool {
     hasLine && !row.isSame
   }
@@ -150,10 +150,10 @@ private struct DiffRow: View {
     return side == .old ? .diffRemoved : .diffAdded
   }
 
-  /// 바뀐 부분만 진하게. 줄 전체가 바뀐 것으로 본 줄은 바탕색만.
+  /// Only the changed part in bold. Lines treated as wholly changed get just the background.
   private func text(line: Int, side: Side) -> Text {
     let string = side == .old ? diff.oldLines[line] : diff.newLines[line]
-    // 빈 문단도 한 줄 높이를 차지하게(두 칸 줄 맞춤과 줄 번호가 보이도록).
+    // Empty paragraphs still take one line's height (so two-column alignment and line numbers show).
     if string.isEmpty { return Text(" ") }
     guard case .changed(_, _, .ranges(let old, let new)) = row else { return Text(string) }
     let ranges = side == .old ? old : new
@@ -173,7 +173,7 @@ private struct DiffRow: View {
   }
 }
 
-/// 지운 줄 왼쪽의 빨간 빗금 막대.
+/// Red hatched bar left of deleted lines.
 private struct Hatch: View {
   var body: some View {
     Canvas { context, size in
@@ -189,7 +189,7 @@ private struct Hatch: View {
   }
 }
 
-/// 과거 칸만 글자를 골라 복사할 수 있게.
+/// Only the past column is selectable for copying.
 private struct SelectableIf: ViewModifier {
   let isOn: Bool
 

@@ -2,8 +2,8 @@ import AppKit
 import XCTest
 @testable import NovelEditor
 
-/// 편집 영역 어디를 눌러도 편집기가 클릭을 받는다. 오른쪽 여백(텍스트 칸 오른쪽) 클릭이 뒤의 clip view로 빠져
-/// 커서가 움직이지 않던 문제를 막는다.
+/// The editor receives clicks anywhere in the editor area. Prevents right-margin clicks (right of the text container) falling through to the clip view behind
+/// and the caret not moving.
 @MainActor
 final class EditorClickTests: XCTestCase {
   private func makeEditor(width: CGFloat) -> (NSScrollView, ManuscriptTextView) {
@@ -17,7 +17,7 @@ final class EditorClickTests: XCTestCase {
 
   func testRightMarginClickGoesToEditor() {
     let (scrollView, textView) = makeEditor(width: 1300)
-    // 본문 폭 680pt를 가운데 두면 오른쪽 여백은 990pt쯤부터 시작한다.
+    // With a 680 pt body width centered, the right margin starts around 990 pt.
     let textRight = textView.textContainerOrigin.x + (textView.textContainer?.size.width ?? 0)
     XCTAssertLessThan(textRight, 1100)
     XCTAssertTrue(scrollView.hitTest(NSPoint(x: 1200, y: 100)) === textView)

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 설정 창 "일반": 테마, 목표, 스냅샷, 되돌리기 확인 창, 알림.
+/// Settings "General": theme, goal, snapshots, undo confirmation, toasts.
 struct GeneralSettingsPane: View {
   @AppStorage(AppSettingKey.appTheme) private var theme: AppTheme = .system
   @AppStorage(AppSettingKey.undoConfirmPause) private var undoPause: UndoConfirmPause = .week
@@ -15,7 +15,7 @@ struct GeneralSettingsPane: View {
   var body: some View {
     Form {
       Section {
-        // 아이콘만 보이고, 마우스를 올리면 이름이 뜬다. 색 없이 시스템 보조 글자색.
+        // Icons only; the name shows on hover. Uncolored, system secondary text color.
         Picker("테마", selection: $theme) {
           ForEach(AppTheme.allCases, id: \.self) { theme in
             Image(systemName: theme.symbolName)
@@ -25,7 +25,7 @@ struct GeneralSettingsPane: View {
         }
         .pickerStyle(.segmented)
       }
-      // 사이드바 설정은 두 개뿐이라 따로 판을 두지 않는다(판 아래가 비어 보였다).
+      // Only two sidebar settings, so no separate pane (the pane looked empty below).
       Section("사이드바") {
         Toggle("글자 수 보이기", isOn: $showsCount)
         Toggle("뒤로 창 비치기", isOn: $seesThroughWindow)
@@ -76,7 +76,7 @@ struct GeneralSettingsPane: View {
     .formStyle(.grouped)
   }
 
-  /// 예: "5월 19일까지 묻지 않음", 계속이면 "묻지 않는 중"
+  /// E.g. "5월 19일까지 묻지 않음", or "묻지 않는 중" if indefinite
   private var pausedText: String {
     let until = Date(timeIntervalSince1970: undoPausedUntil)
     guard until < .distantFuture.addingTimeInterval(-86_400) else { return "묻지 않는 중" }

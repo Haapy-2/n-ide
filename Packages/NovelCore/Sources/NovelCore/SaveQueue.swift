@@ -1,6 +1,6 @@
 import Foundation
 
-/// 저장할 대상. 같은 대상에 대한 저장은 순서대로 하나씩만 처리된다.
+/// Save target. Saves to the same target are processed one at a time in order.
 public enum SaveTarget: Hashable, Sendable {
   case project
   case episode(EpisodeID)
@@ -9,37 +9,37 @@ public enum SaveTarget: Hashable, Sendable {
 
 public enum SaveOutcome: Equatable, Sendable {
   case written
-  /// 이미 더 새 변경 번호의 내용이 저장되어 있어서 건너뛰었다. 최신 원고를 되돌리지 않기 위해서다.
+  /// Skipped because content with a newer change number is already saved. So the latest manuscript is never reverted.
   case skippedStale
 }
 
-/// 저장 줄. 모든 파일 쓰기를 이 actor 하나로 모아서:
-/// 1. 같은 파일에 대한 저장이 동시에 일어나지 않게 하고,
-/// 2. 변경 번호가 더 낮은(옛) 저장이 더 높은(새) 저장을 덮어쓰지 못하게 하고,
-/// 3. 실패하면 잠깐 기다렸다 몇 번 다시 시도한다.
+/// The save queue. All file writes are funneled into this one actor to:
+/// 1. prevent simultaneous saves to the same file,
+/// 2. prevent a lower (older) change number from overwriting a higher (newer) one,
+/// 3. wait briefly and retry a few times on failure.
 ///
-/// 변경 번호는 편집하는 쪽(앱)이 대상마다 1씩 올려서 붙인다.
+/// Change numbers are attached by the editing side (the app), incremented by 1 per target.
 public actor SaveQueue {
-  /// 대상별로 지금까지 파일에 쓴 가장 높은 변경 번호.
+  /// Highest change number written to file so far, per target.
   private var writtenChange: [SaveTarget: Int] = [:]
   private let retryDelays: [Duration]
 
-  /// - Parameter retryDelays: 실패 후 다시 시도하기 전 기다리는 시간. 기본값은 PLAN.md 세부 기준(0.5초, 1초, 2초).
+  /// - Parameter retryDelays: wait before each retry after a failure. Default per PLAN.md detailed criteria (0.5 s, 1 s, 2 s).
   public init(retryDelays: [Duration] = [.milliseconds(500), .seconds(1), .seconds(2)]) {
     self.retryDelays = retryDelays
   }
 
-  /// `write`로 실제 쓰기를 한다. 재시도까지 모두 실패하면 마지막 오류를 던진다(편집 내용은 앱 메모리에 그대로 있다).
+  /// `write` performs the actual write. If all retries fail, throws the last error (edits remain in app memory).
   public func save(
     _ target: SaveTarget, change: Int, write: @Sendable () throws -> Void
   ) async throws -> SaveOutcome {
     try await save(target, change: change, writeReturning: write) == nil ? .skippedStale : .written
   }
 
-  /// `save`와 같지만 쓰기 함수가 돌려준 값을 그대로 돌려준다. 옛 저장이라 건너뛰었으면 nil.
-  /// (회차 저장이 "썼다"와 "외부 변경과 충돌해 쓰지 않았다"를 알려 주려고 쓴다.)
-  /// `onRetry`는 실패한 뒤 다시 시도하기 전마다 불린다(상태 줄의 "다시 시도 중" 표시용).
-  /// `didWrite`는 돌려준 값을 보고 실제로 썼는지 알려 준다. 쓰지 않은 번호는 저장된 것으로 세지 않는다.
+  /// Same as `save` but returns the write function's value. nil if skipped as an old save.
+  /// (Used by episode saves to report "written" vs. "not written due to an external-change conflict".)
+  /// `onRetry` is called before each retry after a failure (for the status bar's "retrying" indicator).
+  /// `didWrite` tells from the returned value whether it actually wrote. Unwritten numbers don't count as saved.
   public func save<Value: Sendable>(
     _ target: SaveTarget, change: Int, writeReturning write: @Sendable () throws -> Value,
     didWrite: @Sendable (Value) -> Bool = { _ in true },
@@ -47,12 +47,12 @@ public actor SaveQueue {
   ) async throws -> Value? {
     var attempt = 0
     while true {
-      // 재시도를 기다리는 동안(await) 더 새 저장이 끝났을 수 있으므로 매번 다시 확인한다.
+      // A newer save may have finished while awaiting a retry, so check again every time.
       if let written = writtenChange[target], written >= change {
         return nil
       }
       do {
-        // 이 사이에는 await가 없어서, actor 안에서 쓰기 하나가 끝날 때까지 다른 저장이 끼어들지 못한다.
+        // No await in between, so within the actor no other save can slip in until one write finishes.
         let value = try write()
         if didWrite(value) { writtenChange[target] = change }
         return value
@@ -65,7 +65,7 @@ public actor SaveQueue {
     }
   }
 
-  /// 대상이 지금까지 저장된 가장 높은 변경 번호. 아직 없으면 nil.
+  /// Highest change number saved so far for the target. nil if none yet.
   public func lastWrittenChange(for target: SaveTarget) -> Int? {
     writtenChange[target]
   }

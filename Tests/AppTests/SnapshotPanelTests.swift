@@ -19,7 +19,7 @@ final class SnapshotPanelTests: XCTestCase {
     try? FileManager.default.removeItem(at: folder)
   }
 
-  // MARK: - 접기
+  // MARK: - Folding
 
   private func lines(_ count: Int, changeAt changed: Set<Int>) -> (String, String) {
     let old = (0..<count).map { "줄 \($0)" }
@@ -40,7 +40,7 @@ final class SnapshotPanelTests: XCTestCase {
     let (old, new) = lines(30, changeAt: [10, 20])
     let diff = try TextDiff(old: old, new: new)
     let items = DiffDisplay.items(diff.rows)
-    // 앞 묶음(0~9)은 뒤 3줄만, 가운데(11~19)는 앞뒤 3줄, 끝(21~29)은 앞 3줄만.
+    // First run (0–9) keeps its last 3 lines, middle (11–19) 3 before and after, last (21–29) its first 3.
     XCTAssertEqual(shape(items), [
       "fold0..<7", "=7", "=8", "=9", "*10",
       "=11", "=12", "=13", "fold14..<17", "=17", "=18", "=19", "*20",
@@ -49,14 +49,14 @@ final class SnapshotPanelTests: XCTestCase {
   }
 
   func testDoesNotFoldSingleHiddenLine() throws {
-    // 가운데 같은 줄 7개 = 앞 3 + 숨길 1 + 뒤 3 → 접지 않는다.
+    // 7 identical lines in the middle = 3 before + 1 hidden + 3 after → not folded.
     let (old, new) = lines(9, changeAt: [0, 8])
     let items = DiffDisplay.items(try TextDiff(old: old, new: new).rows)
     XCTAssertFalse(items.contains { if case .folded = $0 { true } else { false } })
   }
 
   func testShortSameRunsBetweenChangesStayOpen() throws {
-    // 바뀐 줄 사이의 같은 줄이 1~5개면 앞뒤 3줄이 겹친다. 접지도 죽지도 않아야 한다.
+    // With 1–5 identical lines between changed lines, the before/after 3 overlap. Must neither fold nor crash.
     for gap in 0...6 {
       let (old, new) = lines(gap + 2, changeAt: [0, gap + 1])
       let items = DiffDisplay.items(try TextDiff(old: old, new: new).rows)
@@ -85,7 +85,7 @@ final class SnapshotPanelTests: XCTestCase {
     XCTAssertEqual(Set(items.map(\.id)).count, items.count)
   }
 
-  // MARK: - 목록과 비교
+  // MARK: - List and diff
 
   private func waitUntil(_ condition: () -> Bool) async throws {
     for _ in 0..<200 where !condition() { try await Task.sleep(for: .milliseconds(10)) }
@@ -119,7 +119,7 @@ final class SnapshotPanelTests: XCTestCase {
     }
   }
 
-  /// 바꾼 회차 목록에서 열면 `바꾸기 전`을 골라 둔 채 연다(가장 최근인 `바꾼 뒤`가 아니라).
+  /// Opened from the replaced-episodes list, `바꾸기 전` is preselected (not the most recent `바꾼 뒤`).
   func testOpensWithPreferredSnapshotSelected() async throws {
     let now = Date()
     let before = try XCTUnwrap(try store.writeSnapshot("민준", episode: episode, kind: .replace, at: now))
@@ -158,11 +158,11 @@ final class SnapshotPanelTests: XCTestCase {
     browser.updateMemo(id, to: "   ")
     try await waitUntil { browser.items?.first?.memo == nil }
     XCTAssertNil(store.readMemo(try store.snapshots(of: episode)[0]))
-    // 본문 스냅샷은 그대로
+    // Body snapshots unchanged
     XCTAssertEqual(try store.snapshots(of: episode).count, 1)
   }
 
-  /// 이름 변경 스냅샷은 본문이 같아도 제목이 다르면 되돌릴 수 있고, 되돌리면 바뀌기 전 제목으로.
+  /// A rename snapshot can be restored if its title differs even when the body is identical, and restoring brings back the old title.
   func testRenameSnapshotRestoresTitle() async throws {
     try store.writeSnapshot("글", episode: episode, kind: .rename, memo: "'1화' → '프롤로그'", title: "1화")
     let browser = SnapshotBrowser(store: store, episodeID: episode, currentText: "글", currentTitle: "프롤로그")
@@ -187,7 +187,7 @@ final class SnapshotPanelTests: XCTestCase {
     XCTAssertFalse(browser.canRestore)
   }
 
-  /// 이름 변경 스냅샷의 메모를 고치면 지킬지 묻고, 지키면 보관 개수로 지우지 않는다. 다른 종류는 묻지 않는다.
+  /// Editing a rename snapshot's memo asks whether to protect it; if so, it's exempt from keep-count pruning. Other kinds don't ask.
   func testEditingRenameMemoAsksToKeep() async throws {
     try store.writeSnapshot("글", episode: episode, kind: .auto, at: Date().addingTimeInterval(-60))
     try store.writeSnapshot("글", episode: episode, kind: .rename, memo: "자동 메모", title: "1화")
@@ -209,7 +209,7 @@ final class SnapshotPanelTests: XCTestCase {
     XCTAssertTrue(try store.snapshots(of: episode).contains(rename.snapshot), "지킨 것은 정리하지 않는다")
   }
 
-  // MARK: - 이름
+  // MARK: - Names
 
   func testDayTitles() {
     let calendar = Calendar(identifier: .gregorian)

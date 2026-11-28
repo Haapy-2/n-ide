@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// 편집 메뉴의 "작품 전체 검색"(⇧⌘F, DESIGN 7장), "전체 바꾸기 되돌리기…"(PLAN 14장 5번), "같은 말 하나 더 고르기"(⌘D, 16장).
-/// 앞에 있는 작업 공간 창이 없으면 흐리게 보인다.
+/// Edit menu "project search" (⇧⌘F, DESIGN ch.7), "revert replace all…" (PLAN ch.14 #5), "select next occurrence" (⌘D, ch.16).
+/// Dims when there's no front workspace window.
 struct SearchCommands: Commands {
   @FocusedValue(\.workspaceActions) private var actions
   @AppStorage(AppSettingKey.multiCursorEnabled) private var multiCursorEnabled = true

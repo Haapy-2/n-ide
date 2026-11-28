@@ -1,18 +1,18 @@
 import AppKit
 import NovelCore
 
-/// 편집기 줄 번호.
+/// Editor line numbers.
 ///
-/// - 줄 = 엔터마다(문단). 규칙은 비교 화면과 같은 `ParagraphLines`.
-/// - 본문 칸(텍스트 컨테이너)의 자리·폭은 건드리지 않고 왼쪽 여백에 그림만 그린다. 켜고 꺼도 글자가 움직이지 않는다.
-/// - 텍스트 저장소는 읽기만 한다. 조합 중에도 안전하다.
-/// - 화면에 보이는 문단만 계산한다.
+/// - Line = per Return (paragraph). Same rule as the diff view, `ParagraphLines`.
+/// - The text container's position and width are untouched; numbers are only drawn in the left margin, so toggling never moves text.
+/// - Text storage is read only. Safe during composition.
+/// - Only paragraphs visible on screen are computed.
 extension ManuscriptTextView {
   struct LineNumberPlacement: Equatable {
     let number: Int
-    /// 번호 글자의 기준선 y(편집기 좌표, 위가 0)
+    /// Baseline y of the number text (editor coordinates, top is 0)
     let baselineY: CGFloat
-    /// 번호 칸 오른쪽 끝 x. 번호는 여기에 오른쪽 정렬한다.
+    /// Right edge x of the number column. Numbers are right-aligned here.
     let rightX: CGFloat
   }
 
@@ -21,19 +21,19 @@ extension ManuscriptTextView {
   static func isLineBreak(_ character: unichar) -> Bool { character == 0x0A || character == 0x0D }
   static let lineNumberFont = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
 
-  /// 가장 큰 번호 폭. 자릿수가 달라도 번호 끝이 맞게 이 폭에 오른쪽 정렬한다.
+  /// Widest number width. Numbers are right-aligned to it so ends line up regardless of digit count.
   var lineNumberColumnWidth: CGFloat {
     let digits = String(currentLineCount).count
     let sample = String(repeating: "0", count: digits) as NSString
     return ceil(sample.size(withAttributes: [.font: Self.lineNumberFont]).width)
   }
 
-  /// 왼쪽 여백이 `번호 칸 + 40pt`보다 좁으면 번호만 숨긴다(본문을 밀지 않는다).
+  /// If the left margin is narrower than `number column + 40pt`, hide only the numbers (don't push the text).
   var lineNumbersFit: Bool {
     textContainerInset.width >= lineNumberColumnWidth + Self.lineNumberLeading * 2
   }
 
-  /// `rect`(편집기 좌표)에 걸치는 문단의 번호 자리. 그리기와 테스트가 같이 쓴다.
+  /// Number positions for paragraphs overlapping `rect` (editor coordinates). Shared by drawing and tests.
   func lineNumberPlacements(in rect: NSRect) -> [LineNumberPlacement] {
     guard showsLineNumbers, lineNumbersFit, let layoutManager, let textContainer, let storage = textStorage else {
       return []
@@ -44,7 +44,7 @@ extension ManuscriptTextView {
     var result: [LineNumberPlacement] = []
 
     if text.length > 0 {
-      // 컨테이너 좌표로 옮겨 그 높이에 걸친 글리프만 고른다. 가로는 컨테이너 전체(번호 칸은 컨테이너 밖이라서).
+      // Convert to container coordinates and pick glyphs overlapping that height. Horizontally the whole container (the number column is outside it).
       let probe = NSRect(x: 0, y: rect.minY - origin.y, width: textContainer.size.width, height: rect.height)
       let glyphs = layoutManager.glyphRange(forBoundingRect: probe, in: textContainer)
       let characters = layoutManager.characterRange(forGlyphRange: glyphs, actualGlyphRange: nil)
@@ -56,7 +56,7 @@ extension ManuscriptTextView {
         while location < text.length && location <= end {
           let glyph = layoutManager.glyphIndexForCharacter(at: location)
           let line = layoutManager.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
-          // 빈 줄의 줄바꿈 글리프 자리는 글자 기준선보다 위에 잡혀서, 글자 줄과 같은 기준선을 쓴다.
+          // A blank line's newline glyph sits above the text baseline, so use the same baseline as text lines.
           let isBlank = Self.isLineBreak(text.character(at: location))
           let baseline = origin.y + line.minY + (isBlank ? blankBaseline : layoutManager.location(forGlyphAt: glyph).y)
           if (!isBlank || numbersBlankLines), baseline - Self.lineNumberFont.ascender <= rect.maxY {
@@ -68,7 +68,7 @@ extension ManuscriptTextView {
       }
     }
 
-    // 끝이 엔터면(또는 빈 회차면) 그 아래 빈 줄에도 커서를 둘 수 있으니 번호를 단다.
+    // If the text ends with Return (or the episode is empty), the caret can sit on the blank line below, so number it.
     let extra = layoutManager.extraLineFragmentRect
     if numbersBlankLines, !extra.isEmpty || text.length == 0 {
       let lineTop = origin.y + (extra.isEmpty ? 0 : extra.minY)
@@ -81,8 +81,8 @@ extension ManuscriptTextView {
     return result
   }
 
-  /// 빈 줄(글리프가 없는 줄)의 기준선이 줄 위에서 얼마나 내려오는지. 줄 높이를 고정해서 모든 줄이 같다.
-  /// 본문의 첫 글자(줄바꿈이 아닌 것)의 실제 값을 쓰고, 글자가 없을 때만 식으로 구한다. 식은 실제 값과 0.1pt쯤 다르다.
+  /// How far a blank (glyphless) line's baseline is below the line top. Same for every line since line height is fixed.
+  /// Use the actual value from the body's first non-newline character; compute by formula only when there's none. The formula is ~0.1 pt off.
   var emptyLineBaselineFromTop: CGFloat {
     if let layoutManager, let storage = textStorage {
       let first = storage.mutableString.rangeOfCharacter(from: CharacterSet.newlines.inverted)
@@ -102,7 +102,7 @@ extension ManuscriptTextView {
     for placement in placements {
       let label = String(placement.number) as NSString
       let width = label.size(withAttributes: attributes).width
-      // 편집기는 뒤집힌 좌표(위가 0)라 draw(at:)의 점은 글자 칸 위 왼쪽이다. 기준선에서 올림 값만큼 올린다.
+      // The editor is flipped (top is 0), so draw(at:)'s point is the glyph box's top-left. Raise by the ascender from the baseline.
       let point = NSPoint(x: placement.rightX - width, y: placement.baselineY - font.ascender)
       label.draw(at: point, withAttributes: attributes)
     }

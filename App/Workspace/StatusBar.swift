@@ -2,15 +2,15 @@ import NovelCore
 import Observation
 import SwiftUI
 
-/// 편집 영역 맨 아래 상태 줄 (DESIGN.md 4장): 글자 수 · 목표 진행률 · 저장 상태.
-/// 좌우 끝을 본문 폭에 맞춘다. 본문 위에 겹쳐 뜨므로 보일 때는 종이색 바탕으로 아래 글을 가리고,
-/// 숨을 때는 바탕도 함께 사라져 본문이 보인다. 저장 실패 표시는 숨지 않으므로 그때는 바탕도 남긴다.
+/// Status bar at the bottom of the editor (DESIGN.md ch.4): count · goal progress · save state.
+/// Edges align with the body width. It floats over the body, so when visible a paper-colored background hides text below,
+/// and when hidden the background goes too so the body shows. Save failure indicators don't hide, so the background stays then.
 struct StatusBar: View {
   let counter: CharacterCounter
   let autosaver: EpisodeAutosaver
   let fade: StatusBarFade
   let goal: Int
-  /// 편집기와 같은 본문 폭(설정 값).
+  /// Same body width as the editor (setting value).
   var textWidth: CGFloat = EditorStyle().textWidth
   @AppStorage(AppSettingKey.characterCountDisplay) private var display: CharacterCountDisplay = .both
   @AppStorage(AppSettingKey.characterCountGoalBasis) private var basis: CharacterCountBasis = .withSpaces
@@ -39,9 +39,9 @@ struct StatusBar: View {
     .padding(.horizontal, EditorStyle.minimumSideInset)
     .frame(maxWidth: .infinity)
     .background(Color.paper.opacity(isCovering ? 1 : 0))
-    // 숨어 있을 때는 아래 본문을 클릭할 수 있게 한다.
+    // When hidden, the body below stays clickable.
     .allowsHitTesting(isCovering)
-    // 흐려짐은 150ms(DESIGN.md 6장). 동작 줄이기가 켜져 있으면 바로 바뀐다.
+    // Fades over 150 ms (DESIGN.md ch.6). With reduce motion on, changes instantly.
     .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: fade.isHidden)
   }
 
@@ -60,7 +60,7 @@ struct StatusBar: View {
     return failure.detail + "\n\n" + safety
   }
 
-  /// 평소엔 비어 있다. 실패 표시는 흐려지지 않는다.
+  /// Usually empty. Failure indicators don't fade.
   @ViewBuilder
   private var saveStatus: some View {
     switch autosaver.status {
@@ -110,9 +110,9 @@ struct StatusBar: View {
   }
 }
 
-/// 목표 진행률: `97%` 옆에 작은 고리, 꽉 찬 원(파이) 또는 가는 막대. 채운 부분은 accent, 남은 부분은 흐린 회색 트랙.
-/// 트랙을 `rule` 색으로 그리면 다크 모드에서 종이와 거의 같아 남은 부분이 안 보인다.
-/// 100%를 넘으면 숫자는 그대로 올라가고 모양은 가득 찬 채로 있다.
+/// Goal progress: next to `97%`, a small ring, a full circle (pie) or a thin bar. Filled part accent, remainder a faint gray track.
+/// Drawing the track in `rule` color makes it nearly paper-colored in dark mode, so the remainder disappears.
+/// Past 100% the number keeps rising and the shape stays full.
 struct GoalProgress: View {
   let value: Int
   let goal: Int
@@ -135,7 +135,7 @@ struct GoalProgress: View {
           Circle()
             .trim(from: 0, to: fraction)
             .stroke(Color.accent, style: StrokeStyle(lineWidth: Self.ringLine, lineCap: .butt))
-            // 12시 방향에서 시계 방향으로 채운다. 끝을 둥글게 하면 97%처럼 조금 남았을 때 틈이 덮여 안 보여서 각지게.
+            // Fills clockwise from 12 o'clock. Round caps would cover the gap when little remains (like 97%), so caps are square.
             .rotationEffect(.degrees(-90))
         }
         .frame(width: Self.ringSize, height: Self.ringSize)
@@ -162,7 +162,7 @@ struct GoalProgress: View {
   }
 }
 
-/// 12시 방향에서 시계 방향으로 `fraction`만큼 채운 부채꼴.
+/// A sector filled clockwise from 12 o'clock by `fraction`.
 private nonisolated struct PieSlice: Shape {
   let fraction: Double
 
@@ -178,18 +178,18 @@ private nonisolated struct PieSlice: Shape {
   }
 }
 
-/// 상태 줄 숨기기:
-/// - 타이핑 중: 기본은 계속 보인다. "숨기기"를 고르면 치기 시작하고 1초 뒤 사라졌다가 입력이 1.5초 멈추면 나타난다.
-/// - 쉬고 있을 때: 기본은 마지막 입력·마우스 움직임 10초 뒤에 사라진다. "계속 보이기"를 고를 수 있다.
-/// - 숨어 있어도 마우스를 움직이거나 다시 치면 나타난다(타이핑 중 숨기기를 골랐으면 칠 때는 그대로 숨김).
-/// 키 입력마다 SwiftUI 상태를 바꾸지 않는다(docs/PERFORMANCE.md 2장). `isHidden`은 보이기·숨기기가 실제로 바뀔 때만 바뀌고,
-/// 나머지는 관찰하지 않는 값(시각)만 적는다. 기다리는 작업은 하나만 둔다.
+/// Hiding the status bar:
+/// - While typing: visible by default. With "hide", it disappears 1 s after typing starts and reappears after input pauses 1.5 s.
+/// - While idle: by default it disappears 10 s after the last input/mouse movement. "Always visible" can be chosen.
+/// - Even hidden, moving the mouse or typing again brings it back (if hide-while-typing is chosen, it stays hidden while typing).
+/// SwiftUI state isn't changed per keystroke (docs/PERFORMANCE.md ch.2). `isHidden` changes only when visibility actually changes;
+/// otherwise only unobserved values (times) are recorded. Only one waiting task exists.
 @MainActor
 @Observable
 final class StatusBarFade {
   private(set) var isHidden = false
 
-  /// 설정 값. 바꾼 뒤에는 `reconsider()`.
+  /// Setting values. Call `reconsider()` after changing.
   @ObservationIgnored var hidesWhileTyping = false
   @ObservationIgnored var hidesWhenIdle = true
 
@@ -215,7 +215,7 @@ final class StatusBarFade {
     watch()
   }
 
-  /// 마우스를 움직였을 때. 이어서 타이핑하면 처음부터 다시 판단한다.
+  /// On mouse movement. Continued typing restarts the decision.
   func show() {
     burstStart = nil
     lastActivity = .now
@@ -223,7 +223,7 @@ final class StatusBarFade {
     watch()
   }
 
-  /// 설정이 바뀌었을 때: 기다리던 작업을 버리고 지금 설정으로 다시 판단한다.
+  /// On settings change: drop the waiting task and decide again with the current settings.
   func reconsider() {
     watcher?.cancel()
     watcher = nil
@@ -241,12 +241,12 @@ final class StatusBarFade {
     }
   }
 
-  /// 지금 보일지 숨길지 정하고, 다음에 다시 판단할 시각을 돌려준다. nil이면 더 기다릴 일이 없다.
+  /// Decide whether to show or hide now, and return when to decide again. nil means nothing more to wait for.
   private func step() -> ContinuousClock.Instant? {
     let now = ContinuousClock.now
     if let start = burstStart {
       if now - lastInput < showAfter {
-        // 타이핑 중
+        // Typing
         let hide = hidesWhileTyping && now - start >= hideAfter
         setHidden(hide)
         let showCheck = lastInput + showAfter
@@ -254,7 +254,7 @@ final class StatusBarFade {
       }
       burstStart = nil
     }
-    // 쉬는 중
+    // Idle
     guard hidesWhenIdle else {
       setHidden(false)
       return nil

@@ -1,15 +1,15 @@
 import Foundation
 
-/// 두 글의 차이 (PLAN 10장 4번). 과거(old) ↔ 현재(new) 비교 화면이 그대로 그릴 수 있는 모양으로 만든다.
-/// - 줄 = 문단(`ParagraphLines` 규칙, 편집기 줄 번호와 같음). 같은 줄은 두 칸에 나란히, 지운 줄은 왼쪽만, 넣은 줄은 오른쪽만.
-/// - 붙어 있는 "지운 줄"과 "넣은 줄"은 순서대로 짝지어 "고친 줄"로 만든다(두 칸에서 같은 높이).
-/// - 고친 줄 안은 바뀐 크기에 맞춰 칠할 곳을 정한다: 많이 바뀌면 줄 전체, 아니면 어절, 어절 안에서 몇 글자면 그 글자만.
+/// Difference between two texts (PLAN ch.10 #4). Built in a shape the past (old) ↔ present (new) diff view can draw directly.
+/// - Line = paragraph (`ParagraphLines` rule, same as editor line numbers). Unchanged lines side by side, deleted lines left only, inserted right only.
+/// - Adjacent "deleted" and "inserted" lines are paired in order into "modified lines" (same height in both columns).
+/// - Within a modified line, highlighting scales with the change: whole line if much changed, else words, or just a few characters within a word.
 public struct TextDiff: Sendable, Equatable {
-  /// 고친 줄에서 칠할 곳. 범위는 그 줄 안의 `Character` 위치(0부터)라 한글 음절·이모지가 쪼개지지 않는다.
+  /// What to highlight in a modified line. Ranges are `Character` offsets within the line (from 0), so Hangul syllables and emoji never split.
   public enum Highlight: Sendable, Equatable {
-    /// 줄 전체가 바뀐 것으로 본다(문장 단위)
+    /// Treat the whole line as changed (sentence level)
     case wholeLine
-    /// 바뀐 부분만. 한쪽이 비어 있을 수 있다(예: 했다→했었다는 과거 칸에 칠할 곳이 없다).
+    /// Only the changed parts. One side may be empty (e.g. 했다→했었다 has nothing to highlight in the past column).
     case ranges(old: [Range<Int>], new: [Range<Int>])
   }
 
@@ -20,31 +20,31 @@ public struct TextDiff: Sendable, Equatable {
     case changed(old: Int, new: Int, Highlight)
   }
 
-  /// 줄 번호는 여기 위치 + 1
+  /// Line number is this position + 1
   public let oldLines: [String]
   public let newLines: [String]
   public let rows: [Row]
-  /// 너무 커서 고친 줄 안을 비교하지 않았다(모두 `.wholeLine`). 화면에 알린다.
+  /// Too large, so modified lines weren't compared internally (all `.wholeLine`). Reported on screen.
   public let isLineOnly: Bool
 
   public var hasChanges: Bool {
     rows.contains { if case .same = $0 { false } else { true } }
   }
 
-  /// 고친 줄 안을 비교하는 최대 개수. 넘으면 줄 단위만 한다.
-  /// 측정: 한 줄에 약 0.013ms라 2,000줄이면 26ms 안팎(10만 자 전부 고친 2,861줄은 37ms 더 듦).
+  /// Max number of modified lines compared internally. Beyond it, line level only.
+  /// Measured ~0.013 ms per line, so ~26 ms for 2,000 lines (2,861 lines with all 100k chars modified took 37 ms more).
   public static let defaultInlineLimit = 2_000
 
-  /// 고친 줄에서 바뀐 글자가 이 비율을 넘으면 줄 전체를 칠한다. 한국어 문장 고침 10가지로 정했다(PLAN 10장 4번):
-  /// 0.5면 짧은 대사를 늘린 것(`"어디 가?"` → `"어디 가는 거야?"`)도 줄 전체가 되고, 0.7이면 문장을 통째로 바꾼 것도 조각으로 칠한다.
+  /// If changed characters in a modified line exceed this ratio, highlight the whole line. Set from 10 Korean sentence edits (PLAN ch.10 #4):
+  /// at 0.5 even lengthening a short line (`"어디 가?"` → `"어디 가는 거야?"`) becomes whole-line, and at 0.7 a fully rewritten sentence gets highlighted in pieces.
   public static let defaultWholeLineRatio = 0.6
 
-  /// 메인 스레드 밖에서 부른다. 도중에 작업이 취소되면 `CancellationError`를 던진다.
+  /// Call off the main thread. Throws `CancellationError` if the task is cancelled midway.
   public init(
     old: String, new: String, wholeLineRatio: Double = TextDiff.defaultWholeLineRatio,
     inlineLimit: Int = TextDiff.defaultInlineLimit
   ) throws {
-    // 다른 편집기가 한글을 자모로 풀어 저장해도(NFD) 같은 글자로 보도록 맞춘다.
+    // Normalized so Hangul saved decomposed into jamo by other editors (NFD) counts as the same characters.
     let oldLines = Self.lines(old.precomposedStringWithCanonicalMapping)
     let newLines = Self.lines(new.precomposedStringWithCanonicalMapping)
     var pairs = try Self.lineRows(oldLines, newLines)
@@ -68,10 +68,10 @@ public struct TextDiff: Sendable, Equatable {
     ParagraphLines.split(text)
   }
 
-  // MARK: - 줄 단위
+  // MARK: - Line level
 
-  /// 앞뒤의 같은 줄을 잘라내고 가운데만 `difference(from:)`로 비교한 뒤, 줄 맞춤 목록으로 편다.
-  /// 고친 줄은 아직 칠할 곳 없이 `.wholeLine`으로 둔다.
+  /// Trim identical leading/trailing lines, compare only the middle with `difference(from:)`, then flatten into an aligned row list.
+  /// Modified lines are left as `.wholeLine` with no highlights yet.
   private static func lineRows(_ old: [String], _ new: [String]) throws -> [Row] {
     var prefix = 0
     while prefix < old.count, prefix < new.count, old[prefix] == new[prefix] { prefix += 1 }
@@ -81,7 +81,7 @@ public struct TextDiff: Sendable, Equatable {
     {
       suffix += 1
     }
-    // 줄마다 번호를 붙여 번호끼리 비교한다. 문자열 비교(유니코드 규칙)를 수백만 번 하지 않게 하려는 것(측정, 10만 자 최악 316ms).
+    // Number each line and compare numbers, avoiding millions of string comparisons (Unicode rules) (measured, worst case 316 ms for 100k chars).
     var numbers: [String: Int] = [:]
     func number(_ line: String) -> Int {
       if let known = numbers[line] { return known }
@@ -90,8 +90,8 @@ public struct TextDiff: Sendable, Equatable {
     }
     let oldMiddle = old[prefix..<(old.count - suffix)].map(number)
     let newMiddle = new[prefix..<(new.count - suffix)].map(number)
-    // 한쪽에만 있는 줄은 짝이 될 수 없으니 미리 빼고, 양쪽에 다 있는 줄끼리만 비교한다.
-    // 고친 문단은 대개 한쪽에만 있어서 비교할 양이 크게 준다(측정: 겹치는 줄이 없는 10만 자 155ms → 14ms).
+    // Lines present on only one side can't pair, so they're removed up front and only lines present on both sides are compared.
+    // Modified paragraphs usually exist on one side only, which shrinks the comparison a lot (measured: 100k chars with no shared lines 155 ms → 14 ms).
     let oldSet = Set(oldMiddle)
     let newSet = Set(newMiddle)
     let oldCommon = oldMiddle.indices.filter { newSet.contains(oldMiddle[$0]) }
@@ -100,7 +100,7 @@ public struct TextDiff: Sendable, Equatable {
     let difference = newCommon.map { newMiddle[$0] }.difference(from: oldCommon.map { oldMiddle[$0] })
     try Task.checkCancellation()
 
-    // 처음엔 모두 지운 줄·넣은 줄로 두고, 비교에서 남은(같은) 줄만 뺀다.
+    // Start with everything as deleted/inserted, then remove the lines left (unchanged) by the comparison.
     var removed = Set(prefix..<(old.count - suffix))
     var inserted = Set(prefix..<(new.count - suffix))
     var removedCommon = Set<Int>()
@@ -130,7 +130,7 @@ public struct TextDiff: Sendable, Equatable {
         j += 1
       }
       if removedRun.isEmpty, insertedRun.isEmpty {
-        // 한쪽만 끝났다면 계산이 어긋난 것이다. 앱이 죽지 않게 남은 줄을 지운 줄·넣은 줄로 내보낸다.
+        // If only one side finished, the computation went wrong. To avoid crashing, emit the remaining lines as deleted/inserted.
         guard i < old.count, j < new.count else {
           rows += (i..<old.count).map { Row.removed(old: $0) } + (j..<new.count).map { Row.added(new: $0) }
           break
@@ -148,10 +148,10 @@ public struct TextDiff: Sendable, Equatable {
     return rows
   }
 
-  // MARK: - 고친 줄 안
+  // MARK: - Within modified lines
 
-  /// 어절 단위로 비교하고, 바뀐 글자가 `wholeLineRatio`를 넘으면 줄 전체로 본다.
-  /// 지운 어절 하나와 넣은 어절 하나가 맞붙어 있고 앞이나 뒤 글자가 같으면 다른 글자만 칠한다(을→를, 했다→했었다).
+  /// Compare by words; if changed characters exceed `wholeLineRatio`, treat as the whole line.
+  /// When one deleted word and one inserted word are adjacent and share leading or trailing characters, highlight only the differing characters (을→를, 했다→했었다).
   static func highlight(_ old: [Character], _ new: [Character], wholeLineRatio: Double) -> Highlight {
     let oldTokens = tokens(old)
     let newTokens = tokens(new)
@@ -187,7 +187,7 @@ public struct TextDiff: Sendable, Equatable {
         j += 1
         continue
       }
-      // 바뀐 어절에 낀 띄어쓰기만은 칠하지 않는다(보이지 않는 칸이 칠해지면 어색하다).
+      // Spaces caught inside changed words aren't highlighted (highlighting invisible cells looks odd).
       let removedWords = removedRun.filter { !$0.isSpace }
       let insertedWords = insertedRun.filter { !$0.isSpace }
       if removedWords.count == 1, insertedWords.count == 1,
@@ -210,7 +210,7 @@ public struct TextDiff: Sendable, Equatable {
     return .ranges(old: merged(oldRanges), new: merged(newRanges))
   }
 
-  /// 두 어절의 같은 앞부분·뒷부분을 빼고 남은 가운데. 같은 글자가 하나도 없으면 nil(어절 전체를 칠한다).
+  /// The middle left after removing the shared prefix/suffix of two words. nil if no characters are shared (highlight the whole word).
   private static func characterRanges(_ old: Token, _ new: Token) -> (Range<Int>, Range<Int>)? {
     let a = old.characters
     let b = new.characters
@@ -229,7 +229,7 @@ public struct TextDiff: Sendable, Equatable {
     )
   }
 
-  /// 맞닿은 범위를 하나로 합친다(화면이 칠할 조각 수를 줄인다).
+  /// Merge touching ranges into one (fewer pieces for the view to paint).
   private static func merged(_ ranges: [Range<Int>]) -> [Range<Int>] {
     var result: [Range<Int>] = []
     for range in ranges.sorted(by: { $0.lowerBound < $1.lowerBound }) {
@@ -242,7 +242,7 @@ public struct TextDiff: Sendable, Equatable {
     return result
   }
 
-  /// 어절(빈칸이 아닌 글자 묶음)과 빈칸 묶음을 번갈아 나눈다. 둘 다 토큰이라 이어 붙이면 원래 줄이 된다.
+  /// Split alternately into words (runs of non-space characters) and space runs. Both are tokens, so concatenating restores the line.
   struct Token {
     let characters: [Character]
     let range: Range<Int>

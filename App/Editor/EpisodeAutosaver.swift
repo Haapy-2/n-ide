@@ -2,26 +2,26 @@ import AppKit
 import NovelCore
 import Observation
 
-/// 회차 자동 저장 (SPEC 6장, 7장 4번).
-/// - 입력이 멈추고 1초 뒤 저장한다. 회차 전환·창 비활성·앱 종료 때는 바로 저장한다(`startSave`·`flush`).
-/// - 실제 쓰기는 `SaveQueue`가 순서대로 처리하고 실패하면 재시도한다.
-/// - 끝내 실패하면 그 회차 본문을 메모리(`unsaved`)에 들고 있다가, 그 회차를 다시 열 때 디스크 대신 이것을 보여준다.
-/// - 텍스트 저장소는 읽기만 한다. 그래서 한글 조합 중에 저장해도 조합이 끊기지 않는다.
-/// - 외부 변경: 창이 다시 활성화될 때와 저장 직전에 파일이 앱 밖에서 바뀌었는지 본다.
-///   앱 쪽 변경이 없으면 조용히 다시 읽고, 양쪽 다 바뀌었으면 앱 쪽을 스냅샷으로 남긴 뒤 사용자에게 묻는다(`conflicts`).
-/// - 버전 스냅샷은 `snapshots`가 찍는다. 떠날 때는 저장하려고 복사한 본문을 그대로 넘겨 한 번 더 복사하지 않는다.
+/// Episode autosave (SPEC ch.6, ch.7 #4).
+/// - Saves 1 s after typing stops. Saves immediately on episode switch, window deactivation and quit (`startSave`, `flush`).
+/// - `SaveQueue` performs writes in order and retries on failure.
+/// - If it ultimately fails, the body is kept in memory (`unsaved`) and shown instead of the disk copy when that episode reopens.
+/// - Text storage is read only, so saving during Hangul composition doesn't break it.
+/// - External changes: check whether the file changed outside the app on reactivation and right before saving.
+///   With no app-side changes, reload silently; if both changed, snapshot the app side and ask the user (`conflicts`).
+/// - Version snapshots are taken by `snapshots`. On leave, the body already copied for saving is passed along, avoiding another copy.
 @MainActor
 @Observable
 final class EpisodeAutosaver {
   enum Status: Equatable {
     case idle
     case saving
-    /// 저장이 실패해 다시 시도하는 중.
+    /// Retrying after a failed save.
     case retrying
     case failed(Failure)
   }
 
-  /// 저장 실패 표시. `label`은 상태 줄 한 줄, `detail`은 눌렀을 때 보이는 설명.
+  /// Save failure display. `label` is the one-line status bar text, `detail` the explanation shown on click.
   struct Failure: Equatable {
     var label = WriteProblem.other.statusLabel
     var detail = ""
@@ -37,33 +37,33 @@ final class EpisodeAutosaver {
     }
   }
 
-  /// 외부 변경과 부딪친 회차. 사용자가 고를 때까지 그 회차는 저장하지 않는다.
+  /// An episode that collided with an external change. It isn't saved until the user chooses.
   struct Conflict: Equatable {
     let episodeID: EpisodeID
-    /// 디스크의 지금 상태(앱 밖에서 바뀐 내용).
+    /// Current disk state (content changed outside the app).
     let disk: DiskVersion
-    /// `snapshot`에 남긴 때의 변경 번호. 그 뒤에 더 고쳤으면 스냅샷에 없는 글이 있다.
+    /// Change number when `snapshot` was taken. If edited after that, some text isn't in the snapshot.
     var change: Int
-    /// 앱 쪽 본문을 남긴 스냅샷. 남기는 중이면 nil.
+    /// Snapshot holding the app-side body. nil while it's being written.
     var snapshot: URL?
-    /// 스냅샷 쓰기를 마쳤는지(실패 포함). 마친 뒤에 묻는다.
+    /// Whether the snapshot write finished (including failure). We ask only after it finishes.
     var isReady = false
-    /// 고른 쪽으로 바꾸려다 버릴 쪽을 스냅샷으로 남기지 못해 멈췄으면 그 버릴 쪽. 묻는 창이 까닭을 보인다.
+    /// The side to discard, if switching to the chosen side stopped because it couldn't be snapshotted. The dialog shows why.
     var unkept: Side?
 
     enum Side: Equatable {
-      /// 이 앱에서 쓴 글
+      /// Text written in this app
       case app
-      /// 앱 밖에서 바뀐 글
+      /// Text changed outside the app
       case disk
     }
   }
 
   private(set) var status: Status = .idle
   private(set) var conflicts: [EpisodeID: Conflict] = [:]
-  /// 저장이 0.5초 넘게 걸릴 때만 켜진다. 평소 저장은 화면에 아무것도 띄우지 않는다(DESIGN.md 4장).
+  /// On only when a save takes over 0.5 s. Normal saves show nothing on screen (DESIGN.md ch.4).
   private(set) var showsSavingIndicator = false
-  /// 되돌린 직후 상태 줄에 띄우는 알림(`14:23:05 버전으로 되돌렸어요`). 다음 입력이나 회차 전환에 사라진다.
+  /// Notice shown in the status bar right after a restore (`14:23:05 버전으로 되돌렸어요`). Disappears on the next input or episode switch.
   private(set) var restoreNotice: String?
 
   let store: ProjectStore
@@ -73,20 +73,20 @@ final class EpisodeAutosaver {
   private let maxWait: Duration
   @ObservationIgnored private weak var textView: ManuscriptTextView?
   @ObservationIgnored private(set) var episodeID: EpisodeID?
-  /// 스냅샷 판이 열려 있다(`beginPanel`~`endPanel`). 그동안 외부 변경 확인을 미룬다.
+  /// The snapshot panel is open (`beginPanel`…`endPanel`). External-change checks are deferred meanwhile.
   @ObservationIgnored private var isHoldingExternalChanges = false
-  /// 회차별 변경 번호. 입력할 때마다 1씩 오른다.
+  /// Per-episode change number. Increases by 1 on every edit.
   @ObservationIgnored private var changes: [EpisodeID: Int] = [:]
   @ObservationIgnored private var savedChanges: [EpisodeID: Int] = [:]
-  /// 저장에 실패한 회차의 본문. 변경 번호를 함께 들어, 쓰는 중인 본문과 어느 쪽이 더 새것인지 가린다.
+  /// Body of an episode whose save failed. Carries its change number to tell which is newer than the one being written.
   @ObservationIgnored private var unsaved: [EpisodeID: SaveJob] = [:]
-  /// 파일에 쓰는 중인 회차의 본문.
+  /// Body of the episode currently being written to file.
   @ObservationIgnored private var inFlight: [EpisodeID: SaveJob] = [:]
   @ObservationIgnored private var running: [UUID: Task<Void, Never>] = [:]
   @ObservationIgnored private var pendingSave: Task<Void, Never>?
-  /// 지금 회차에서 아직 저장을 시작하지 않은 첫 변경의 시각.
+  /// Time of the first change in the current episode not yet being saved.
   @ObservationIgnored private var waitingSince: ContinuousClock.Instant?
-  /// 마지막 저장 실패의 설명. 실패한 원고가 남아 있는 동안 상태 줄에 보인다.
+  /// Description of the last save failure. Shown in the status bar while the failed manuscript remains.
   @ObservationIgnored private var lastFailure = Failure()
   @ObservationIgnored let disk = DiskVersions()
 
@@ -103,51 +103,51 @@ final class EpisodeAutosaver {
     snapshots.currentText = { [weak self] in self?.textView?.string }
   }
 
-  /// 앱을 끄기 전에 마칠 일이 있는지: 저장 안 된 변경, 아직 안 찍은 떠날 때 스냅샷, 쓰는 중인 스냅샷.
+  /// Whether there's work to finish before quitting: unsaved changes, pending leave snapshots, snapshots being written.
   var hasWorkBeforeQuit: Bool {
     hasUnsavedChanges || snapshots.hasPendingWork || hasProjectWork() || bulkRewrites > 0
   }
 
-  /// 진행 중인 여러 회차 고쳐 쓰기(전체 바꾸기·되돌리기·다시 바꾸기). 회차와 회차 사이에는 쓰는 중인 저장이 없어
-  /// 그 순간 종료·창 닫기가 일부 회차만 바뀐 채 끝나지 않게, 끝날 때까지 기다린다.
+  /// Multi-episode rewrites in progress (replace all / revert / redo replace). Between episodes no save is in flight,
+  /// so wait until they finish to avoid quit or window close ending with only some episodes changed.
   @ObservationIgnored private var bulkRewrites = 0
-  /// 편집기에서 마지막으로 글이 바뀐 때. 열린 회차를 고쳐 쓰기 전에 입력이 멈추기를 기다리는 데 쓴다.
+  /// When the editor text last changed. Used to wait for typing to pause before rewriting the open episode.
   @ObservationIgnored private var lastInput: ContinuousClock.Instant?
-  /// 두벌식 입력기(macOS 27)가 표시된 글자 없이 조합을 이어 갈 때는 `hasMarkedText`가 false라 조합 중인지 알 수 없다.
-  /// 그 틈에 고치면 입력기가 잇던 글자를 놓게 되어(`forgetInputInProgress`) 글자가 쪼개지므로(가 + ㄱ → "가ㄱ"),
-  /// 입력이 이만큼 멈춘 뒤에 고친다.
+  /// When the 2-set IME (macOS 27) continues composing without displayed characters, `hasMarkedText` is false, so composition can't be detected.
+  /// Editing in that gap makes the IME drop the character in progress (`forgetInputInProgress`), splitting it (가 + ㄱ → "가ㄱ"),
+  /// so edit only after input pauses this long.
   static let inputPause: Duration = .milliseconds(500)
 
   func beginBulkRewrite() { bulkRewrites += 1 }
   func endBulkRewrite() { bulkRewrites -= 1 }
 
-  /// 작품 쪽(`project.json`: 회차 목록, 미뤄 둔 글자 수)에 끝낼 저장이 있는지와 그것을 끝내는 일. `ProjectModel`이 건다.
-  /// 앱 종료는 자동 저장기 목록만 보므로 여기에 걸어 함께 기다리게 한다.
+  /// Whether the project side (`project.json`: episode list, deferred counts) has saves to finish, and how to finish them. Set by `ProjectModel`.
+  /// App quit only looks at the autosaver list, so it's hooked here to be awaited too.
   @ObservationIgnored var hasProjectWork: () -> Bool = { false }
   @ObservationIgnored var finishProjectWork: () async -> Void = {}
 
-  /// 저장 안 된 변경이 있는지 (지금 회차 또는 저장에 실패한 회차, 외부 변경 충돌을 고르지 않은 회차).
+  /// Whether there are unsaved changes (current episode, failed episodes, or unresolved external-change conflicts).
   var hasUnsavedChanges: Bool {
     if let episodeID, isDirty(episodeID) { return true }
     return !unsaved.isEmpty || !running.isEmpty
   }
 
-  /// 저장 안 된 변경 중 어디에도 남지 않은 것이 있는지. 다시 시도·내보내기는 이것만 다룬다.
-  /// 충돌 회차의 앱 쪽 글은 `conflict` 스냅샷에 그대로 있으면 지켜진 것으로 본다(저장을 다시 해도 충돌은 풀리지 않는다).
+  /// Whether any unsaved change is preserved nowhere. Only these get retry/export.
+  /// A conflict episode's app-side text counts as preserved if it's intact in the `conflict` snapshot (re-saving can't resolve the conflict).
   var hasUnprotectedChanges: Bool {
     if let episodeID, isDirty(episodeID), !isKeptInSnapshot(episodeID) { return true }
     return unsaved.keys.contains { !isKeptInSnapshot($0) } || !running.isEmpty
   }
 
-  /// 고르지 않은 충돌 중 앱 쪽 글이 스냅샷에 그대로 남은 회차 수. 종료 때 따로 알린다.
+  /// Number of unresolved conflict episodes whose app-side text is intact in a snapshot. Reported separately at quit.
   var conflictsKeptInSnapshots: Int { conflicts.keys.filter(isKeptInSnapshot).count }
 
-  /// 지켜지지 않은 원고가 모두 작품 밖 백업에 실제로 써졌는지(종료 경고·상태 줄 문구). 충돌 회차는 백업하지 않는다.
+  /// Whether every unpreserved manuscript was actually written to the out-of-project backup (quit warning, status bar text). Conflict episodes aren't backed up.
   var unprotectedAreBackedUp: Bool {
     backup != nil && unsaved.keys.allSatisfy { isKeptInSnapshot($0) || (conflicts[$0] == nil && isBackedUp($0)) }
   }
 
-  /// 그 회차의 마지막 글이 백업에 써졌는지. 써진 뒤에 더 고쳤으면 아니다.
+  /// Whether that episode's latest text was written to the backup. Not if edited after the write.
   private func isBackedUp(_ id: EpisodeID) -> Bool {
     guard let written = writtenBackups[id] else { return false }
     return written >= changes[id, default: 0]
@@ -158,30 +158,30 @@ final class EpisodeAutosaver {
     return changes[id, default: 0] == conflict.change
   }
 
-  /// 회차 제목. 저장하지 못한 원고를 다른 곳으로 내보낼 때 파일 이름으로 쓴다. `ProjectModel`이 건다.
+  /// Episode title, used as the file name when exporting an unsaved manuscript elsewhere. Set by `ProjectModel`.
   @ObservationIgnored var episodeTitle: (EpisodeID) -> String = { _ in "" }
-  /// 회차가 지금 목록에 있는지. 휴지통으로 간 회차에 늦게 쓰면 지운 본문 파일이 되살아나므로 전체 바꾸기가 쓰기 직전에 본다.
+  /// Whether the episode is in the list now. A late write to a trashed episode would resurrect its deleted body file, so replace all checks right before writing.
   @ObservationIgnored var isListed: (EpisodeID) -> Bool = { _ in true }
   @ObservationIgnored var projectTitle: () -> String = { "" }
 
-  /// 저장에 끝내 실패한 원고를 작품 밖에 따로 두는 곳. 없으면(테스트 기본값) 백업하지 않는다.
+  /// Where manuscripts that ultimately failed to save are kept outside the project. Absent (test default) = no backup.
   @ObservationIgnored var backup: EmergencyBackup?
-  /// 이번 실행에서 백업한 회차와 그 변경 번호. 그보다 새 본문이 저장되면 백업을 지운다.
+  /// Episodes backed up this run and their change numbers. The backup is deleted once a newer body is saved.
   @ObservationIgnored private var backedUp: [EpisodeID: Int] = [:]
-  /// 그중 백업 파일에 실제로 써진 것. 쓰기가 실패하면(디스크 가득 등) 들지 않아 "백업해 두었어요"라고 하지 않는다.
+  /// Of those, the ones actually written to the backup file. A failed write (disk full etc.) isn't included, so we never claim "backed up".
   @ObservationIgnored private var writtenBackups: [EpisodeID: Int] = [:]
-  /// 백업 쓰기·지우기를 차례대로(옛 쓰기가 새 지우기 뒤에 끝나 낡은 백업이 남지 않게).
+  /// Backup writes/deletes in order (so an old write finishing after a new delete doesn't leave a stale backup).
   @ObservationIgnored private var backupTail: Task<Void, Never>?
 
-  /// 끝내 저장하지 못해 메모리에만 있는 원고(창 닫기·앱 종료 때 다른 곳으로 내보내려고).
-  /// 충돌 스냅샷에 그대로 남은 회차는 뺀다(내보낼 필요가 없다).
+  /// Manuscripts that ultimately couldn't be saved and live only in memory (to export elsewhere on window close or quit).
+  /// Excludes episodes intact in a conflict snapshot (no need to export).
   func unsavedManuscripts() -> [(title: String, text: String)] {
     unsaved.values.filter { !isKeptInSnapshot($0.id) }.sorted { $0.id.rawValue < $1.id.rawValue }
       .map { (episodeTitle($0.id), $0.text) }
   }
 
-  /// 아직 디스크에 썼다고 확인되지 않은 원고: 저장에 실패했거나, 쓰는 중이거나, 열린 회차에서 저장 전인 글.
-  /// 종료가 늦어 사용자가 기다리지 않고 내보낼 때 쓴다.
+  /// Manuscripts not yet confirmed written to disk: failed, being written, or unsaved text in the open episode.
+  /// Used when the user exports instead of waiting for a slow quit.
   func pendingManuscripts() -> [(title: String, text: String)] {
     var texts: [EpisodeID: String] = [:]
     for id in Set(unsaved.keys).union(inFlight.keys) { texts[id] = pendingText(for: id) }
@@ -189,8 +189,8 @@ final class EpisodeAutosaver {
     return texts.sorted { $0.key.rawValue < $1.key.rawValue }.map { (episodeTitle($0.key), $0.value) }
   }
 
-  /// 사용자가 다른 곳으로 내보냈다. 메모리의 원고를 놓아 더는 "저장 안 됨"으로 세지 않는다.
-  /// 충돌 스냅샷에 남은 회차는 내보내지 않았으므로 그대로 둔다(나중에 충돌을 고를 때 앱 쪽 글이 필요하다).
+  /// The user exported elsewhere. Release the in-memory manuscripts so they no longer count as "unsaved".
+  /// Episodes kept in conflict snapshots weren't exported, so leave them (the app-side text is needed when resolving later).
   func markRescued() {
     for id in unsaved.keys where !isKeptInSnapshot(id) {
       savedChanges[id] = max(savedChanges[id, default: 0], changes[id, default: 0])
@@ -201,25 +201,25 @@ final class EpisodeAutosaver {
 
   func attach(_ textView: ManuscriptTextView) {
     self.textView = textView
-    // 본문 복사는 들어갈 때 한 번만 메인에서, 쓰기는 스냅샷 줄이 메인 밖에서 한다.
+    // The body is copied once on main on entry; the snapshot queue writes off main.
     textView.onEnterMultiCursor = { [weak self, weak textView] in
       guard let self, let textView, let id = episodeID else { return }
       snapshots.takeBeforeMultiCursor(id, text: textView.string)
     }
   }
 
-  /// 회차를 열 때 디스크 대신 보여줄 본문: 저장에 실패해 메모리에 남은 것, 또는 아직 쓰는 중인 것. 없으면 nil.
-  /// (빠르게 A→B→A로 돌아왔을 때 A 저장이 끝나기 전 디스크의 옛 본문을 읽지 않기 위해서다.)
-  /// 둘 다 있으면(실패한 뒤 더 쓰고 떠나 새 저장이 아직 쓰는 중) 변경 번호가 큰 쪽이 더 새 본문이다.
-  /// 옛 실패 본문을 보여 주면 이어 쓴 글이 그사이 쓴 글을 덮는다.
+  /// Body to show instead of disk when opening an episode: kept in memory after a failed save, or still being written. nil if none.
+  /// (So quickly going A→B→A doesn't read A's old disk body before its save finishes.)
+  /// If both exist (wrote more after a failure, left, and the new save is still in flight), the larger change number is newer.
+  /// Showing the old failed body would let continued typing overwrite what was written in between.
   func pendingText(for id: EpisodeID) -> String? {
     guard let failed = unsaved[id] else { return inFlight[id]?.text }
     guard let writing = inFlight[id], writing.change > failed.change else { return failed.text }
     return writing.text
   }
 
-  /// 작품 전체 검색이 파일 대신 찾을 글: 저장하지 못했거나 아직 쓰는 중인 글, 그리고 열린 회차는 편집기의 지금 글.
-  /// 디스크 파일은 1초 전 글일 수 있어서, 방금 친 글도 찾히게 한다.
+  /// Text project search uses instead of files: unsaved or in-flight text, and for the open episode the editor's current text.
+  /// The disk file may be a second old, so just-typed text is still found.
   func searchTexts() -> [EpisodeID: String] {
     var texts: [EpisodeID: String] = [:]
     for id in Set(unsaved.keys).union(inFlight.keys) { texts[id] = pendingText(for: id) }
@@ -227,18 +227,18 @@ final class EpisodeAutosaver {
     return texts
   }
 
-  /// 편집기에 새 회차가 올라간 뒤 부른다. 디스크에서 읽었으면 그때의 상태(`version`)를 함께 준다.
-  /// (메모리에 남은 본문으로 열었으면 nil: 기준은 전에 기억한 것을 그대로 쓴다.)
+  /// Called after a new episode is loaded into the editor. If read from disk, pass that state (`version`).
+  /// (nil when opened from an in-memory body: keep the previously remembered baseline.)
   func begin(episode id: EpisodeID, version: DiskVersion? = nil) {
     episodeID = id
     waitingSince = nil
     if let version { disk[id] = version }
-    // 메모리에 남은 본문으로 연 경우 바로 다시 저장을 시도한다.
+    // When opened from an in-memory body, retry saving right away.
     if unsaved[id] != nil { scheduleSave() }
   }
 
-  /// 회차를 떠날 때. 지금 본문을 바로 복사해 저장을 시작하되 기다리지 않는다.
-  /// 저장이 끝나길 기다렸다 다음 회차를 보여주면 전환이 끊겨 보이기 때문이다.
+  /// On leaving an episode. Copy the current body now and start saving, without waiting.
+  /// Waiting for the save before showing the next episode would make switching look choppy.
   func leaveEpisode() {
     restoreNotice = nil
     snapshotLeaving()
@@ -247,36 +247,36 @@ final class EpisodeAutosaver {
     if let left { releaseBaselineIfIdle(left) }
   }
 
-  /// 떠난 회차의 디스크 기준을 놓는다. 기준은 본문 전체를 들고 있어서, 그대로 두면 훑어본 회차만큼 메모리에 쌓인다.
-  /// 저장할 것도 쓰는 중인 것도 없을 때만 놓는다. 다시 열면 디스크에서 새로 읽어 기준을 잡는다.
+  /// Release the left episode's disk baseline. It holds the whole body, so keeping it would pile up memory for every browsed episode.
+  /// Only released when nothing is pending or in flight. Reopening reads disk afresh for a new baseline.
   private func releaseBaselineIfIdle(_ id: EpisodeID) {
     guard id != episodeID, !isDirty(id), inFlight[id] == nil, conflicts[id] == nil else { return }
     disk[id] = nil
   }
 
-  /// 디스크 기준을 들고 있는 회차인지(테스트용).
+  /// Whether the episode holds a disk baseline (for tests).
   func holdsBaseline(for id: EpisodeID) -> Bool { disk[id] != nil }
 
-  /// 창을 닫을 때 그 자리에서 부른다: `finish`의 앞부분(떠날 때 스냅샷·저장 시작)만 기다리지 않고 한다.
-  /// 창 닫기 처리가 끝나면 편집기(약한 참조)가 먼저 사라질 수 있어서, 본문은 그 전에 복사해 둔다.
+  /// Called in place when a window closes: does only the first part of `finish` (leave snapshot, start save) without waiting.
+  /// After window close handling the editor (weak reference) may vanish first, so the body is copied before that.
   func startFinishing() {
     snapshotLeaving()
   }
 
-  /// 창을 닫거나 앱을 끌 때: 떠날 때 스냅샷을 남기고, 저장과 스냅샷 쓰기가 다 끝날 때까지 기다린다.
+  /// On window close or quit: take the leave snapshot and wait until saving and snapshot writes all finish.
   func finish() async {
     while bulkRewrites > 0 { try? await Task.sleep(for: .milliseconds(20)) }
     snapshotLeaving()
     await flush()
     await backupTail?.value
     await snapshots.waitForWrites()
-    // 바로 위 저장이 외부 변경 충돌을 막 냈으면 앱 쪽 글을 스냅샷에 다 남기기를 기다린다.
-    // 남았는지에 따라 종료 경고(지켜진 충돌 / 내보낼 원고)가 갈린다.
+    // If the save just above produced an external-change conflict, wait for the app-side text to be fully snapshotted.
+    // Whether it was kept decides the quit warning (preserved conflict / manuscript to export).
     while conflicts.values.contains(where: { !$0.isReady }) { try? await Task.sleep(for: .milliseconds(20)) }
     await finishProjectWork()
   }
 
-  /// 저장을 시작하고, 이번에 고친 회차면 같은 본문으로 `leave` 스냅샷을 남긴다.
+  /// Start saving, and if this episode was edited, take a `leave` snapshot with the same body.
   private func snapshotLeaving() {
     pendingSave?.cancel()
     pendingSave = nil
@@ -285,8 +285,8 @@ final class EpisodeAutosaver {
     if let id = episodeID { snapshots.leave(id) { job?.text ?? textView?.string } }
   }
 
-  /// 직접 찍기(⌃⌘S): 저장을 먼저 끝낸 뒤 지금 본문을 찍는다. 열린 회차가 없으면 nil.
-  /// `skipIfUnchanged`면 마지막 스냅샷과 같을 때도 nil(저장하면서 스냅샷 찍기).
+  /// Manual snapshot (⌃⌘S): finish saving first, then snapshot the current body. nil if no episode is open.
+  /// With `skipIfUnchanged`, also nil when equal to the last snapshot (snapshot-on-save).
   func takeManualSnapshot(skipIfUnchanged: Bool = false) async throws -> Snapshot? {
     guard let id = episodeID else { return nil }
     await flush()
@@ -294,16 +294,16 @@ final class EpisodeAutosaver {
     return try await snapshots.takeManual(id, text: text, skipIfUnchanged: skipIfUnchanged)
   }
 
-  /// 이름이 바뀐 회차의 `rename` 스냅샷. 열린 회차는 편집기 글, 저장하지 못했거나 쓰는 중인 글은 그 글,
-  /// 나머지는 쓰는 차례에 파일을 읽는다(디스크의 글이 그 회차의 지금 글이라서).
+  /// `rename` snapshot of renamed episodes. The open episode uses the editor text, unsaved or in-flight episodes that text,
+  /// others read the file when their turn comes (the disk text is that episode's current text).
   func snapshotRename(_ id: EpisodeID, title: String, memo: String, at date: Date) -> Task<Snapshot?, any Error> {
     let text = id == episodeID ? textView?.string ?? pendingText(for: id) : pendingText(for: id)
     return snapshots.takeRename(id, text: text, title: title, memo: memo, at: date)
   }
 
-  /// 떠 있는 판(⇧⌘S)을 열 때: 편집기의 조합을 끝내고 초점을 내려놓은 뒤 지금 본문을 한 번 복사해 준다.
-  /// 편집기가 없으면 nil. `hadFocus`는 닫을 때 `endPanel`에 그대로 돌려준다.
-  /// 판이 열린 동안은 바깥에서 바뀐 내용을 불러오지 않는다. 판의 "현재"가 이때 복사한 본문이라 비교가 틀어진다.
+  /// Opening the floating panel (⇧⌘S): end editor composition, release focus, then copy the current body once.
+  /// nil without an editor. `hadFocus` is passed back to `endPanel` on close.
+  /// While the panel is open, external changes aren't loaded: the panel's "current" is the body copied here, so the diff would go wrong.
   func beginPanel() -> (text: String, hadFocus: Bool)? {
     guard let textView else { return nil }
     let hadFocus = yieldFocus()
@@ -311,14 +311,14 @@ final class EpisodeAutosaver {
     return (textView.string, hadFocus)
   }
 
-  /// 판을 닫을 때. 열린 동안 미룬 외부 변경 확인을 한 번 한다.
+  /// On panel close. Run the external-change check deferred while it was open, once.
   func endPanel(hadFocus: Bool) {
     isHoldingExternalChanges = false
     if hadFocus { regainFocus() }
     Task { await checkExternalChange() }
   }
 
-  /// 편집기의 조합을 끝내고 키보드 초점을 내려놓는다. 편집기가 초점을 갖고 있었는지 돌려준다.
+  /// End editor composition and release keyboard focus. Returns whether the editor had focus.
   func yieldFocus() -> Bool {
     textView?.yieldFocusForPanel() ?? false
   }
@@ -327,16 +327,16 @@ final class EpisodeAutosaver {
     textView?.regainFocusAfterPanel()
   }
 
-  /// 회차를 휴지통으로 보낸 뒤 부른다. 그 회차에 대해 남은 저장 정보를 버린다.
-  /// (지운 회차를 나중에 저장해 파일이 되살아나는 일을 막는다. 부르기 전에 `flush`로 저장을 끝내 둔다.)
+  /// Called after an episode is trashed. Discards remaining save state for that episode.
+  /// (Prevents a later save from resurrecting a deleted episode's file. Finish saving with `flush` before calling.)
   func forget(episode id: EpisodeID) {
     if episodeID == id {
       pendingSave?.cancel()
       pendingSave = nil
       episodeID = nil
     }
-    // 변경 번호는 0으로 되돌리지 않는다. 저장 줄(SaveQueue)이 이 회차에 쓴 마지막 번호를 기억하고 있어서,
-    // ⌘Z로 휴지통에서 꺼낸 뒤 1부터 다시 세면 새 저장이 "옛 저장"으로 보여 조용히 건너뛰어진다.
+    // Change numbers are never reset to 0. The save queue remembers the last number written for this episode, so
+    // after restoring from trash with ⌘Z, counting from 1 again would make new saves look "old" and be silently skipped.
     if let change = changes[id] { savedChanges[id] = change }
     unsaved[id] = nil
     inFlight[id] = nil
@@ -360,37 +360,37 @@ final class EpisodeAutosaver {
     scheduleSave()
   }
 
-  // MARK: - 스냅샷으로 되돌리기 (PLAN 10장 6번)
+  // MARK: - Restore from snapshot (PLAN ch.10 #6)
 
   enum RestoreError: Error {
     case notOpen
-    /// 외부 변경 충돌을 아직 고르지 않았다.
+    /// The external-change conflict isn't resolved yet.
     case conflict
-    /// 복원 전 스냅샷을 남기는 사이 회차나 본문이 바뀌었다.
+    /// The episode or body changed while the pre-restore snapshot was being taken.
     case changedMeanwhile
   }
 
-  /// 지금 본문을 `restore` 스냅샷(메모 포함)으로 먼저 남기고, 남긴 뒤에만 편집기 본문을 바꾼다.
-  /// 남기지 못하면 오류를 던지고 본문은 그대로다. 바꾼 뒤의 저장은 평소 자동 저장에 맡긴다(본문 파일을 직접 덮지 않음).
-  /// 지금과 같아서 바꿀 것이 없으면 false.
+  /// First keep the current body as a `restore` snapshot (with memo); only after that replace the editor body.
+  /// If it can't be kept, throw and leave the body as is. Saving afterwards is left to normal autosave (the body file isn't overwritten directly).
+  /// False if identical to now and nothing to change.
   func restore(_ id: EpisodeID, to text: String, memo: String, notice: String) async throws -> Bool {
     guard id == episodeID, let textView else { throw RestoreError.notOpen }
     guard conflicts[id] == nil else { throw RestoreError.conflict }
     let current = textView.string
     guard current != text else { return false }
     _ = try await snapshots.takeRestore(id, text: current, memo: memo)
-    // 기다리는 사이 바뀌었으면 손대지 않는다. 남긴 스냅샷은 그대로 둔다(지워서 좋을 것이 없다).
+    // If it changed while waiting, don't touch it. Keep the snapshot taken (nothing gained by deleting it).
     guard id == episodeID, conflicts[id] == nil, self.textView === textView, !textView.hasMarkedText(),
       textView.string == current
     else { throw RestoreError.changedMeanwhile }
     guard textView.replaceAllUndoably(with: text, actionName: "스냅샷으로 되돌리기") else { return false }
-    // 편집기 알림으로도 들어오지만(두 번 세어도 해롭지 않다), 알림이 없는 경우에도 저장되게 직접 센다.
+    // The editor notification also arrives (counting twice is harmless), but count directly so it saves even without a notification.
     noteChange(id)
     restoreNotice = notice
     return true
   }
 
-  /// 상태 줄의 "취소": 되돌리기 직전으로. 알림이 떠 있으면 그 뒤로 고친 것이 없으므로 실행 취소 맨 위가 되돌리기다.
+  /// Status bar "Cancel": back to just before the restore. While the notice shows nothing was edited since, so the top undo is the restore.
   func undoRestore() {
     guard restoreNotice != nil, let textView, let id = episodeID else { return }
     restoreNotice = nil
@@ -399,26 +399,26 @@ final class EpisodeAutosaver {
     textView.regainFocusAfterPanel()
   }
 
-  // MARK: - 전체 바꾸기·되돌리기·다시 바꾸기 (PLAN 14장 2·5번)
+  // MARK: - Replace all / revert / redo replace (PLAN ch.14 #2·5)
 
-  /// 회차 하나를 고쳐 쓰는 일. 전체 바꾸기, 바꾼 자리만 되돌리기, 다시 바꾸기가 모두 같은 길을 간다:
-  /// 지금 글을 스냅샷으로 남긴 뒤에만 고치고, 열린 회차는 조합이 끝난 뒤 편집기에서 고칠 자리만,
-  /// 나머지는 저장 줄로 조건부로 쓰고 엇갈리면 다시 읽어 3번까지.
+  /// Rewriting one episode. Replace all, reverting only replaced spots, and redo replace all take the same path:
+  /// edit only after snapshotting the current text; the open episode is edited in the editor at just the target spots after composition ends,
+  /// others are written conditionally via the save queue, rereading on mismatch up to 3 times.
   struct Rewrite: Sendable {
-    /// 지금 글에서 고칠 자리와 고치지 않고 둔 곳 수(되돌리기에서 그 뒤에 고친 곳). 메인 스레드 밖에서 부른다.
-    /// 던지면(스냅샷을 읽지 못함 등) 그 회차는 읽지 못한 것으로 센다.
+    /// Spots to edit in the current text, and how many were left alone (in revert, spots edited since). Called off the main thread.
+    /// If it throws (snapshot unreadable etc.), the episode counts as unreadable.
     let changes: @Sendable (String) throws -> (changes: [TextChange], kept: Int)
     let beforeKind: SnapshotKind
-    /// 고치기 전 스냅샷 메모. 고칠 곳 수와 둔 곳 수를 받는다.
+    /// Pre-edit snapshot memo. Receives the edit count and the left-alone count.
     let beforeMemo: @Sendable (_ count: Int, _ kept: Int) -> String
-    /// 고친 뒤 스냅샷 메모. nil이면 남기지 않는다(전체 바꾸기만 `바꾼 뒤`를 남긴다).
+    /// Post-edit snapshot memo. nil = don't keep one (only replace all keeps `바꾼 뒤`).
     let afterMemo: (@Sendable (_ count: Int) -> String)?
-    /// 스냅샷 시각. 한 번의 작업에서 모든 회차가 같은 시각을 가져 하나로 알아볼 수 있다.
+    /// Snapshot time. All episodes in one operation share it so they can be recognized as one.
     let date: Date
-    /// 편집기 실행 취소 이름
+    /// Editor undo action name
     let actionName: String
 
-    /// 전체 바꾸기. `memo` 뒤에 `· 바꾸기 전 · 12곳`이 붙는다.
+    /// Replace all. `· 바꾸기 전 · 12곳` is appended after `memo`.
     static func replace(query: String, replacement: String, caseSensitive: Bool, date: Date, memo: String) -> Self {
       Self(
         changes: { text in
@@ -432,28 +432,28 @@ final class EpisodeAutosaver {
   }
 
   enum RewriteOutcome: Equatable {
-    /// 고쳤다. 열리지 않은 회차를 끝내 쓰지 못했으면 평소 저장 실패처럼 메모리에 붙잡고 상태 줄이 알린다.
-    /// `characters`는 고친 글의 글자 수. 열린 회차는 편집기의 글자 수 세기가 맡아 nil.
-    /// `바꾼 뒤` 스냅샷은 쓰기를 시작만 해 두므로 여기에 없다(같은 시각·종류 `replaced`로 찾는다).
+    /// Edited. If an unopened episode ultimately couldn't be written, it's held in memory like a normal save failure and the status bar reports it.
+    /// `characters` is the edited text's count. nil for the open episode, whose counting the editor handles.
+    /// The `바꾼 뒤` snapshot is only started here, so it's not included (find it by the same time and kind `replaced`).
     case done(count: Int, kept: Int, characters: CharacterCount?, before: Snapshot?)
-    /// 지금 글에는 고칠 곳이 없다.
+    /// Nothing to edit in the current text.
     case nothing
-    /// 외부 변경 충돌을 아직 고르지 않았다.
+    /// The external-change conflict isn't resolved yet.
     case conflict
-    /// 고치기 전 스냅샷을 남기지 못했다.
+    /// Couldn't take the pre-edit snapshot.
     case snapshotFailed
-    /// 본문(또는 되돌리기에 쓸 스냅샷)을 읽지 못했다.
+    /// Couldn't read the body (or the snapshot used for revert).
     case unreadable
-    /// 읽고 쓰는 사이에 앱 밖에서 거듭 바뀌었다.
+    /// Changed outside the app repeatedly between read and write.
     case keptChanging
   }
 
-  /// 이 실행 취소 기록이 열린 회차 편집기의 것인가(편집기 ⌘Z로 전체 바꾸기를 되돌렸는지 알아볼 때).
+  /// Whether this undo record belongs to the open episode's editor (to tell if editor ⌘Z undid a replace all).
   func ownsEditorUndo(_ manager: UndoManager) -> Bool {
     textView?.undoManager === manager
   }
 
-  /// 회차 하나를 고친다. 센 때의 글이 아니라 고치는 순간의 지금 글에서 고칠 자리를 다시 정한다(그사이 고쳤어도 건너뛰지 않는다).
+  /// Edit one episode. Target spots are recomputed from the text at edit time, not when counted (edits made meanwhile aren't skipped).
   func rewrite(_ id: EpisodeID, _ job: Rewrite) async -> RewriteOutcome {
     var before: (text: String, snapshot: Snapshot?)?
     for _ in 0..<3 {
@@ -462,12 +462,12 @@ final class EpisodeAutosaver {
     return .keptChanging
   }
 
-  /// 한 번 해 본다. 그사이 상태가 바뀌어 다시 해야 하면 nil.
+  /// One attempt. nil if state changed meanwhile and it must be retried.
   private func rewriteAttempt(
     _ id: EpisodeID, _ job: Rewrite, before: inout (text: String, snapshot: Snapshot?)?
   ) async -> RewriteOutcome? {
     if id == episodeID, textView != nil { return await rewriteOpen(id, job, before: &before) }
-    // 쓰는 중인 저장이 있으면 끝나기를 기다린다. 그 저장이 끝난 뒤의 글에서 고쳐야 순서가 맞는다.
+    // If a save is in flight, wait for it. Editing the text after that save is what keeps the order right.
     while id != episodeID, inFlight[id] != nil, let task = running.values.first {
       await task.value
     }
@@ -503,10 +503,10 @@ final class EpisodeAutosaver {
     } catch {
       return .snapshotFailed
     }
-    // 기다리는 사이 열렸거나, 충돌이 생겼거나, 메모리의 글이 바뀌었으면 처음부터 다시.
+    // If it got opened, a conflict arose, or the in-memory text changed while waiting, start over.
     guard id != episodeID, conflicts[id] == nil, inFlight[id] == nil, pendingText(for: id) == pending else { return nil }
-    // 스냅샷을 쓰는 사이 휴지통으로 갔으면 쓰지 않는다. 쓰기는 여기서 바로 시작되어(`running`), 그 뒤의 휴지통 보내기는
-    // 저장을 기다렸다가 고친 본문째 옮긴다.
+    // If it was trashed while the snapshot was being written, don't write. The write starts right here (`running`), and a later trash
+    // waits for the save and moves the edited body along.
     guard isListed(id) else { return .nothing }
     guard await writeReplacement(id, text: computed.text, readVersion: source.version) else { return nil }
     if let afterMemo = job.afterMemo {
@@ -515,10 +515,10 @@ final class EpisodeAutosaver {
     return .done(count: computed.count, kept: computed.kept, characters: computed.characters, before: beforeSnapshot)
   }
 
-  /// 열린 회차: 한글 조합과 입력이 멈추면 지금 글에서 고칠 자리를 정하고 그 글을 남긴 뒤, 편집기 글이 아직 그 글
-  /// 그대로일 때 고칠 자리만 고친다. 정하고 남기는 사이(await)에 글이 바뀌면 바뀐 글로 다시 정하고 다시 남긴다.
-  /// 그래서 `바꾸기 전`은 늘 실제로 고친 바로 그 글이다. 기다리는 사이 새로 친 찾는 말도 바뀌는데, 스냅샷에 없으면
-  /// 되돌리기가 그 자리를 찾지 못한다. 마지막 비교와 고치기 사이에는 await가 없어 입력이 끼어들지 못한다.
+  /// Open episode: once Hangul composition and typing pause, decide spots in the current text and snapshot it, then edit only those spots
+  /// while the editor text is still that text. If it changes during deciding/snapshotting (await), redecide and resnapshot with the new text.
+  /// So `바꾸기 전` is always exactly the text that was edited. A search term typed meanwhile changes too, and if it's missing from the snapshot
+  /// revert can't find that spot. There's no await between the final comparison and the edit, so input can't slip in.
   private func rewriteOpen(
     _ id: EpisodeID, _ job: Rewrite, before: inout (text: String, snapshot: Snapshot?)?
   ) async -> RewriteOutcome? {
@@ -533,7 +533,7 @@ final class EpisodeAutosaver {
         continue
       }
       let current = textView.string
-      // 글자 그대로 비교한다(String ==는 자모로 풀어 쓴 글도 같다고 봐서 UTF-16 자리가 어긋날 수 있다).
+      // Compare literally (String == treats decomposed jamo as equal, which can misalign UTF-16 positions).
       guard let basis, current.utf16.elementsEqual(basis.utf16) else {
         basis = current
         guard let again = await Self.changes(job, in: current) else { return .unreadable }
@@ -563,7 +563,7 @@ final class EpisodeAutosaver {
     return try? await Task.detached { try changes(text) }.value
   }
 
-  /// 고치기 전 스냅샷. 다시 해 보는 중에 같은 글이면 또 찍지 않는다.
+  /// Pre-edit snapshot. Not taken again on retry if the text is the same.
   private func snapshotBefore(
     _ id: EpisodeID, _ text: String, count: Int, kept: Int, _ job: Rewrite,
     _ before: inout (text: String, snapshot: Snapshot?)?
@@ -575,8 +575,8 @@ final class EpisodeAutosaver {
     return snapshot
   }
 
-  /// 바꾼 글을 저장 줄로 쓴다. 파일에서 읽었으면 그때의 상태, 메모리의 글이면 디스크 기준과 비교해 조건부로 쓴다.
-  /// 그사이 앱 밖에서 바뀌어 쓰지 않았으면 false(다시 읽어 바꾼다).
+  /// Write the edited text via the save queue. Conditional on the read state if from file, or against the disk baseline if from memory.
+  /// False if not written because it changed outside the app meanwhile (reread and replace).
   private func writeReplacement(_ id: EpisodeID, text: String, readVersion: DiskVersion?) async -> Bool {
     changes[id, default: 0] += 1
     let job = SaveJob(id: id, change: changes[id, default: 0], text: text)
@@ -604,7 +604,7 @@ final class EpisodeAutosaver {
         return result
       }, didWrite: { if case .written = $0 { true } else { false } })
       guard case .written = result else {
-        // 바꾼 글은 버린다. 이 번호를 저장한 것으로 쳐야 고친 적 없는 회차가 "저장 안 됨"으로 남지 않는다.
+        // Discard the edited text. This number must count as saved, or an untouched episode would stay "unsaved".
         savedChanges[job.id] = max(savedChanges[job.id, default: 0], job.change)
         return false
       }
@@ -613,7 +613,7 @@ final class EpisodeAutosaver {
       if let backed = backedUp[job.id], backed <= job.change { removeBackup(job.id) }
       settleStatus()
     } catch {
-      // 다음 저장 시도도 읽은 때의 파일과 비교하게 기준을 남긴다.
+      // Keep the baseline so the next save attempt also compares against the file as read.
       if disk[job.id] == nil, let readVersion { disk[job.id] = readVersion }
       if (unsaved[job.id]?.change ?? 0) <= job.change {
         unsaved[job.id] = job
@@ -625,16 +625,16 @@ final class EpisodeAutosaver {
     return true
   }
 
-  /// 지금 본문을 그 자리에서 복사해 저장을 시작만 한다(창 비활성). 끝나기는 기다리지 않는다.
-  /// `Task` 안에서 부르면 창 닫기 처리가 끝난 뒤에야 돌아, 그사이 편집기(약한 참조)가 사라지면 본문을 못 읽는다.
+  /// Copy the current body in place and only start saving (window deactivation). Doesn't wait for completion.
+  /// Called inside a `Task`, it would run only after window-close handling, and if the editor (weak reference) vanished meanwhile the body couldn't be read.
   func startSave() {
     pendingSave?.cancel()
     pendingSave = nil
     if let job = makeSaveJob() { start(job) }
   }
 
-  /// 지금 저장하고, 이미 시작된 저장까지 모두 끝날 때까지 기다린다(⌘S, 창 닫기, 종료).
-  /// 저장에 실패해 메모리에 남은 다른 회차도 다시 저장한다. 열린 회차만 저장하면 창을 닫을 때 그 원고가 사라진다.
+  /// Save now and wait until every save, including those already started, finishes (⌘S, window close, quit).
+  /// Also re-save other episodes left in memory after failed saves. Saving only the open one would lose them when the window closes.
   func flush() async {
     startSave()
     for job in unsaved.values where job.id != episodeID && inFlight[job.id] == nil && conflicts[job.id] == nil {
@@ -645,9 +645,9 @@ final class EpisodeAutosaver {
     }
   }
 
-  // MARK: - 외부 변경
+  // MARK: - External changes
 
-  /// 창이 다시 활성화될 때. 지금 회차 파일이 앱 밖에서 바뀌었는지 백그라운드에서 본다.
+  /// On window reactivation, check in the background whether the current episode file changed outside the app.
   func checkExternalChange() async {
     guard !isHoldingExternalChanges, let id = episodeID, conflicts[id] == nil, let known = disk[id] else { return }
     let store = store
@@ -658,40 +658,40 @@ final class EpisodeAutosaver {
         if refreshed != known { _ = disk.replace(id, ifStill: known, with: refreshed) }
         return result
       }
-      // 확인하는 사이에 앱이 저장해 기준이 바뀌었으면, 방금 본 변경은 앱 자신의 저장일 수 있어 버린다.
-      // (진짜 외부 변경이었다면 그 저장이 쓰기 직전 확인에서 먼저 알아챈다.)
+      // If the app saved and moved the baseline during the check, the change just seen may be the app's own save, so drop it.
+      // (A real external change would be caught first by that save's pre-write check.)
       return disk[id] == known ? result : nil
     }.value
-    // 기다리는 사이 회차가 바뀌었거나 저장이 끝나 기준이 바뀌었으면 손대지 않는다.
+    // Don't touch anything if the episode changed or a finished save moved the baseline while waiting.
     guard let result, !isHoldingExternalChanges, episodeID == id, conflicts[id] == nil, disk[id] == known else { return }
     switch result {
     case .unchanged:
       break
     case .missing:
-      // 앱 밖에서 본문 파일이 지워졌다. 앱이 들고 있는 본문으로 다시 써서 원고를 지킨다.
+      // The body file was deleted outside the app. Rewrite it from the body the app holds to protect the manuscript.
       changes[id, default: 0] += 1
       scheduleSave()
     case .changed(let diskVersion):
       if hasAppChanges(id) {
         raiseConflict(id, disk: diskVersion, appText: textView?.string ?? "")
       } else {
-        // 앱 쪽 변경이 없으니 묻지 않고 바깥 내용으로 바꾼다. 결정과 교체 사이에 await가 없어 그 사이 입력이 끼어들지 못한다.
+        // No app-side changes, so switch to the external content without asking. No await between decision and swap, so input can't slip in.
         disk[id] = diskVersion
         textView?.reloadText(with: diskVersion.text)
       }
     }
   }
 
-  /// 앱 쪽에 아직 디스크에 없는 내용이 있는지: 저장 안 된 입력, 쓰는 중인 저장, 조합 중인 글자.
-  /// 여러 커서도 넣는다(PLAN 16장 X4): 다시 읽으면 고르던 자리들이 말없이 사라진다.
+  /// Whether the app holds content not yet on disk: unsaved input, an in-flight save, or composing characters.
+  /// Multi-cursor too (PLAN ch.16 X4): a reload would silently drop the selected spots.
   private func hasAppChanges(_ id: EpisodeID) -> Bool {
     isDirty(id) || inFlight[id] != nil || (textView?.hasMarkedText() ?? false) || textView?.multiCursor != nil
   }
 
-  /// 양쪽 다 바뀌었다. 앱 쪽 본문을 메모리에 붙잡아 두고 스냅샷으로 남긴 뒤, 다 남기면 묻는다(`conflicts`).
+  /// Both changed. Hold the app-side body in memory, snapshot it, and ask once fully kept (`conflicts`).
   private func raiseConflict(_ id: EpisodeID, disk diskVersion: DiskVersion, appText: String) {
     guard conflicts[id] == nil else { return }
-    // 지금 보고 있는 회차면 저장 작업에 복사해 둔 것보다 화면의 본문이 더 새것이다.
+    // For the episode being viewed, the on-screen body is newer than the copy made for the save task.
     let text = (id == episodeID ? textView?.string : nil) ?? appText
     unsaved[id] = SaveJob(id: id, change: changes[id, default: 0], text: text)
     conflicts[id] = Conflict(episodeID: id, disk: diskVersion, change: changes[id, default: 0])
@@ -703,8 +703,8 @@ final class EpisodeAutosaver {
     }
   }
 
-  /// 사용자가 "이 앱의 내용"을 골랐다. 덮어쓸 바깥 내용도 스냅샷으로 남긴 뒤 앱 쪽 본문을 저장한다.
-  /// 남기지 못하면 덮지 않고 충돌을 그대로 둔다(스냅샷 폴더만 막혀 본문 저장은 될 수도 있다).
+  /// The user chose "this app's content". Snapshot the external content being overwritten too, then save the app-side body.
+  /// If it can't be kept, don't overwrite; leave the conflict (only the snapshot folder may be blocked while body saving works).
   func keepAppVersion(_ id: EpisodeID) async {
     guard let conflict = conflicts[id], conflict.isReady else { return }
     let store = store
@@ -717,7 +717,7 @@ final class EpisodeAutosaver {
       return
     }
     guard conflicts.removeValue(forKey: id) != nil else { return }
-    // 디스크의 지금 상태를 알고 덮어쓴다는 뜻으로 기준을 바꾼다. 그 뒤 또 바뀌었으면 저장 직전 확인이 다시 묻는다.
+    // Update the baseline to mean "overwriting with knowledge of the current disk state". If it changes again, the pre-save check asks again.
     disk[id] = conflict.disk
     changes[id, default: 0] += 1
     let text = id == episodeID ? textView?.string : unsaved[id]?.text
@@ -728,10 +728,10 @@ final class EpisodeAutosaver {
     }
   }
 
-  /// 사용자가 "바깥에서 바뀐 내용"을 골랐다. 버리기 전에 앱 쪽 지금 글이 스냅샷에 그대로 있게 한다:
-  /// 충돌 스냅샷을 못 남겼거나 그 뒤에 더 썼으면 지금 남긴다. 남기지 못하면 버리지 않고 충돌을 그대로 둔다.
-  /// 고르는 동안 또 바뀌었을 수 있어 지금 내용을 다시 읽는다. 회차 전환처럼 바로 읽는다(5,000자 안팎, 0.1ms 수준):
-  /// 기다리는 사이에 친 글자가 곧바로 덮여 사라지지 않게 하려는 것이다.
+  /// The user chose "the externally changed content". Before discarding, make sure the app's current text is intact in a snapshot:
+  /// if the conflict snapshot failed or more was written since, take one now. If that fails, don't discard; leave the conflict.
+  /// It may have changed again while choosing, so reread now. Read directly like an episode switch (~5,000 chars, ~0.1 ms):
+  /// so characters typed while waiting aren't immediately overwritten and lost.
   func useDiskVersion(_ id: EpisodeID) async {
     while conflicts[id] != nil, !isKeptInSnapshot(id) {
       guard let text = (id == episodeID ? textView?.string : nil) ?? unsaved[id]?.text else { break }
@@ -757,8 +757,8 @@ final class EpisodeAutosaver {
     if case .failed = status { settleStatus() }
   }
 
-  /// 저장 하나가 끝나면 상태 줄을 실제 상태에 맞춘다. 마지막 저장의 결과로 덮으면, 다른 회차가 저장된 뒤
-  /// 앞 회차의 실패 표시가 사라지고 "저장 중"에 멈춘다. 충돌은 실패로 보이지 않는다.
+  /// When one save finishes, sync the status bar to the actual state. Overwriting with the last save's result would, after another episode saves,
+  /// clear the earlier episode's failure and leave "saving" stuck. Conflicts don't show as failures.
   private func settleStatus() {
     guard unsaved.keys.contains(where: { conflicts[$0] == nil }) else {
       status = .idle
@@ -769,8 +769,8 @@ final class EpisodeAutosaver {
     status = .failed(failure)
   }
 
-  /// 입력이 `delay`만큼 멈추면 저장한다. 쉬지 않고 계속 치면 이 기다림이 끝없이 미뤄지므로,
-  /// 저장하지 않은 첫 변경부터 `maxWait`이 지나면 멈춤을 기다리지 않는다.
+  /// Save once input pauses for `delay`. Continuous typing would postpone this wait forever, so
+  /// once `maxWait` has passed since the first unsaved change, don't wait for a pause.
   private func scheduleSave() {
     pendingSave?.cancel()
     let now = ContinuousClock.now
@@ -794,7 +794,7 @@ final class EpisodeAutosaver {
     let text: String
   }
 
-  /// 저장할 내용을 지금 시점으로 복사한다. 키 입력마다가 아니라 저장할 때 한 번만 본문을 복사한다.
+  /// Copy the content to save as of now. The body is copied once per save, not per keystroke.
   private func makeSaveJob() -> SaveJob? {
     guard let id = episodeID, let textView, isDirty(id), conflicts[id] == nil else { return nil }
     return SaveJob(id: id, change: changes[id, default: 0], text: textView.string)
@@ -823,7 +823,7 @@ final class EpisodeAutosaver {
     }
     let disk = disk
     do {
-      // 저장 직전 확인: 쓰기 직전에 디스크를 기준과 비교하고, 앱 밖에서 바뀌었으면 쓰지 않는다.
+      // Pre-write check: compare disk against the baseline right before writing; don't write if it changed outside the app.
       let result = try await queue.save(.episode(job.id), change: job.change, writeReturning: {
         let result = try store.writeEpisode(job.text, id: job.id, ifUnchangedSince: disk[job.id])
         if case .written(let version) = result { disk[job.id] = version }
@@ -840,13 +840,13 @@ final class EpisodeAutosaver {
         return
       }
       savedChanges[job.id] = max(savedChanges[job.id, default: 0], job.change)
-      // 메모리에 남아 있던 본문이 방금 저장한 것보다 옛것이면 그 내용은 이미 디스크에 있으므로 지운다.
-      // (그 뒤에 더 친 글이 있어도 지운다. 그 글은 편집기에 있고 다음 저장이 맡는다.)
+      // If the in-memory body is older than what was just saved, its content is already on disk, so drop it.
+      // (Drop it even if more was typed since. That text is in the editor and the next save handles it.)
       if let failed = unsaved[job.id], failed.change <= job.change { unsaved[job.id] = nil }
       if let backed = backedUp[job.id], backed <= job.change { removeBackup(job.id) }
       settleStatus()
     } catch {
-      // 더 새 본문이 이미 저장됐거나 메모리에 남아 있으면 이 실패는 지난 일이다. 옛 본문으로 덮지 않는다.
+      // If a newer body is already saved or held in memory, this failure is stale. Don't overwrite with the old body.
       if savedChanges[job.id, default: 0] < job.change, (unsaved[job.id]?.change ?? 0) <= job.change {
         unsaved[job.id] = job
         backUp(job)
@@ -858,7 +858,7 @@ final class EpisodeAutosaver {
     releaseBaselineIfIdle(job.id)
   }
 
-  // MARK: - 비상 백업 (PLAN 17장 1번)
+  // MARK: - Emergency backup (PLAN ch.17 #1)
 
   private func backUp(_ job: SaveJob) {
     guard let backup else { return }
@@ -875,7 +875,7 @@ final class EpisodeAutosaver {
   }
 
   private func recordBackup(_ id: EpisodeID, change: Int, written: Bool) {
-    // 그사이 저장돼 백업을 지웠거나 더 새 백업을 시작했으면 이 결과는 지난 일이다.
+    // If it was saved meanwhile (backup deleted) or a newer backup started, this result is stale.
     guard backedUp[id] == change else { return }
     writtenBackups[id] = written ? change : nil
     if case .failed = status { settleStatus() }
@@ -887,7 +887,7 @@ final class EpisodeAutosaver {
     enqueueBackup { try backup.remove(id) }
   }
 
-  /// 백업을 못 써도 원고는 메모리에 남고 상태 줄이 실패를 보여 준다. 써졌는지는 `done`으로 알린다.
+  /// Even if the backup can't be written, the manuscript stays in memory and the status bar shows the failure. `done` reports whether it was written.
   private func enqueueBackup(
     _ work: @escaping @Sendable () throws -> Void, done: @escaping @MainActor @Sendable (Bool) -> Void = { _ in }
   ) {
@@ -899,13 +899,13 @@ final class EpisodeAutosaver {
     }
   }
 
-  /// 테스트: 쌓인 백업 작업이 끝날 때까지.
+  /// Tests: until queued backup work finishes.
   func waitForBackups() async {
     await backupTail?.value
   }
 }
 
-/// 열린 모든 자동 저장기. 앱을 끌 때 남은 저장을 마치기 위해 쓴다.
+/// All open autosavers. Used to finish pending saves at quit.
 @MainActor
 final class AutosaverRegistry {
   static let shared = AutosaverRegistry()
@@ -915,7 +915,7 @@ final class AutosaverRegistry {
     weak var value: EpisodeAutosaver?
   }
 
-  /// 창은 닫혔지만 저장하지 못한 원고를 든 저장기. 앱을 끌 때 다시 묻도록 놓지 않는다.
+  /// Autosavers whose window closed but still hold unsaved manuscripts. Kept so quit asks again.
   private var orphans: [EpisodeAutosaver] = []
 
   func register(_ autosaver: EpisodeAutosaver) {

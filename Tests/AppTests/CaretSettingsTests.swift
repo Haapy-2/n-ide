@@ -39,7 +39,7 @@ final class CaretSettingsTests: XCTestCase {
     let caret = textView.caretRect(in: line)
     XCTAssertEqual(caret.width, 4)
     XCTAssertEqual(caret.height, (17 * 1.5).rounded())
-    // 굵은 커서도 자국이 남지 않게 다시 그릴 칸을 두께 + 1pt까지 넓힌다.
+    // Even a thick caret leaves no trail: the redraw rect is widened to width + 1 pt.
     XCTAssertEqual(textView.widenedForCaret(NSRect(x: 0, y: 0, width: 1, height: 30)).width, 5)
   }
 }

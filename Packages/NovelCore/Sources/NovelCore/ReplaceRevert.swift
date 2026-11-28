@@ -1,19 +1,19 @@
 import Foundation
 
-/// 전체 바꾸기를 바꾼 자리만 되돌리기, 그리고 다시 바꾸기(PLAN 14장 5번).
-/// 회차를 `바꾸기 전` 글로 통째로 덮지 않는다. 바꾼 자리를 다시 알아내 지금 글에서 그 자리를 따라가(`TextTracking`) 그곳만 고친다.
-/// 그래서 바꾼 뒤에 쓴 글과 원래부터 있던 같은 말은 그대로 남고, 작가가 손댄 바꾼 자리도 그대로 둔다.
+/// Reverting replace all at only the replaced spots, and redoing it (PLAN ch.14 #5).
+/// The episode isn't overwritten wholesale with the `바꾸기 전` text. Replaced spots are re-derived, tracked into the current text (`TextTracking`), and only those are edited.
+/// So text written after the replace and pre-existing occurrences of the same word stay, as do replaced spots the writer edited.
 public enum ReplaceRevert {
-  /// 한 회차에 적용한 결과
+  /// Result of applying to one episode
   public struct Outcome: Equatable, Sendable {
-    /// 적용한 글. 고친 곳이 없으면 지금 글 그대로.
+    /// The applied text. Unchanged current text if nothing was edited.
     public let text: String
-    /// 지금 글에서 고칠 자리(지금 글 기준, 앞에서부터). 열린 회차는 편집기가 이것만 고친다.
+    /// Spots to edit in the current text (current-text coordinates, front to back). For the open episode the editor edits only these.
     public let changes: [TextChange]
-    /// 그 뒤에 고쳐서 그대로 둔 곳
+    /// Spots edited since, left alone
     public let kept: Int
 
-    /// 고친 자리(결과 글 기준). 다시 바꾸기가 이 자리를 쓴다.
+    /// Edited spots (result-text coordinates). Redo replace uses these.
     public var applied: [NSRange] {
       var shift = 0
       return changes.map { change in
@@ -24,9 +24,9 @@ public enum ReplaceRevert {
     }
   }
 
-  /// `before`(바꾸기 전 스냅샷)에서 바꾼 자리를 다시 찾아, 지금 글에서 그 자리를 원래 말로 돌린다.
-  /// 바꾼 뒤 글은 스냅샷 대신 `before`에 같은 바꾸기를 다시 해서 만든다(`바꾼 뒤` 스냅샷은 남기지 못했을 수 있다).
-  /// 메인 스레드 밖에서 부른다.
+  /// Re-find the replaced spots in `before` (the pre-replace snapshot) and turn those spots in the current text back to the original word.
+  /// The post-replace text is rebuilt by reapplying the same replace to `before` instead of using a snapshot (the `바꾼 뒤` snapshot may not have been kept).
+  /// Call off the main thread.
   public static func reverting(
     _ query: String, with replacement: String, caseSensitive: Bool, before: String, current: String
   ) throws -> Outcome {
@@ -47,8 +47,8 @@ public enum ReplaceRevert {
     return try apply(edits, madeOn: after as String, to: current, written: replacement)
   }
 
-  /// 되돌린 것을 다시 바꾼다. `revertedFrom`은 되돌리기 직전 글(`되돌리기 전` 스냅샷).
-  /// 그 글에 같은 되돌리기를 다시 해서 되돌린 자리를 알아낸 뒤, 지금 글에서 그 자리를 바꿀 말로 바꾼다.
+  /// Redo what was reverted. `revertedFrom` is the text right before the revert (`되돌리기 전` snapshot).
+  /// Reapply the same revert to that text to locate the reverted spots, then change those spots in the current text to the replacement.
   public static func redoing(
     _ query: String, with replacement: String, caseSensitive: Bool, before: String, revertedFrom: String,
     current: String
@@ -61,9 +61,9 @@ public enum ReplaceRevert {
     return try apply(edits, madeOn: source as String, to: current, written: nil)
   }
 
-  /// `base`에서 정한 자리들을 지금 글로 따라가 고친다. 못 따라간 자리는 `kept`로 센다.
-  /// `written`은 그 자리에 지금 들어 있어야 할 말(바꿀 말). 그 말이 원래 말의 일부(`민준이` → `민준`)면
-  /// 작가가 뒤에 `이`를 다시 붙였거나 이미 되돌린 자리가 그대로 따라와 두 번 붙을 수 있어, 지금 글에 원래 말이 이미 있으면 건너뛴다.
+  /// Track spots decided in `base` into the current text and edit them. Spots that can't be tracked count as `kept`.
+  /// `written` is the word that should currently be at the spot (the replacement). If it's part of the original word (`민준이` → `민준`),
+  /// the writer re-adding `이` or an already reverted spot could be tracked and doubled, so skip when the original word is already in the current text.
   static func apply(_ edits: [TextChange], madeOn base: String, to current: String, written: String?) throws -> Outcome {
     let tracking = try TextTracking(old: base, new: current)
     let now = current as NSString
@@ -82,7 +82,7 @@ public enum ReplaceRevert {
     return Outcome(text: TextChange.applying(changes, to: current), changes: changes, kept: kept)
   }
 
-  /// 따라온 자리를 둘러싼 지금 글에 넣으려는 말이 이미 그대로 있는가.
+  /// Whether the current text around the tracked spot already contains the word about to be inserted.
   private static func alreadyHas(_ text: String, around range: NSRange, written: String?, in now: NSString) -> Bool {
     guard let written, !written.isEmpty else { return false }
     let original = text as NSString

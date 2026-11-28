@@ -1,16 +1,16 @@
 import SwiftUI
 
-/// 설정 창(⌘,) (DESIGN.md 4장 "설정 창"). 왼쪽 목록에서 섹션을 고르면 오른쪽에 그 설정이 보인다.
-/// 앱 전체 설정이라 UserDefaults에 저장되고(목표만 작품별), 바꾸면 열린 창들에 바로 반영된다.
-/// 창 크기는 고정이다. 열 때마다 "일반"부터 보인다.
+/// Settings window (⌘,) (DESIGN.md ch.4 "Settings window"). Choosing a section on the left shows its settings on the right.
+/// App-wide settings stored in UserDefaults (only the goal is per project); changes apply to open windows immediately.
+/// Fixed window size. Always opens on "General".
 struct SettingsView: View {
-  /// 왼쪽 목록 180 + 오른쪽 520. 오른쪽 폭은 슬라이더(240)와 이름이 넉넉히 들어가는 폭.
-  /// 높이는 가장 긴 "편집기"가 스크롤 없이 들어가고 13인치 화면에도 들어가는 값(스냅샷으로 확인).
+  /// Left list 180 + right 520. The right width fits the slider (240) and labels comfortably.
+  /// Height fits the longest pane, "Editor", without scrolling and still fits a 13-inch screen (checked with snapshots).
   static let windowSize = CGSize(width: 700, height: 640)
   static let sidebarWidth: CGFloat = 180
 
   @State private var section: SettingsSection = .general
-  /// 목록 줄의 가로 배치. 실행 중에 창 닫기 버튼 위치를 재서 정한다. 재기 전에는 nil.
+  /// Horizontal layout of list rows. Set at runtime by measuring the window close button position. nil before measuring.
   @State private var layout: RowLayout?
 
   init(section: SettingsSection = .general) {
@@ -19,16 +19,16 @@ struct SettingsView: View {
 
   var body: some View {
     NavigationSplitView {
-      // 시스템 List 대신 줄을 직접 쌓는다: List는 줄을 패널 왼쪽 16pt부터만 그려서
-      // 아이콘을 빨간 닫기 버튼(창 왼쪽 9pt) 선까지 옮길 수 없었다. 선택·마우스 올림·클릭은 원래 직접 그려서 잃는 기능은 없다.
-      // 시스템 선택(파란 강조색 칸) 대신 작업 공간 사이드바와 같은 회색 칸을 직접 그린다.
+      // Rows are stacked by hand instead of a system List: List draws rows only from 16 pt from the panel's left,
+      // so the icon couldn't reach the red close button's line (9 pt from the window's left). Selection, hover and click were already custom, so nothing is lost.
+      // Instead of the system selection (blue accent rect), draw the same gray rect as the workspace sidebar.
       VStack(spacing: 0) {
         ForEach(SettingsSection.allCases) { item in
-          // 아이콘은 빨간 닫기 버튼과 같은 선, 이름은 아이콘 오른쪽에 왼쪽 정렬. 간격은 시스템 기본.
+          // Icon on the red close button's line, name left-aligned to the right of the icon. Spacing is the system default.
           HStack {
-            // 색 없는 아이콘: 라이트에서는 진한 회색, 다크에서는 밝은 회색
-            // 아이콘 칸 폭을 같게 두어 이름의 왼쪽 끝이 한 줄로 맞는다. 아이콘은 칸 왼쪽에 붙여 버튼 선을 지킨다.
-            // 잰 값이 오기 전에는 숨긴다: 기본 위치에 한 번 그렸다가 옮겨지는 것이 보이지 않게.
+            // Uncolored icons: dark gray in light, light gray in dark
+            // Equal icon column width so names' left edges line up. Icons hug the column's left to keep the button line.
+            // Hidden until the measurement arrives: so drawing once at the default position and moving isn't visible.
             Image(systemName: item.symbolName)
               .foregroundStyle(.secondary)
               .frame(width: 20, alignment: .leading)
@@ -40,7 +40,7 @@ struct SettingsView: View {
           .frame(maxWidth: .infinity, alignment: .leading)
           .rowHighlight(isSelected: item == section)
           .padding(.horizontal, layout?.boxMargin ?? 0)
-          // 칸 사이 틈까지 눌리게(작업 공간 사이드바와 같은 이유)
+          // Clickable including the gaps between rows (same reason as the workspace sidebar)
           .padding(.vertical, 1)
           .contentShape(Rectangle())
           .onTapGesture { section = item }
@@ -49,12 +49,12 @@ struct SettingsView: View {
         }
         Spacer(minLength: 0)
       }
-      // 패널 왼쪽 끝에서 한 번 잰다(줄마다 잴 필요 없음). 패널 끝은 여백과 상관없이 고정이라 잰 값이 흔들리지 않는다.
+      // Measured once from the panel's left edge (no need per row). The panel edge is fixed regardless of padding, so the value doesn't wobble.
       .background(TrafficLightOffsetReader { offset in
         layout = RowLayout(buttonOffset: TrafficLightOffsetReader.contentInset(for: offset))
       })
       .navigationSplitViewColumnWidth(Self.sidebarWidth)
-      // 창이 고정 크기라 목록을 접을 일이 없다.
+      // The window has a fixed size, so the list never needs collapsing.
       .toolbar(removing: .sidebarToggle)
     } detail: {
       switch section {
@@ -69,9 +69,9 @@ struct SettingsView: View {
   }
 }
 
-/// 설정 창 왼쪽 목록 줄의 가로 배치. 패널 왼쪽 끝 → 닫기 버튼 거리를 반씩 나눠
-/// 앞 절반은 패널 끝과 회색 칸 사이, 뒤 절반은 회색 칸 끝과 아이콘 사이로 쓴다. 그래서 아이콘 왼쪽 끝 = 버튼 왼쪽 끝.
-/// 숫자를 박지 않는 이유는 작업 공간 사이드바와 같다(macOS 버전·창 모양에 따라 버튼 위치가 다르다).
+/// Horizontal layout of Settings list rows. The distance from the panel's left edge to the close button is split in half:
+/// the first half between the panel edge and the gray rect, the second between the rect's edge and the icon. So icon left edge = button left edge.
+/// Not hard-coded for the same reason as the workspace sidebar (button position varies with macOS version and window style).
 private struct RowLayout: Equatable {
   let boxMargin: CGFloat
   let iconPadding: CGFloat
@@ -82,7 +82,7 @@ private struct RowLayout: Equatable {
   }
 }
 
-/// 설정 창 왼쪽 목록의 섹션. 선언 순서가 목록 순서다(커서는 편집기 바로 아래).
+/// Sections of the Settings list. Declaration order is list order (Caret right below Editor).
 enum SettingsSection: String, CaseIterable, Identifiable {
   case general, editor, caret, shortcuts
 

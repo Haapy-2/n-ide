@@ -1,26 +1,26 @@
 import Foundation
 import NovelCore
 
-/// 스냅샷을 찍는 때 (PLAN 10장 3번). 자동 저장기(`EpisodeAutosaver`)가 갖고 있고 본문은 그쪽이 건넨다.
-/// - 자동: 설정한 간격마다, 지금 회차를 그사이 고쳤을 때만.
-/// - 떠날 때: 회차 전환·창 닫기·앱 종료. 자동을 꺼도 늘 찍는다(결정 16). 이번에 고치지 않은 회차는 찍지 않는다
-///   (훑어보기만 한 회차마다 스냅샷이 생기지 않게).
-/// - 직접(⌃⌘S): 고치지 않았어도 찍는다.
-/// - 여러 커서 전: ⌘D로 커서가 둘이 되는 순간. 여러 커서로 망친 글을 되찾을 수 있게(PLAN 16장 4번).
-/// 자동·떠날 때는 마지막 스냅샷과 같으면 건너뛰고, 찍은 뒤 보관 개수로 정리한다.
-/// 쓰기는 메인 스레드 밖에서 한 줄로 차례대로 한다(앞 것이 끝나야 "마지막과 같은지"를 바르게 본다).
+/// When snapshots are taken (PLAN ch.10 #3). Owned by the autosaver (`EpisodeAutosaver`), which hands over the body.
+/// - Automatic: every configured interval, only if the current episode was edited since.
+/// - Leave: episode switch, window close, quit. Always taken even with automatic off (decision 16). Not for episodes untouched this time
+///   (so merely browsed episodes don't each get a snapshot).
+/// - Manual (⌃⌘S): taken even without edits.
+/// - Before multi-cursor: the moment ⌘D makes two cursors. So text ruined by multi-cursor can be recovered (PLAN ch.16 #4).
+/// Automatic and leave skip when equal to the last snapshot, and prune by the keep count after taking.
+/// Writes run off the main thread in one ordered queue (the previous must finish to check "same as last" correctly).
 @MainActor
 final class EpisodeSnapshotter {
   struct Settings: Equatable {
     var autoEnabled = true
     var interval: Duration = .seconds(30 * 60)
-    /// `auto`·`leave`·`rename`·`multicursor`를 회차마다 몇 개까지 남길지
+    /// How many `auto`·`leave`·`rename`·`multicursor` to keep per episode
     var retention = 50
 
     static let intervalChoices = [5, 10, 15, 30, 60]
     static let retentionRange = 10...100
 
-    /// 설정 창 값(분, 개수)을 고를 수 있는 값으로 맞춘다. 손으로 고친 UserDefaults 값도 여기서 걸러진다.
+    /// Snap Settings values (minutes, counts) to selectable values. Hand-edited UserDefaults values are filtered here too.
     init(autoEnabled: Bool = true, minutes: Int = 30, retention: Int = 50) {
       self.autoEnabled = autoEnabled
       let minutes = Self.intervalChoices.contains(minutes) ? minutes : 30
@@ -36,17 +36,17 @@ final class EpisodeSnapshotter {
     }
   }
 
-  /// 자동 스냅샷 때 지금 회차와 그 본문을 꺼내 준다. 본문은 고친 경우에만 꺼낸다(복사를 아끼려고).
+  /// At automatic snapshot time, hand over the current episode and its body. The body is fetched only if edited (to save copying).
   var currentEpisode: () -> EpisodeID? = { nil }
   var currentText: () -> String? = { nil }
 
   private let store: ProjectStore
-  /// 마지막 스냅샷 뒤에 고친 회차
+  /// Episodes edited since the last snapshot
   private var edited: Set<EpisodeID> = []
   private var tail: Task<Void, Never>?
-  /// 아직 안 끝난 쓰기 수
+  /// Number of unfinished writes
   private var pending = 0
-  /// 줄 밖에서 쓰는 중인 바꾸기 스냅샷. 끝나면 스스로 빠진다.
+  /// Replace snapshots being written outside the queue. They remove themselves when done.
   private var unqueued: [UUID: Task<Void, Never>] = [:]
   private var timer: Task<Void, Never>?
 
@@ -55,42 +55,42 @@ final class EpisodeSnapshotter {
     restartTimer()
   }
 
-  /// 찍어야 할 것이 남았는지(앱 종료 때 기다릴지 정한다).
+  /// Whether anything remains to take (decides whether quit waits).
   var hasPendingWork: Bool { !edited.isEmpty || pending > 0 || !unqueued.isEmpty }
 
   func noteEdit(_ id: EpisodeID) {
     edited.insert(id)
   }
 
-  /// 회차를 떠날 때. 이번에 고쳤으면 본문을 받아 `leave`로 남긴다.
+  /// On leaving an episode. If edited this time, take the body and keep it as `leave`.
   func leave(_ id: EpisodeID, text: () -> String?) {
-    // 본문을 못 받으면(편집기가 이미 없음) 표시를 남겨 둔다. 앱 종료 때 "찍을 것이 남음"으로 보이게.
+    // If the body can't be obtained (editor already gone), keep the mark so quit shows "snapshots pending".
     guard edited.contains(id), let text = text() else { return }
     edited.remove(id)
     enqueue(text, id, .leave)
   }
 
-  /// 직접 찍기. 다 쓸 때까지 기다리고 찍은 스냅샷을 돌려준다.
-  /// `skipIfUnchanged`면 마지막 스냅샷과 같을 때 찍지 않고 nil(저장하면서 스냅샷 찍기: ⌘S를 자주 눌러도 쌓이지 않게).
+  /// Manual snapshot. Waits until written and returns the snapshot.
+  /// With `skipIfUnchanged`, nil without taking when equal to the last snapshot (snapshot-on-save: frequent ⌘S doesn't pile up).
   func takeManual(_ id: EpisodeID, text: String, skipIfUnchanged: Bool = false) async throws -> Snapshot? {
     edited.remove(id)
     return try await enqueue(text, id, .manual, skipIfSame: skipIfUnchanged).value
   }
 
-  /// 되돌리기 직전 지금 본문을 `restore`로 남긴다. 같은 내용이어도 늘 찍는다: 메모로 "언제 무엇으로 되돌렸나"를 남기려고.
+  /// Right before a restore, keep the current body as `restore`. Always taken even if identical: the memo records "when and to what it was restored".
   func takeRestore(_ id: EpisodeID, text: String, memo: String) async throws -> Snapshot? {
     try await enqueue(text, id, .restore, memo: memo).value
   }
 
-  /// 여러 커서로 들어가기 직전(`multicursor`). 마지막 스냅샷과 같으면 건너뛰고, 찍은 뒤 보관 개수로 정리한다.
-  /// 고친 회차 표시는 그대로 둔다: 여러 커서로 고친 글은 다음 간격이나 떠날 때 따로 남아야 한다.
+  /// Right before entering multi-cursor (`multicursor`). Skipped when equal to the last snapshot; pruned by keep count after taking.
+  /// The edited-episode mark stays: text edited with multi-cursor must be kept separately at the next interval or on leave.
   func takeBeforeMultiCursor(_ id: EpisodeID, text: String) {
     enqueue(text, id, .multiCursor, skipIfSame: true)
   }
 
-  /// 이름이 바뀔 때(`rename`). 같은 글이어도 늘 찍고, 바뀌기 전 제목을 함께 남긴 뒤 보관 개수로 정리한다.
-  /// `text`가 nil이면 쓰는 차례에 파일을 읽는다: 500화를 한 번에 바꿔도 본문을 메모리에 모아 두지 않는다.
-  /// 장치 캐시는 비우지 않는다: 기록용이고, 같은 때 저장하는 `project.json`의 F_FULLFSYNC가 함께 내려 준다.
+  /// On rename (`rename`). Always taken even if text is identical, together with the old title, then pruned by keep count.
+  /// If `text` is nil, the file is read when its turn comes: renaming 500 episodes at once doesn't gather bodies in memory.
+  /// Device cache isn't flushed: it's a record, and the F_FULLFSYNC of `project.json` saved at the same time flushes it too.
   @discardableResult
   func takeRename(_ id: EpisodeID, text: String?, title: String, memo: String, at date: Date) -> Task<Snapshot?, any Error> {
     let store = store
@@ -98,18 +98,18 @@ final class EpisodeSnapshotter {
     return enqueue(body, id, .rename, memo: memo, title: title, date: date, fullSync: false)
   }
 
-  /// 전체 바꾸기 직전(`replace`)·직후(`replaced`) 본문. 늘 찍고 보관 개수로 지우지 않는다.
-  /// 한 번의 바꾸기에서 나온 스냅샷이 회차가 달라도 같은 시각을 갖도록 시각을 받는다.
-  /// 장치 캐시는 비우지 않는다(`fullSync: false`): 회차마다 바로 뒤의 본문 쓰기(열린 회차는 자동 저장)가 F_FULLFSYNC로
-  /// 이 스냅샷까지 함께 내려 주므로 "바꾸기 전 글이 본문보다 먼저 디스크에"는 그대로다. 다 F_FULLFSYNC로 쓰면 회차마다
-  /// 다섯 번(스냅샷 둘·메모 둘·본문, 한 번 3.2ms)이라 500화에 몇 초가 걸린다.
-  /// 다른 스냅샷처럼 한 줄로 세우지 않는다: "마지막과 같으면 건너뛰기"·보관 개수 정리가 없어 앞 쓰기를 기다릴 까닭이 없고,
-  /// 회차 여러 개를 겹쳐 바꿀 때 그 줄이 병목이 된다. 앱을 끌 때는 `waitForWrites`가 함께 기다린다.
+  /// Bodies right before (`replace`) and after (`replaced`) replace all. Always taken and never pruned by keep count.
+  /// Takes the time so snapshots from one replace share it across episodes.
+  /// Device cache isn't flushed (`fullSync: false`): each episode's immediately following body write (autosave for the open one) uses F_FULLFSYNC
+  /// and flushes this snapshot along with it, so "pre-replace text hits disk before the body" still holds. F_FULLFSYNC for all would be
+  /// five per episode (two snapshots, two memos, the body; 3.2 ms each), several seconds for 500 episodes.
+  /// Not serialized like other snapshots: no "skip if same as last" or pruning, so there's no reason to wait for earlier writes,
+  /// and the queue would bottleneck replacing many episodes in parallel. At quit, `waitForWrites` waits for them too.
   func takeReplace(_ id: EpisodeID, kind: SnapshotKind, text: String, memo: String, at date: Date) async throws -> Snapshot? {
     try await startReplace(id, kind: kind, text: text, memo: memo, at: date).value
   }
 
-  /// `takeReplace`와 같지만 쓰기를 시작만 한다(바꾼 뒤 스냅샷: 다 쓰기를 기다리면 회차마다 메인 스레드를 한 번 더 오간다).
+  /// Same as `takeReplace` but only starts the write (post-replace snapshot: waiting would cost another main-thread round trip per episode).
   @discardableResult
   func startReplace(
     _ id: EpisodeID, kind: SnapshotKind, text: String, memo: String, at date: Date
@@ -126,7 +126,7 @@ final class EpisodeSnapshotter {
     return write
   }
 
-  /// 휴지통으로 보낸 회차는 더 찍지 않는다.
+  /// No more snapshots for trashed episodes.
   func forget(_ id: EpisodeID) {
     edited.remove(id)
   }
@@ -140,7 +140,7 @@ final class EpisodeSnapshotter {
     }
   }
 
-  /// 간격마다 부른다. 테스트에서도 직접 부른다.
+  /// Called every interval. Tests call it directly too.
   func autoTick() {
     guard settings.autoEnabled, let id = currentEpisode(), edited.contains(id), let text = currentText() else { return }
     edited.remove(id)
@@ -185,7 +185,7 @@ final class EpisodeSnapshotter {
           body, id, kind, memo: memo, title: title, skipIfSame: skipIfSame, retention: retention, date: date,
           fullSync: fullSync)
       } catch {
-        // 못 찍었으면(디스크가 꽉 찼을 때 등) "고친 회차"로 되돌린다. 아직 그 회차를 보고 있으면 다음 간격이나 떠날 때 다시 찍는다.
+        // If it failed (disk full etc.), restore the "edited" mark. If the episode is still open, it's taken again at the next interval or on leave.
         if kind.capturesEdits { edited.insert(id) }
         throw error
       }
@@ -202,13 +202,13 @@ final class EpisodeSnapshotter {
     let store = store
     return try await Task.detached {
       let text = try body()
-      // 자동·떠날 때·여러 커서 전만 마지막과 같으면 건너뛴다. 직접·복원 전·이름 변경은 그 순간을 기록하려는 것이라 늘 찍는다
-      // (저장하면서 찍는 직접 찍기만 예외로 건너뛴다).
+      // Only automatic, leave and pre-multi-cursor skip when equal to the last. Manual, pre-restore and rename record that moment, so always taken
+      // (only snapshot-on-save manual snapshots skip, as an exception).
       let snapshot = try store.writeSnapshot(
         text, episode: id, kind: kind, memo: memo, title: title, at: date,
         skipIfSameAsLatest: kind.capturesEdits || skipIfSame,
         fullSync: fullSync)
-      // 정리가 실패해도 방금 찍은 것은 남았으니 실패로 치지 않는다. 다음에 찍을 때 다시 정리한다.
+      // A failed prune isn't a failure since the snapshot just taken remains. Pruning retries at the next snapshot.
       if kind.isPrunable { _ = try? store.pruneSnapshots(of: id, keeping: retention) }
       return snapshot
     }.value

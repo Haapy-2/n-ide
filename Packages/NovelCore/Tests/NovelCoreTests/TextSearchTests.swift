@@ -21,7 +21,7 @@ struct TextSearchTests {
     #expect(TextSearch.matches(of: "sword", in: text, caseSensitive: true).map(\.location) == [6])
   }
 
-  /// 자모를 따로 적은 한글(NFD, 다른 편집기·맥 파일 이름에서 섞여 들어옴)도 같은 글자로 찾는다.
+  /// Decomposed Hangul (NFD, mixed in from other editors or Mac file names) is found as the same characters.
   @Test func findsDecomposedHangul() {
     let decomposed = "한서윤".decomposedStringWithCanonicalMapping
     let text = "이름: \(decomposed)"
@@ -33,7 +33,7 @@ struct TextSearchTests {
     #expect((text as NSString).substring(with: range).precomposedStringWithCanonicalMapping == "서윤")
   }
 
-  /// 줄 번호는 편집기와 같다: `\r\n`도 줄바꿈 하나다.
+  /// Line numbers match the editor: `\r\n` is a single newline too.
   @Test func crlfCountsAsOneLineBreak() {
     let text = "첫 줄\r\n둘째 줄\r\n셋째 검"
 
@@ -72,7 +72,7 @@ struct TextSearchTests {
     #expect(TextSearch.matches(of: "가", in: String(repeating: "가", count: 50), caseSensitive: false, limit: 7).count == 7)
   }
 
-  // MARK: - 여러 회차
+  // MARK: - Multiple episodes
 
   @Test func searchesEpisodesInOrderAndPrefersGivenText() throws {
     let folder = try TestFolder()
@@ -83,7 +83,7 @@ struct TextSearchTests {
     try store.writeEpisode("디스크에는 없음", id: second)
     try store.writeEpisode("검 셋 검", id: third)
 
-    // 둘째 회차는 편집기에서 방금 고쳐 아직 저장 전인 글을 찾는다.
+    // The second episode is searched in text just edited in the editor and not yet saved.
     let result = try store.search("검", in: [first, second, third], texts: [second: "막 쓴 검"], caseSensitive: false)
 
     #expect(result.episodes.map(\.id) == [first, second, third])

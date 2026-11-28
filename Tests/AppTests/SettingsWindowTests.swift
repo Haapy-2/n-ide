@@ -9,7 +9,7 @@ final class SettingsWindowTests: XCTestCase {
     let menu = try XCTUnwrap(item.menu)
     menu.performActionForItem(at: menu.index(of: item))
     RunLoop.main.run(until: Date().addingTimeInterval(1))
-    // SwiftUI `Settings` 장면이 만드는 창의 고정 이름
+    // Fixed name of the window created by the SwiftUI `Settings` scene
     let window = try XCTUnwrap(NSApp.windows.first { $0.identifier?.rawValue == "com_apple_SwiftUI_Settings_window" })
     defer { window.close() }
 

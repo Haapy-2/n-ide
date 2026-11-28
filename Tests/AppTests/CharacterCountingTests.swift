@@ -25,7 +25,7 @@ final class CharacterCountingTests: XCTestCase {
       autosaveDelay: .milliseconds(20), countDelay: .milliseconds(20), countSaveDelay: .milliseconds(50))
   }
 
-  /// EpisodeEditorPane과 같은 순서로 연다.
+  /// Opened in the same order as EpisodeEditorPane.
   private func open(_ id: EpisodeID, in model: ProjectModel, textView: ManuscriptTextView? = nil) throws -> ManuscriptTextView {
     let textView = textView ?? ManuscriptTextView.make()
     model.counter.attach(textView)
@@ -60,7 +60,7 @@ final class CharacterCountingTests: XCTestCase {
     XCTAssertEqual(model.episode(id)?.characterCount, CharacterCount(withSpaces: 10, withoutSpaces: 8))
   }
 
-  /// 다음 회차 본문을 열지 못하면 앞 회차의 글자 수를 비운다(오류 문구 옆에 남으면 그 회차 것처럼 보인다).
+  /// If the next episode's body fails to open, the previous episode's count is cleared (left next to the error text it would look like this episode's).
   func testClearDropsPreviousEpisodeCount() async throws {
     let model = try makeModel()
     let id = try await model.addEpisode()
@@ -73,7 +73,7 @@ final class CharacterCountingTests: XCTestCase {
     XCTAssertNil(model.counter.current)
   }
 
-  /// 조합 중에 세어도 조합이 끊기지 않고, 조합 중인 글자도 한 글자로 센다.
+  /// Counting during composition doesn't break it, and the composing character counts as one.
   func testCountingDuringCompositionKeepsMarkedText() async throws {
     let model = try makeModel()
     let id = try await model.addEpisode()
@@ -100,7 +100,7 @@ final class CharacterCountingTests: XCTestCase {
     XCTAssertEqual(model.episode(second)?.characterCount?.withSpaces, 5)
   }
 
-  /// 앱 밖에서 바뀐 본문으로 다시 읽어도 다시 센다.
+  /// Recounts when the body is reloaded from an outside change.
   func testReloadRecounts() async throws {
     let model = try makeModel()
     let id = try await model.addEpisode()
@@ -176,9 +176,9 @@ final class CharacterCountingTests: XCTestCase {
     XCTAssertEqual(CharacterCountDisplay.withoutSpaces.text(for: count), "공백 제외 987자")
   }
 
-  // MARK: - 상태 줄 숨기기
+  // MARK: - Hiding the status bar
 
-  /// "타이핑 중 숨기기"를 골랐을 때.
+  /// When "hide while typing" is chosen.
   private func typingHidingFade(hideAfter: Duration, showAfter: Duration) -> StatusBarFade {
     let fade = StatusBarFade(hideAfter: hideAfter, showAfter: showAfter)
     fade.hidesWhileTyping = true
@@ -221,7 +221,7 @@ final class CharacterCountingTests: XCTestCase {
     XCTAssertFalse(fade.isHidden)
   }
 
-  /// 기본 설정: 치는 동안에는 계속 보이고, 멈추고 (10초 대신) 잠시 뒤 숨는다. 마우스를 움직이면 나타난다.
+  /// Default: stays visible while typing, hides a while after stopping (instead of 10 s). Moving the mouse shows it.
   func testDefaultStaysVisibleWhileTypingAndHidesWhenIdle() async throws {
     let fade = StatusBarFade(hideAfter: .milliseconds(50), showAfter: .milliseconds(50), idleAfter: .milliseconds(400))
     fade.reconsider()
@@ -243,7 +243,7 @@ final class CharacterCountingTests: XCTestCase {
     XCTAssertFalse(fade.isHidden)
   }
 
-  /// 갱신 주기를 "실시간"(0)으로 하면 치는 동안 기다리지 않고 센다.
+  /// With refresh set to "live" (0), counting happens without waiting while typing.
   func testRealtimeCountingUpdatesWhileTyping() async throws {
     let model = try makeModel()
     model.counter.interval = .zero

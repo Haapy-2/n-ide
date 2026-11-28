@@ -28,7 +28,7 @@ final class ProjectSearchTests: XCTestCase {
     }
   }
 
-  /// 방금 친 글(아직 1초 자동 저장 전)도 찾는다. 디스크만 읽으면 못 찾는다.
+  /// Just-typed text (before the 1 s autosave) is found too. Reading only the disk would miss it.
   func testFindsTextTypedInOpenEpisodeBeforeItIsSaved() async throws {
     let model = ProjectModel(project: try store.loadProject(), store: store, queue: SaveQueue(), autosaveDelay: .seconds(60))
     let first = try await model.addEpisode()
@@ -70,7 +70,7 @@ final class ProjectSearchTests: XCTestCase {
     XCTAssertNil(search.result)
   }
 
-  // MARK: - 결과로 가기
+  // MARK: - Going to a result
 
   private func editor(_ text: String) -> (NSWindow, ManuscriptTextView) {
     let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 800, height: 600), styleMask: [.titled], backing: .buffered, defer: false)
@@ -98,7 +98,7 @@ final class ProjectSearchTests: XCTestCase {
     let (window, textView) = editor("아, 그는 검을 들었다.\n검이 울었다.")
     defer { window.close() }
 
-    // 검색할 때는 "그는 검을…"이 맨 앞이라 둘째 "검"이 11에 있었다. 지금은 앞에 "아, "가 붙어 14에 있다.
+    // At search time "그는 검을…" was at the start, so the second "검" was at 11. Now "아, " is prepended, putting it at 14.
     textView.reveal(TextReveal(episodeID: EpisodeID.make(), location: 11, length: 1, query: "검", caseSensitive: false))
 
     XCTAssertEqual(textView.selectedRange(), NSRange(location: 14, length: 1))
@@ -122,7 +122,7 @@ final class ProjectSearchTests: XCTestCase {
     XCTAssertTrue(textView.visibleRect.contains(rect), "보이는 곳 \(textView.visibleRect) 찾은 곳 \(rect)")
   }
 
-  /// 실제 앱처럼: SwiftUI 다리로 다른 회차 본문을 올리면서 같은 갱신에 결과로 가기를 건다.
+  /// Like the real app: load another episode's body through the SwiftUI bridge and set the result jump in the same update.
   func testRevealAfterSwitchingEpisodeShowsMatch() async throws {
     func body(_ mark: Int) -> String {
       (1...130).map { $0 == mark ? "\"늦었군.\"" : "\($0)번째 문단입니다. 그는 길을 걸었다. 바람이 불었다. 하늘은 맑았다." }.joined(separator: "\n\n")

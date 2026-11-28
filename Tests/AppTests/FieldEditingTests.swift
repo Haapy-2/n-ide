@@ -2,7 +2,7 @@ import AppKit
 import XCTest
 @testable import NovelEditor
 
-/// 입력 칸 밖을 누르면 입력이 끝나고(값 확정), 칸 안을 누르면 그대로다(AppDelegate의 클릭 감시).
+/// Clicking outside the field ends editing (commits the value); clicking inside keeps it (AppDelegate's click monitor).
 @MainActor
 final class FieldEditingTests: XCTestCase {
   func testClickOutsideEndsEditingAndInsideKeepsIt() throws {

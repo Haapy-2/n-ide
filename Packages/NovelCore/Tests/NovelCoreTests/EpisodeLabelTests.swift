@@ -1,7 +1,7 @@
 import Testing
 @testable import NovelCore
 
-/// 확인 창·판 제목에 들어가는 회차 이름과 조사. 사용자에게 그대로 보이는 문구다.
+/// Episode names and particles used in confirmations and panel titles. These strings are shown to the user verbatim.
 struct EpisodeLabelTests {
   @Test func numberOnlyWhenTitleIsEmptyOrSameNumber() {
     #expect(EpisodeLabel.text(number: 3, title: "") == "3화")

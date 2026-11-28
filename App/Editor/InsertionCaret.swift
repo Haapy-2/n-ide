@@ -1,29 +1,29 @@
 import AppKit
 
-/// 커서 높이를 글자 크기의 배수로.
-/// 줄 높이를 글자 크기 × 줄 간격(기본 1.75)으로 고정해서, 그대로 두면 커서가 줄 높이만큼 길어 글자보다 훨씬 컸다.
-/// 위치는 글자 몸통(올림~내림) 한가운데. 두께·높이·색은 설정 › 커서(`CaretSettings.swift`).
+/// Caret height as a multiple of font size.
+/// Line height is fixed to font size × spacing (default 1.75), so left alone the caret would span the whole line, far taller than the glyphs.
+/// Positioned at the middle of the glyph body (ascender–descender). Width, height and color: Settings › Caret (`CaretSettings.swift`).
 extension ManuscriptTextView {
 
-  /// 시스템이 준 커서 칸(`lineRect`: 줄 위에서 시작하는 줄 높이 칸)에서 실제로 그릴 칸.
-  /// 줄 높이를 고정해서 기준선은 모든 줄에서 줄 위로부터 같은 거리라, 그 거리로 글자 몸통 가운데를 구한다.
+  /// The rect actually drawn, derived from the system's caret rect (`lineRect`: a line-height rect starting at the line top).
+  /// With fixed line height the baseline is the same distance from every line top, so that distance gives the glyph body's middle.
   func caretRect(in lineRect: NSRect) -> NSRect {
     let font = style.font
     let height = (style.fontSize * caret.heightRatio).rounded()
     let baseline = lineRect.minY + emptyLineBaselineFromTop
-    // 뒤집힌 좌표(아래로 갈수록 커짐). 글자 몸통 = 기준선 − 올림 ~ 기준선 − 내림(내림은 음수).
+    // Flipped coordinates (y grows downward). Glyph body = baseline − ascender … baseline − descender (descender is negative).
     let center = baseline - (font.ascender + font.descender) / 2
     var rect = lineRect
     rect.size.width = caret.width
     rect.size.height = min(height, lineRect.height)
     rect.origin.y = (center - rect.height / 2).rounded()
-    // 줄 칸 밖으로는 나가지 않게(아주 큰 글자·좁은 줄 간격).
+    // Don't extend outside the line rect (very large font, tight spacing).
     rect.origin.y = min(max(rect.minY, lineRect.minY), lineRect.maxY - rect.height)
     return rect
   }
 
-  /// 시스템은 커서를 옮기거나 깜빡일 때 원래 굵기(1pt) 칸만 지운다. 더 굵게 그리면 오른쪽 1pt가 남아 자국이 생기므로
-  /// 커서처럼 가는 칸을 다시 그리라는 요청은 커서 두께 + 1pt까지 넓힌다. 다른 다시 그리기는 그대로.
+  /// When moving or blinking the caret, the system erases only a default-width (1 pt) rect. Drawing thicker leaves the right 1 pt as a trail, so
+  /// requests to redraw a caret-thin rect are widened to caret width + 1 pt. Other redraws are unchanged.
   func widenedForCaret(_ rect: NSRect) -> NSRect {
     guard isCaretSized(rect) else { return rect }
     var wide = rect
@@ -31,7 +31,7 @@ extension ManuscriptTextView {
     return wide
   }
 
-  /// 시스템이 커서 칸으로 보내는 가는 칸인가(넓힌 칸은 아니다).
+  /// Whether this is the thin rect the system sends for the caret (not an already widened one).
   func isCaretSized(_ rect: NSRect) -> Bool {
     !rect.isEmpty && rect.width < caret.width + 1
   }

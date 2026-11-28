@@ -2,8 +2,8 @@ import Foundation
 import Testing
 @testable import NovelCore
 
-/// 사용자가 Finder와 텍스트 편집기로 열어 볼 수 있는 예시 작품을 build/samples/에 만든다.
-/// 테스트를 돌릴 때마다 새로 만든다.
+/// Builds a sample project in build/samples/ that the user can open in Finder and a text editor.
+/// Rebuilt on every test run.
 struct SampleProjectTests {
   @Test func writeSampleProjectForManualInspection() throws {
     let root = TestFolder.repoRoot.appending(path: "build/samples/예시 작품.novel", directoryHint: .isDirectory)

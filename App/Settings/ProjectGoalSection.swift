@@ -1,13 +1,13 @@
 import NovelCore
 import SwiftUI
 
-/// 설정 창 "일반"의 "목표" 묶음: 맨 마지막으로 앞에 있던 작품의 회차 목표(project.json, 작품별 값)와 목표 기준(앱 전체).
-/// 바꾸면 이미 있는 모든 회차와 앞으로 만들 회차에 함께 적용된다.
-/// 회차 하나만 다르게 하려면 회차 메뉴의 "목표 글자 수…"를 쓴다. 작품 창이 없으면 안내 한 줄만 보인다.
+/// "Goal" group in Settings "General": the episode goal of the most recently front project (project.json, per project) and the goal basis (app-wide).
+/// Changing it applies to all existing episodes and future ones.
+/// To differ for one episode, use the episode menu's "목표 글자 수…". Without a project window only a one-line hint shows.
 struct ProjectGoalSection: View {
   private var active = ActiveWorkspace.shared
   @AppStorage(AppSettingKey.characterCountGoalBasis) private var basis: CharacterCountBasis = .withSpaces
-  /// 입력 중인 값. 엔터를 치거나 칸을 벗어나면 저장한다(한 글자 칠 때마다 저장하지 않게).
+  /// Value being typed. Saved on Return or leaving the field (not per keystroke).
   @State private var draft = 0
   @FocusState private var isEditing: Bool
 
@@ -29,7 +29,7 @@ struct ProjectGoalSection: View {
         Text("작품을 열면 바꿀 수 있어요.")
           .foregroundStyle(.secondary)
       }
-      // 기준은 앱 전체 값이라 작품이 없어도 바꿀 수 있다.
+      // The basis is app-wide, so it can change without a project.
       Picker("목표 기준", selection: $basis) {
         ForEach(CharacterCountBasis.allCases, id: \.self) { Text($0.title) }
       }
@@ -45,14 +45,14 @@ struct ProjectGoalSection: View {
     .onChange(of: active.model?.project.settings.defaultEpisodeGoal, initial: true) { _, goal in
       if !isEditing, let goal { draft = goal }
     }
-    // 설정 창을 열면 맥이 첫 입력 칸에 커서를 넣는데, 목표 칸이 저절로 입력 상태가 되지 않게 바로 뺀다.
-    // 창이 뜨고 맥이 커서를 넣은 다음 차례에 빼야 해서 조금 기다린다.
+    // Opening Settings makes macOS put the cursor in the first field; remove it right away so the goal field doesn't enter editing by itself.
+    // Must remove it on the turn after the window appears and macOS sets the cursor, so wait a little.
     .task {
       try? await Task.sleep(for: .milliseconds(50))
       isEditing = false
     }
-    // 입력하는 사이 다른 작품 창이 앞으로 오면 그 작품의 값으로 바꾸고 입력을 끝낸다.
-    // 그대로 두면 칸을 벗어날 때 A 작품에 치던 값이 B 작품의 모든 회차 목표를 덮는다.
+    // If another project window comes to the front while typing, switch to that project's value and end editing.
+    // Otherwise leaving the field would apply the value typed for project A to every episode goal of project B.
     .onChange(of: active.model.map(ObjectIdentifier.init)) {
       guard isEditing else { return }
       draft = active.model?.project.settings.defaultEpisodeGoal ?? 0
@@ -63,13 +63,13 @@ struct ProjectGoalSection: View {
     }
   }
 
-  /// 새 회차 목표와 모든 회차 목표를 함께 바꾼다. 두 되돌리기 기록을 같은 차례에 남겨 ⌘Z 한 번에 함께 되돌아가게.
+  /// Change the new-episode goal and all episode goals together. Both undo records are registered in the same turn so one ⌘Z reverts both.
   private func commit(_ model: ProjectModel) {
     guard draft > 0 else {
       draft = model.project.settings.defaultEpisodeGoal
       return
     }
-    // 값이 그대로면 아무것도 하지 않는다. 칸을 눌렀다 나가기만 해도 회차별로 따로 정한 목표가 덮이면 안 되니까.
+    // Do nothing if the value is unchanged. Merely clicking into and out of the field must not overwrite per-episode goals.
     guard draft != model.project.settings.defaultEpisodeGoal else { return }
     let goal = draft
     let undoManager = ActiveWorkspace.shared.undoManager

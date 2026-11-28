@@ -2,7 +2,7 @@ import AppKit
 import XCTest
 @testable import NovelEditor
 
-/// 빈 회차 안내 글은 그리기만 하고 본문(텍스트 저장소)에는 들어가지 않는다.
+/// The empty-episode hint is only drawn and never enters the body (text storage).
 @MainActor
 final class EmptyEpisodePlaceholderTests: XCTestCase {
   func testPlaceholderFollowsEmptinessWithoutTouchingText() {

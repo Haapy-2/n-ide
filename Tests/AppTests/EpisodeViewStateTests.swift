@@ -4,7 +4,7 @@ import SwiftUI
 import XCTest
 @testable import NovelEditor
 
-/// 회차를 다시 열 때 커서와 화면 위치로 돌아간다.
+/// Reopening an episode returns to the caret and scroll position.
 @MainActor
 final class EpisodeViewStateTests: XCTestCase {
   private var defaults: UserDefaults!
@@ -46,7 +46,7 @@ final class EpisodeViewStateTests: XCTestCase {
     XCTAssertNil(states.lastOpened(among: [EpisodeID.make()]))
   }
 
-  /// 편집기에서 커서와 화면 맨 위 글자를 읽고, 다른 본문을 거쳐 돌아왔을 때 그 자리로 간다.
+  /// Read the caret and the top-of-screen character from the editor, and return there after visiting another body.
   func testEditorReturnsToCaretAndScroll() throws {
     let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled], backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false
@@ -73,7 +73,7 @@ final class EpisodeViewStateTests: XCTestCase {
     XCTAssertEqual(textView.viewState().top, saved.top)
   }
 
-  /// 회차를 연 직후 한 차례 늦게 자리를 다시 맞출 때, 그사이 조합이 시작됐으면 선택을 옮기지 않는다.
+  /// When the position is re-applied one turn late right after opening, the selection isn't moved if composition started meanwhile.
   func testLateRestoreLeavesCompositionAlone() async throws {
     let id = EpisodeID.make()
     EpisodeViewStates.shared.record(EpisodeViewState(caret: 3, top: 0, openedAt: Date()), for: id)
@@ -84,7 +84,7 @@ final class EpisodeViewStateTests: XCTestCase {
     defer { window.close() }
     window.contentView = NSHostingView(rootView: ManuscriptEditor(content: content, onReady: { textView in
       editor = textView
-      // 편집기가 본문을 넣은 뒤 늦은 자리 맞추기보다 먼저 오는 첫 키
+      // The first key arriving after the editor loads the body but before the late position restore
       DispatchQueue.main.async { [weak textView] in
         textView?.setMarkedText(
           "ㄱ", selectedRange: NSRange(location: 1, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
@@ -99,7 +99,7 @@ final class EpisodeViewStateTests: XCTestCase {
     XCTAssertEqual(textView.selectedRange(), NSRange(location: 4, length: 0))
   }
 
-  /// 기억한 커서가 한 글자(이모지) 가운데면 그 글자 앞으로.
+  /// If the remembered caret is inside one character (emoji), move before that character.
   func testRestoreKeepsCaretOffEmojiMiddle() {
     let textView = ManuscriptTextView.make()
     textView.replaceAllText(with: "가👍나")

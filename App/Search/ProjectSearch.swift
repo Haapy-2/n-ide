@@ -2,24 +2,24 @@ import Foundation
 import NovelCore
 import Observation
 
-/// 작품 전체 검색 패널 하나의 상태(PLAN 13장). 입력이 0.2초 멈추면 메인 스레드 밖에서 찾는다.
-/// 새로 치면 하던 검색은 취소하고, 새 결과가 나올 때까지 앞 결과를 그대로 보여 준다(목록이 깜빡이지 않게).
+/// State of one project-search panel (PLAN ch.13). Searches off the main thread once typing pauses for 0.2 s.
+/// New typing cancels the running search, and the previous result stays until the new one arrives (so the list doesn't flicker).
 @MainActor
 @Observable
 final class ProjectSearch {
   var query = ""
   var caseSensitive = false
-  /// 마지막으로 끝난 검색. 입력을 지우면 nil.
+  /// Last finished search. nil when the input is cleared.
   private(set) var result: ProjectSearchResult?
-  /// `result`를 찾은 문구와 대소문자 구분. 결과를 누를 때 편집기에서 다시 맞춰 보는 데 쓴다.
+  /// The phrase and case sensitivity `result` was found with. Used to re-match in the editor when a result is clicked.
   private(set) var resultQuery = ""
   private(set) var resultCaseSensitive = false
   private(set) var isSearching = false
 
   @ObservationIgnored private let store: ProjectStore
-  /// 회차 순서(지금 목록)
+  /// Episode order (current list)
   @ObservationIgnored private let episodeIDs: () -> [EpisodeID]
-  /// 파일 대신 찾을 글: 열린 회차의 편집기 글, 저장하지 못해 메모리에만 있는 글.
+  /// Text searched instead of files: the open episode's editor text, and text only in memory after a failed save.
   @ObservationIgnored private let texts: () -> [EpisodeID: String]
   @ObservationIgnored private let delay: Duration
   @ObservationIgnored private var task: Task<Void, Never>?
@@ -34,12 +34,12 @@ final class ProjectSearch {
     self.delay = delay
   }
 
-  /// 문구·옵션이 바뀌었을 때. 잠시 기다렸다가 찾는다.
+  /// When the phrase or options change. Waits briefly, then searches.
   func schedule() {
     start(after: delay)
   }
 
-  /// 기다리지 않고 지금 다시 찾는다(패널을 다시 열 때: 그사이 글이 바뀌었을 수 있다).
+  /// Search again now without waiting (when reopening the panel: text may have changed meanwhile).
   func refresh() {
     start(after: .zero)
   }
@@ -66,7 +66,7 @@ final class ProjectSearch {
         guard !Task.isCancelled else { return }
       }
       isSearching = true
-      // 본문 복사는 찾기 직전에 한 번(열린 회차 하나, 키 입력마다가 아님).
+      // The body is copied once right before searching (only the open episode, not per keystroke).
       let ids = episodeIDs()
       let texts = texts()
       let store = store
@@ -85,7 +85,7 @@ final class ProjectSearch {
   }
 }
 
-/// 검색 결과를 눌렀을 때 편집기에 보낼 요청. 같은 곳을 다시 눌러도 다시 가도록 매번 새 token.
+/// Request sent to the editor when a result is clicked. A new token each time so clicking the same spot jumps again.
 struct TextReveal: Equatable {
   let token = UUID()
   let episodeID: EpisodeID

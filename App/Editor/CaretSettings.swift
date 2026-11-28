@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// 커서 팔레트: 미리 정한 색 다섯 개. 값은 Colors.xcassets에 라이트/다크 한 쌍씩.
+/// Caret palette: five preset colors. Values live in Colors.xcassets as light/dark pairs.
 enum CaretPalette: String, CaseIterable {
   case accent, ink, caretRed, caretGreen, caretOrange
 
@@ -26,14 +26,14 @@ enum CaretPalette: String, CaseIterable {
   }
 }
 
-/// 커서 색 하나: 팔레트 색이거나, 컬러 피커로 고른 sRGB 색.
+/// One caret color: a palette color or an sRGB color picked in the color picker.
 enum CaretColor: Equatable {
   case palette(CaretPalette)
   case custom(red: Double, green: Double, blue: Double)
 
   static let standard = CaretColor.palette(.accent)
 
-  /// UserDefaults에 넣는 글자: 팔레트는 이름, 고른 색은 "#RRGGBB". 빈 글자·알 수 없는 글자는 기본(accent).
+  /// Text stored in UserDefaults: palette name, or "#RRGGBB" for picked colors. Empty/unknown text means default (accent).
   init(storageText: String) {
     if let palette = CaretPalette(rawValue: storageText) {
       self = .palette(palette)
@@ -45,7 +45,7 @@ enum CaretColor: Equatable {
     }
   }
 
-  /// 컬러 피커에서 받은 색. sRGB로 바꿀 수 없는 색(무늬 등)은 nil.
+  /// Color from the color picker. nil for colors that can't convert to sRGB (patterns etc.).
   init?(picked color: Color) {
     guard let rgb = NSColor(color).usingColorSpace(.sRGB) else { return nil }
     self = .custom(red: Double(rgb.redComponent), green: Double(rgb.greenComponent), blue: Double(rgb.blueComponent))
@@ -61,7 +61,7 @@ enum CaretColor: Equatable {
     }
   }
 
-  /// SwiftUI 색. 팔레트 색은 보는 모드(라이트/다크)에 따라 저절로 바뀐다.
+  /// SwiftUI color. Palette colors follow the current appearance (light/dark) automatically.
   var color: Color {
     switch self {
     case .palette(let palette): palette.color
@@ -84,14 +84,14 @@ enum CaretColor: Equatable {
   }
 }
 
-/// 편집기 커서의 두께·높이·색. 색은 라이트/다크를 따로 고른다.
+/// Editor caret width, height and color. Colors are chosen separately for light and dark.
 struct CaretStyle: Equatable {
   var width: CGFloat = EditorSetting.caretWidth.defaultValue
   var heightRatio: CGFloat = EditorSetting.caretHeightRatio.defaultValue
   var lightColor = CaretColor.standard
   var darkColor = CaretColor.standard
 
-  /// 편집기에 넣는 색. 창의 모양(라이트/다크)에 따라 둘 중 하나로 그려진다.
+  /// Color handed to the editor. Drawn as one of the two depending on the window's appearance.
   var dynamicColor: NSColor {
     let light = lightColor.nsColor(dark: false)
     let dark = darkColor.nsColor(dark: true)
@@ -101,7 +101,7 @@ struct CaretStyle: Equatable {
   }
 }
 
-/// 커서 설정(UserDefaults)을 한데 읽는다. 편집 영역과 설정 창이 같은 키·기본값을 쓰게 하려고 묶었다.
+/// Reads caret settings (UserDefaults) together, so the editor and Settings window share keys and defaults.
 struct CaretStyleSettings: DynamicProperty {
   @AppStorage(AppSettingKey.caretWidth) var width = EditorSetting.caretWidth.defaultValue
   @AppStorage(AppSettingKey.caretHeightRatio) var heightRatio = EditorSetting.caretHeightRatio.defaultValue
@@ -116,7 +116,7 @@ struct CaretStyleSettings: DynamicProperty {
       darkColor: CaretColor(storageText: darkColorText))
   }
 
-  /// "기본값으로": 커서 설정 네 개만 처음 값으로.
+  /// "Restore defaults": resets only the four caret settings.
   func reset() {
     width = EditorSetting.caretWidth.defaultValue
     heightRatio = EditorSetting.caretHeightRatio.defaultValue

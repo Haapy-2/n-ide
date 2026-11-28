@@ -1,18 +1,18 @@
 import AppKit
 
-/// 앱 종료 때 진행 중이거나 남은 저장을 끝까지 마치고 끈다(SPEC 6장).
-/// SwiftUI에는 종료를 잠시 미루는 방법이 없어서 AppKit 앱 대리자를 쓴다(AppKit 예외 파일).
-/// 화면 테마도 여기서 앱 전체에 건다: SwiftUI `preferredColorScheme`은 창마다 걸어야 하고,
-/// "기기 설정"(nil)으로 되돌릴 때 이미 열린 창이 바뀌지 않는다.
-/// 입력 칸(설정 창의 목표 등) 밖을 누르면 입력을 끝내는 것도 여기서 한다. 맥은 원래 커서를 그대로 두고,
-/// SwiftUI에는 "창 어디든 누르면"을 받는 방법이 없다.
-/// 창 탭(여러 창을 탭 하나로 묶기)도 여기서 끈다. 켜 두면 보기 메뉴에 쓰지 않는 탭 항목만 생기고, SwiftUI에는 끄는 방법이 없다.
+/// On quit, finish any running or pending saves before exiting (SPEC ch.6).
+/// SwiftUI has no way to delay termination, so we use an AppKit app delegate (AppKit exception file).
+/// The screen theme is also applied app-wide here: SwiftUI `preferredColorScheme` must be set per window,
+/// and reverting to "system" (nil) doesn't update windows that are already open.
+/// Ending text input when clicking outside a field (e.g. the goal in Settings) is also done here. macOS keeps the cursor by default,
+/// and SwiftUI has no way to receive "a click anywhere in the window".
+/// Window tabs (grouping windows into tabs) are also disabled here. Left on, the View menu only gains unused tab items, and SwiftUI can't turn them off.
 final class AppDelegate: NSObject, NSApplicationDelegate {
   private var themeObserver: NSObjectProtocol?
   private var clickMonitor: Any?
 
   func applicationWillFinishLaunching(_ notification: Notification) {
-    // 창이 생기기 전에 꺼야 보기 메뉴의 탭 항목이 처음부터 빠진다.
+    // Must be disabled before any window exists so the View menu's tab items are absent from the start.
     NSWindow.allowsAutomaticWindowTabbing = false
   }
 
@@ -29,8 +29,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
   }
 
-  /// 한 줄 입력 칸을 고치는 중(창의 공용 입력기 = field editor)에 그 칸 밖을 누르면 입력을 끝낸다.
-  /// 입력한 값은 확정되고, 누른 곳(버튼·슬라이더 등)은 평소대로 동작한다. 원고 편집기는 field editor가 아니라 상관없다.
+  /// While editing a single-line field (the window's shared field editor), a click outside that field ends editing.
+  /// The typed value is committed and the clicked control (button, slider…) works as usual. The manuscript editor isn't a field editor, so it's unaffected.
   static func endFieldEditingIfClickedOutside(_ event: NSEvent) {
     guard let window = event.window, let editor = window.firstResponder as? NSTextView, editor.isFieldEditor,
       let field = editor.delegate as? NSView
@@ -40,7 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
   }
 
-  /// 설정이 바뀔 때마다 불리지만 값이 달라졌을 때만 바꾼다.
+  /// Called on every settings change, but only applies when the value actually changed.
   private func applyTheme() {
     let theme = UserDefaults.standard.string(forKey: AppSettingKey.appTheme).flatMap(AppTheme.init) ?? .system
     let appearance: NSAppearance? = switch theme {
@@ -60,7 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     return .terminateLater
   }
 
-  /// 남은 저장을 마치고 끌지 정한다. 끝내 저장하지 못했으면 다시 시도·내보내기·그래도 종료·취소를 묻는다.
+  /// Decide whether to finish pending saves and quit. If saving ultimately failed, ask: retry / export / quit anyway / cancel.
   private func finishBeforeQuit(_ autosavers: [EpisodeAutosaver]) async -> Bool {
     while true {
       switch await finishSaves(autosavers) {
@@ -71,7 +71,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
       let unsaved = autosavers.filter(\.hasUnprotectedChanges)
       if unsaved.isEmpty {
         guard autosavers.contains(where: { $0.hasProjectWork() }) else { return confirmQuitWithConflicts(autosavers) }
-        // 원고는 다 저장됐고 회차 목록(project.json)만 못 썼다. 내보낼 원고가 없으니 끌지만 묻는다.
+        // All manuscripts are saved; only the episode list (project.json) failed. There's no manuscript to export, so only ask whether to quit.
         let alert = NSAlert()
         alert.alertStyle = .critical
         alert.messageText = "회차 목록을 저장하지 못했어요"
@@ -112,8 +112,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
   }
 
-  /// 외부 변경 충돌을 고르지 않은 회차가 있으면 따로 알린다. 앱 쪽 글은 `conflict` 스냅샷에 있어 잃지 않지만,
-  /// 끄면 다음에 열 때 바깥에서 바뀐 글이 보이므로 그 사실과 되살릴 곳을 말하고 끌지 묻는다. 다시 시도는 두지 않는다(저장으로 풀리지 않는다).
+  /// Separately warn about episodes with an unresolved external-change conflict. The app-side text is safe in a `conflict` snapshot,
+  /// but after quitting the externally changed text shows on next open, so say so and where to recover it, then ask. No retry (saving can't resolve it).
   private func confirmQuitWithConflicts(_ autosavers: [EpisodeAutosaver]) -> Bool {
     let count = autosavers.reduce(0) { $0 + $1.conflictsKeptInSnapshots }
     guard count > 0 else { return true }
@@ -129,8 +129,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     case finished, exported, cancelled
   }
 
-  /// 남은 저장을 마친다. 늦으면(네트워크 드라이브·iCloud, 저장 재시도) 아무것도 안 보여 멈춘 것처럼 보이므로,
-  /// 2초가 넘으면 기다리는 중임을 알리고 내보내고 끄기·종료 취소를 고르게 한다. 그사이 저장이 끝나면 알림은 저절로 닫힌다.
+  /// Finish pending saves. When slow (network drive, iCloud, save retries) nothing shows and it looks frozen, so
+  /// after 2 seconds say we're waiting and offer export-and-quit / cancel quit. If saving finishes meanwhile, the alert closes by itself.
   private func finishSaves(_ autosavers: [EpisodeAutosaver]) async -> FinishOutcome {
     let finishing = Task { @MainActor in
       for autosaver in autosavers { await autosaver.finish() }
@@ -149,8 +149,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
   }
 
-  /// `task`가 `limit` 안에 끝나면 true. 늦어도 `task`는 취소하지 않는다(저장은 계속된다).
-  /// 작업 그룹으로 겨루면 그룹이 모든 자식을 기다려서, 취소되지 않는 `task.value` 때문에 한도가 지나도 돌아오지 않는다.
+  /// True if `task` finishes within `limit`. Even if late, `task` is not cancelled (saving continues).
+  /// Racing with a task group makes the group wait for all children, so the uncancellable `task.value` would never return past the limit.
   static func finishes(_ task: Task<Void, Never>, within limit: Duration) async -> Bool {
     await withCheckedContinuation { continuation in
       let once = ResumeOnce(continuation)
@@ -166,7 +166,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   }
 }
 
-/// 둘 중 먼저 온 결과로 한 번만 잇는다.
+/// Resume exactly once with whichever result arrives first.
 @MainActor
 private final class ResumeOnce {
   private var continuation: CheckedContinuation<Bool, Never>?

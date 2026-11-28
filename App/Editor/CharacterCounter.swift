@@ -2,29 +2,29 @@ import AppKit
 import NovelCore
 import Observation
 
-/// 지금 회차의 글자 수 (SPEC 7장 3번, 8장).
-/// - 고치기 시작하면 `interval`(설정의 "글자 수 갱신", 기본 0.2초) 뒤에 본문을 한 번 복사해 메인 스레드 밖에서 전체를 센다.
-///   그사이 들어온 입력은 그 한 번에 묶인다. 치는 동안에도 `interval`마다 숫자가 바뀐다.
-///   `interval`이 0(실시간)이면 그 차례의 입력을 마치자마자 센다.
-///   측정해 보니 5,000자 0.3ms, 10만 자 10ms라 증분 계산은 만들지 않았다.
-/// - 텍스트 저장소는 읽기만 한다. 한글 조합 중에 세어도 조합이 끊기지 않는다(조합 중인 글자도 한 글자로 센다).
-/// - 입력뿐 아니라 실행 취소, 외부 변경으로 다시 읽기도 텍스트 저장소 알림으로 함께 잡는다.
+/// Character count of the current episode (SPEC ch.7 #3, ch.8).
+/// - Once edits start, after `interval` (the "count refresh" setting, default 0.2 s) copy the body once and count it all off the main thread.
+///   Input arriving meanwhile joins that single count. The number also updates every `interval` while typing.
+///   With `interval` 0 (live), count right after that turn's input finishes.
+///   Measured 0.3 ms for 5,000 chars and 10 ms for 100k chars, so no incremental counting.
+/// - Text storage is read only. Counting during Hangul composition doesn't break it (the composing character counts as one).
+/// - Undo and external-change reloads are caught too, via text storage notifications, not just typing.
 @MainActor
 @Observable
 final class CharacterCounter {
-  /// 지금 회차의 글자 수. 상태 줄이 본다. 값이 바뀔 때만 바꿔서 상태 줄이 쓸데없이 다시 그려지지 않게 한다.
+  /// Current episode's count, watched by the status bar. Only updated when it changes so the status bar doesn't redraw needlessly.
   private(set) var current: CharacterCount?
 
-  /// 센 결과를 받는 곳(회차 목록에 기록 → 사이드바, project.json).
+  /// Receiver of counts (records into the episode list → sidebar, project.json).
   @ObservationIgnored var onCount: (EpisodeID, CharacterCount) -> Void = { _, _ in }
   @ObservationIgnored private(set) var episodeID: EpisodeID?
   @ObservationIgnored private weak var textView: NSTextView?
   @ObservationIgnored private var observer: NSObjectProtocol?
   @ObservationIgnored private var waiting: Task<Void, Never>?
-  /// 회차별로 가장 나중에 시작한 계산 번호. 뒤에서 늦게 끝난 옛 계산이 새 값을 덮지 못하게 한다.
+  /// Latest started count number per episode, so an old count finishing late can't overwrite a newer value.
   @ObservationIgnored private var latest: [EpisodeID: Int] = [:]
   @ObservationIgnored private var generation = 0
-  /// 고친 뒤 세기까지 기다리는 시간. 설정 창에서 바꾼다.
+  /// Delay between an edit and counting. Changed in Settings.
   @ObservationIgnored var interval: Duration
 
   init(interval: Duration = .milliseconds(200)) {
@@ -35,7 +35,7 @@ final class CharacterCounter {
     guard self.textView !== textView else { return }
     if let observer { NotificationCenter.default.removeObserver(observer) }
     self.textView = textView
-    // 텍스트 저장소를 고친 그 자리(메인 스레드)에서 바로 불린다. 여기서는 시각만 적는다.
+    // Called right where text storage was edited (main thread). Only records the time here.
     observer = NotificationCenter.default.addObserver(
       forName: NSTextStorage.didProcessEditingNotification, object: textView.textStorage, queue: nil
     ) { [weak self] notification in
@@ -45,7 +45,7 @@ final class CharacterCounter {
     }
   }
 
-  /// 회차를 열 때. `text`는 막 읽은 본문, `known`은 project.json에 남아 있던 값(세는 동안 잠깐 보여준다).
+  /// On opening an episode. `text` is the body just read, `known` the value left in project.json (shown briefly while counting).
   func begin(episode id: EpisodeID, text: String, known: CharacterCount?) {
     finishLeaving()
     episodeID = id
@@ -53,14 +53,14 @@ final class CharacterCounter {
     count(text, for: id)
   }
 
-  /// 회차 본문을 열지 못했을 때. 앞 회차의 글자 수가 상태 줄에 남지 않게 비운다.
+  /// When an episode body failed to open. Clears it so the previous episode's count doesn't linger in the status bar.
   func clear() {
     finishLeaving()
     episodeID = nil
     current = nil
   }
 
-  /// 떠나는 회차에 아직 세지 않은 입력이 있으면 편집기에 옛 본문이 남아 있는 지금 센다.
+  /// If the episode being left has uncounted input, count now while the editor still holds the old body.
   private func finishLeaving() {
     guard waiting != nil else { return }
     waiting?.cancel()
@@ -69,8 +69,8 @@ final class CharacterCounter {
   }
 
   private func textDidChange() {
-    // 키마다 작업을 새로 만들지 않는다. 기다리는 작업이 이미 있으면 이번 입력도 그 작업이 함께 센다.
-    // 텍스트 저장소를 고치는 중(이 알림 안)에는 본문을 꺼내지 않고, 적어도 다음 차례로 미룬다.
+    // Don't create a task per keystroke. If one is already waiting, it counts this input too.
+    // While text storage is being edited (inside this notification) don't read the body; defer to at least the next turn.
     guard waiting == nil else { return }
     let interval = interval
     waiting = Task {
@@ -81,7 +81,7 @@ final class CharacterCounter {
     }
   }
 
-  /// 편집기의 지금 본문으로 바로 센다(복사만 메인 스레드, 세기는 밖에서). 성능 측정도 이것을 부른다.
+  /// Count the editor's current body now (copy on main, count off main). Performance tests call this too.
   func recountNow() {
     guard let id = episodeID, let textView else { return }
     count(textView.string, for: id)

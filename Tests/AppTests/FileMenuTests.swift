@@ -2,10 +2,10 @@ import AppKit
 import XCTest
 @testable import NovelEditor
 
-/// 파일 메뉴에 저장·스냅샷 항목이 실제로 있고 단축키가 맞는지.
-/// (CommandGroup(after: .saveItem)에 붙이면 메뉴에서 통째로 빠져 단축키가 듣지 않는다.)
-/// 항목이 켜지는지는 보지 않는다. 시험용 창(NSHostingView)은 SwiftUI 장면이 아니라 초점 값이 메뉴에 닿지 않아
-/// "새 회차"까지 모두 흐리게 나온다. 켜짐과 판 열기는 손 확인으로 본다.
+/// Whether the File menu actually has the save/snapshot items with the right shortcuts.
+/// (Attached via CommandGroup(after: .saveItem) they vanish from the menu entirely and shortcuts don't work.)
+/// Whether items are enabled isn't checked. The test window (NSHostingView) isn't a SwiftUI scene, so focus values don't reach menus
+/// and even "새 회차" shows dimmed. Enabled state and panel opening are checked by hand.
 @MainActor
 final class FileMenuTests: XCTestCase {
   private func menuItem(_ title: String, in menu: NSMenu?) -> NSMenuItem? {
@@ -16,7 +16,7 @@ final class FileMenuTests: XCTestCase {
     return nil
   }
 
-  /// SwiftUI는 메뉴를 열거나 단축키를 누를 때 메뉴 항목을 다시 만든다. 테스트에서는 그 순간을 직접 부른다.
+  /// SwiftUI rebuilds menu items when a menu opens or a shortcut is pressed. Tests trigger that moment directly.
   private func refreshMenus() {
     RunLoop.main.run(until: Date().addingTimeInterval(0.3))
     for item in NSApp.mainMenu?.items ?? [] {
@@ -38,7 +38,7 @@ final class FileMenuTests: XCTestCase {
     }
   }
 
-  /// 설정에서 바꾼 단축키가 실제 메뉴에 반영된다. 실제 앱 설정(UserDefaults)에 남으므로 끝나면 되돌린다.
+  /// Shortcuts changed in Settings show up in the real menu. They persist in real app settings (UserDefaults), so they're restored afterwards.
   func testCustomShortcutReachesMenu() throws {
     let store = ShortcutStore.shared
     let previous = store.settings
@@ -60,7 +60,7 @@ final class FileMenuTests: XCTestCase {
     XCTAssertEqual(show.keyEquivalent, "")
   }
 
-  /// 저장하면서 스냅샷 찍기를 켜면 "지금 저장" 항목이 그 전용 키를 갖는다. 끄면 원래 키로 돌아온다.
+  /// With snapshot on save on, the "save now" item gets its dedicated key. Turning it off restores the original key.
   func testSaveWithSnapshotKeyReachesMenu() throws {
     let store = ShortcutStore.shared
     let previous = store.settings

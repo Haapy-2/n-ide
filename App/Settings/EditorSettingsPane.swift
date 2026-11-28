@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 설정 창 "편집기": 본문 모양과 아래 상태 줄.
+/// Settings "Editor": body style and the status bar below.
 struct EditorSettingsPane: View {
   private var editor = EditorStyleSettings()
   @AppStorage(AppSettingKey.characterCountDisplay) private var display: CharacterCountDisplay = .both
@@ -58,7 +58,7 @@ struct EditorSettingsPane: View {
     .formStyle(.grouped)
   }
 
-  /// 단축키는 설정에서 바꿀 수 있어 제목에 넣지 않고 지금 키를 여기 보인다.
+  /// Shortcuts are configurable, so the current key is shown here instead of in the title.
   private var multiCursorDescription: String {
     let sentence = "같은 말을 하나씩 더 골라 한꺼번에 고쳐요"
     guard let combo = ShortcutStore.shared.settings.combo(for: .selectNextOccurrence) else { return sentence }

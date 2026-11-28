@@ -3,14 +3,14 @@ import NovelCore
 import XCTest
 @testable import NovelEditor
 
-/// 여러 커서의 화살표·지우기(PLAN 16장 E5). 목표 자리는 직접 계산하므로, 커서 하나일 때 편집기가 같은 키로 가는 자리와
-/// 모든 글자 자리에서 같은지 먼저 비교한다.
+/// Arrows and delete with multi-cursor (PLAN ch.16 E5). Targets are computed directly, so first compare against where the single-cursor editor goes with the same key
+/// at every character position.
 @MainActor
 final class MultiCursorMovementTests: XCTestCase {
   private var view: ManuscriptTextView!
   private let none = NSRange(location: NSNotFound, length: 0)
 
-  /// 한글·문장 부호·따옴표·이모지·자모를 따로 적은 한글·빈 줄·화면에서 접히는 긴 문단·끝 줄바꿈
+  /// Hangul, punctuation, quotes, emoji, decomposed Hangul, blank lines, long wrapped paragraphs, trailing newline
   private let sample = "민준이는 \"어디 가?\" 하고 물었다.\n\n둘째 줄, 👍🏽 짧다\n"
     + "\u{1100}\u{1161}\u{11A8}\u{1102}\u{1161} 셋째 "
     + String(repeating: "아주 길어서 화면 폭을 넘어가면 접히는 문단이다 ", count: 6) + "끝.\n"
@@ -27,12 +27,12 @@ final class MultiCursorMovementTests: XCTestCase {
 
   private var length: Int { (view.string as NSString).length }
 
-  /// 줄이 접히는 자리에서는 다음 줄 처음으로(여러 커서가 그 자리를 보는 방법). 프로그램이 놓은 커서의 기본은 앞 줄 끝이다.
+  /// At a wrap point, the next line's start (how multi-cursor views that position). A program-placed caret defaults to the previous line's end.
   private func caret(at index: Int) {
     view.setSelectedRange(NSRange(location: index, length: 0), affinity: .downstream, stillSelecting: false)
   }
 
-  /// 커서가 설 수 있는 자리(한 글자 가운데가 아닌 곳)
+  /// Positions a caret can stand at (not inside one character)
   private var caretIndices: [Int] {
     let text = sample as NSString
     return (0...text.length).filter { $0 == text.length || text.rangeOfComposedCharacterSequence(at: $0).location == $0 }
@@ -43,9 +43,9 @@ final class MultiCursorMovementTests: XCTestCase {
     view.selectPrimary()
   }
 
-  // MARK: - 커서 하나와 같은가
+  // MARK: - Same as a single cursor?
 
-  /// 명령마다 다른 곳 수와 앞 몇 곳
+  /// Per command, the number of mismatches and the first few
   private func report(_ mismatches: [String]) -> String {
     let counts = Dictionary(grouping: mismatches) { $0.split(separator: " ")[0] }.map { "\($0.key) \($0.value.count)" }.sorted()
     return "\(mismatches.count)곳 다름 [\(counts.joined(separator: ", "))]\n" + mismatches.prefix(12).joined(separator: "\n")
@@ -90,13 +90,13 @@ final class MultiCursorMovementTests: XCTestCase {
     XCTAssertTrue(mismatches.isEmpty, report(mismatches))
   }
 
-  // MARK: - 여러 커서
+  // MARK: - Multi-cursor
 
   private func command(_ selector: Selector) {
     view.doCommand(by: selector)
   }
 
-  /// "민준" 세 곳을 ⌘D로 고른 상태
+  /// Three "민준" selected with ⌘D
   private func selectThree(in text: String = "민준 가 민준 나 민준") {
     view.replaceAllText(with: text)
     view.setSelectedRange((text as NSString).range(of: "민준"))
@@ -129,7 +129,7 @@ final class MultiCursorMovementTests: XCTestCase {
     XCTAssertEqual(view.string, "다나 다나 다나")
   }
 
-  /// 짧은 줄을 지나도 자리마다 처음 가로 위치로 돌아온다.
+  /// Even after passing short lines, each spot returns to its original horizontal position.
   func testUpDownKeepEachCursorsColumn() {
     view.replaceAllText(with: "가나다라\n가\n가나다라\n가나다라\n가\n가나다라")
     cursors([NSRange(location: 3, length: 0), NSRange(location: 15, length: 0)])
@@ -160,7 +160,7 @@ final class MultiCursorMovementTests: XCTestCase {
     XCTAssertEqual(view.multiCursorRanges?.count, 3)
   }
 
-  /// ⌥⌫는 자리마다 앞 단어를 지우고, ⌘Z 한 번에 모든 자리가 돌아온다.
+  /// ⌥⌫ deletes the previous word at each spot, and one ⌘Z brings all spots back.
   func testWordDeletionAtEveryCursorUndoesAsOne() {
     view.replaceAllText(with: "민준이 가 민준이 나")
     cursors([NSRange(location: 3, length: 0), NSRange(location: 9, length: 0)])

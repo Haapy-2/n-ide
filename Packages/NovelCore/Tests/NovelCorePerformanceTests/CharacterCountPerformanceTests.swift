@@ -2,9 +2,9 @@ import Foundation
 import NovelCore
 import XCTest
 
-/// 글자 수 전체 계산 속도 (SPEC 8장: 증분 계산이 필요한지 먼저 잰다).
-/// 더미 작품의 5,000자 회차 본문으로 5,000자와, 그것을 이어 붙인 10만 자를 잰다.
-/// 편집기에서처럼 NSString에서 넘어온 문자열(`textView.string`)도 함께 잰다.
+/// Full character count speed (SPEC ch.8: measure first whether incremental counting is needed).
+/// Measures 5,000 chars using a 5,000-char dummy episode body, and 100k chars made by concatenating it.
+/// Also measures a string bridged from NSString (`textView.string`), as in the editor.
 final class CharacterCountPerformanceTests: XCTestCase {
   func testCountFullText() throws {
     guard let path = ProcessInfo.processInfo.environment["NOVEL_PERF_PROJECT"] else {
@@ -16,7 +16,7 @@ final class CharacterCountPerformanceTests: XCTestCase {
     let long = String(repeating: text, count: 20)
     report("count_5k_ms", samples { _ = CharacterCount(counting: text) })
     report("count_100k_ms", samples { _ = CharacterCount(counting: long) })
-    // NSTextView의 텍스트 저장소에서 꺼낸 문자열(UTF-16 NSString을 감싼 것). Swift 문자열로 바꾸는 시간까지 들어간다.
+    // String taken from NSTextView's text storage (wrapping a UTF-16 NSString). Includes the time to convert to a Swift string.
     let bridged = NSMutableString(string: long).copy() as! String
     report("count_100k_bridged_ms", samples { _ = CharacterCount(counting: bridged) })
   }

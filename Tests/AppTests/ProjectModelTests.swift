@@ -21,8 +21,8 @@ final class ProjectModelTests: XCTestCase {
     try? FileManager.default.removeItem(at: folder)
   }
 
-  /// 진짜 휴지통 대신 테스트 폴더 안 "휴지통"으로 옮기는 모델.
-  /// `trashDelay`: 휴지통으로 옮기는 데 걸리는 시간(옮기는 도중을 재현할 때).
+  /// A model that moves to a "trash" inside the test folder instead of the real Trash.
+  /// `trashDelay`: time taken to move to the trash (to reproduce mid-move states).
   private func makeModel(trashFails: Bool = false, trashDelay: TimeInterval = 0) throws -> ProjectModel {
     let trash = trash!
     return ProjectModel(
@@ -37,8 +37,8 @@ final class ProjectModelTests: XCTestCase {
       })
   }
 
-  /// 백업으로 되살린 목록처럼 `project.json`에 없는 회차 파일은 맨 끝에 "되찾은 회차"로 들어오고 목록에 저장된다.
-  /// 빈 파일(회차를 만들다 꺼진 자국)은 넣지 않는다.
+  /// Episode files missing from `project.json`, like a list restored from backup, come in at the end as "recovered episodes" and are saved to the list.
+  /// Empty files (traces of quitting mid-creation) aren't added.
   func testAdoptsEpisodeFilesMissingFromList() async throws {
     let model = try makeModel()
     let kept = try await model.addEpisode()
@@ -106,7 +106,7 @@ final class ProjectModelTests: XCTestCase {
     XCTAssertEqual(try String(contentsOf: trashed, encoding: .utf8), "지울 회차 본문", "휴지통에서 되살릴 수 있어야 한다")
   }
 
-  /// 휴지통으로 못 옮기면 지우기를 멈춘다. 파일도 목록도 그대로이고, 영구 삭제로 대신하지 않는다.
+  /// If it can't be moved to the trash, deletion stops. File and list stay unchanged; no permanent delete as a substitute.
   func testTrashFailureChangesNothing() async throws {
     let model = try makeModel(trashFails: true)
     let id = try await model.addEpisode()
@@ -122,7 +122,7 @@ final class ProjectModelTests: XCTestCase {
     XCTAssertEqual(try store.readEpisode(id), "지키는 본문")
   }
 
-  /// 편집 중이던 회차를 지우면, 지우기 전에 마지막 내용을 저장해 휴지통에 넣고, 지운 뒤에 파일이 되살아나지 않는다.
+  /// Deleting the episode being edited saves its latest content before trashing, and the file doesn't come back after deletion.
   func testTrashingEditedEpisodeSavesFirstAndDoesNotResurrect() async throws {
     let model = try makeModel()
     let id = try await model.addEpisode()
@@ -134,7 +134,7 @@ final class ProjectModelTests: XCTestCase {
     model.autosaver.textDidChange()
 
     try await model.trashEpisode(id)
-    try await Task.sleep(for: .milliseconds(100))  // 자동 저장 지연(20ms)이 지나도록
+    try await Task.sleep(for: .milliseconds(100))  // Let the autosave delay (20ms) pass
 
     let trashed = trash.appending(path: "\(id.rawValue).md")
     XCTAssertEqual(try String(contentsOf: trashed, encoding: .utf8), "고치던 중 마지막 문장")
@@ -142,7 +142,7 @@ final class ProjectModelTests: XCTestCase {
     XCTAssertFalse(model.autosaver.hasUnsavedChanges)
   }
 
-  /// 마지막 원고를 저장하지 못한 회차는 휴지통으로 보내지 않는다. 보내면 휴지통에는 옛 본문만 남고 마지막 원고는 사라진다.
+  /// An episode whose latest manuscript couldn't be saved isn't trashed. Otherwise only the old body would be in the trash and the latest manuscript lost.
   func testTrashRefusesEpisodeWhoseLastTextIsUnsaved() async throws {
     let model = try makeModel()
     let first = try await model.addEpisode()
@@ -150,7 +150,7 @@ final class ProjectModelTests: XCTestCase {
     let textView = ManuscriptTextView.make()
     model.autosaver.attach(textView)
     model.autosaver.begin(episode: first)
-    // 첫 회차 파일 자리에 폴더를 둬서 이 회차 저장만 실패하게 한다.
+    // Put a folder where the first episode's file goes so only this episode's save fails.
     let file = store.layout.episodeFile(first)
     try FileManager.default.removeItem(at: file)
     try FileManager.default.createDirectory(at: file, withIntermediateDirectories: false)
@@ -172,7 +172,7 @@ final class ProjectModelTests: XCTestCase {
     XCTAssertEqual(model.autosaver.pendingText(for: first), "지킬 문장")
   }
 
-  /// 드래그로 바꾼 순서를 ⌘Z로 직전 순서로 되돌리고, ⇧⌘Z로 다시 바꾼다. 저장된 목록도 따라간다.
+  /// ⌘Z restores the order changed by drag, ⇧⌘Z redoes it. The saved list follows.
   func testUndoAndRedoReorder() async throws {
     let model = try makeModel()
     let a = try await model.addEpisode()
@@ -220,7 +220,7 @@ final class ProjectModelTests: XCTestCase {
     undo.endUndoGrouping()
   }
 
-  /// 실수로 만든 새 회차를 ⌘Z로 없애고(휴지통), ⇧⌘Z로 다시 꺼낸다.
+  /// A new episode made by mistake is removed with ⌘Z (trash) and brought back with ⇧⌘Z.
   func testUndoAddEpisode() async throws {
     let model = try makeModel()
     let first = try await model.addEpisode()
@@ -242,7 +242,7 @@ final class ProjectModelTests: XCTestCase {
     XCTAssertEqual(try store.readEpisode(added), "")
   }
 
-  /// 휴지통으로 보낸 회차를 ⌘Z로 꺼내 원래 자리와 본문 그대로 되돌리고, ⇧⌘Z로 다시 휴지통에 보낸다.
+  /// A trashed episode is taken out with ⌘Z with its original position and body intact, and ⇧⌘Z trashes it again.
   func testUndoTrashRestoresFileAndPosition() async throws {
     let model = try makeModel()
     let a = try await model.addEpisode()
@@ -267,7 +267,7 @@ final class ProjectModelTests: XCTestCase {
     XCTAssertFalse(FileManager.default.fileExists(atPath: store.layout.episodeFile(b).path(percentEncoded: false)))
   }
 
-  /// ⌘Z와 ⇧⌘Z를 바로 이어 눌러도 파일과 목록이 어긋나지 않는다. 파일 옮기기 두 개가 따로 돌면 서로 끼어든다.
+  /// Pressing ⌘Z and ⇧⌘Z back to back doesn't desync files and list. Two file moves running separately would interleave.
   func testRapidUndoRedoOfTrashKeepsFileAndListInStep() async throws {
     let model = try makeModel()
     let a = try await model.addEpisode()
@@ -289,7 +289,7 @@ final class ProjectModelTests: XCTestCase {
     XCTAssertEqual(try store.readEpisode(b), "본문")
   }
 
-  /// 회차 목록(project.json) 저장이 실패하면 끝낼 일로 남아, 앱을 끌 때 다시 시도하고 그래도 안 되면 묻는다.
+  /// If saving the episode list (project.json) fails, it stays as pending work; quit retries and asks if it still fails.
   func testFailedProjectSaveIsRetriedBeforeQuit() async throws {
     let model = try makeModel()
     let id = try await model.addEpisode()
@@ -312,7 +312,7 @@ final class ProjectModelTests: XCTestCase {
     XCTAssertEqual(try store.loadProject().episodes.first?.title, "바꾼 제목")
   }
 
-  /// 앱을 끌 때 휴지통으로 옮기는 중인 회차가 있으면 끝날 때까지 기다린다. 안 기다리면 파일은 옮겨졌는데 목록에는 남는다.
+  /// If an episode is being moved to the trash at quit, wait until it finishes. Otherwise the file is moved but stays in the list.
   func testQuitWaitsForTrashInProgress() async throws {
     let model = try makeModel(trashDelay: 0.3)
     let id = try await model.addEpisode()
@@ -326,7 +326,7 @@ final class ProjectModelTests: XCTestCase {
     try await trashing.value
   }
 
-  /// ⌘Z로 시작한 파일 옮기기도 앱을 끌 때 기다린다.
+  /// File moves started by ⌘Z are awaited at quit too.
   func testQuitWaitsForUndoFileMove() async throws {
     let model = try makeModel(trashDelay: 0.3)
     let undo = UndoManager()
@@ -342,7 +342,7 @@ final class ProjectModelTests: XCTestCase {
     XCTAssertTrue(FileManager.default.fileExists(atPath: trash.appending(path: "\(added.rawValue).md").path(percentEncoded: false)))
   }
 
-  /// 창을 닫을 때도 회차 목록 저장이 끝내 실패한 채면 종료 때처럼 다시 시도할지 묻는다(전에는 묻지 않고 닫혔다).
+  /// Closing the window with the episode list save still failing also asks whether to retry, as at quit.
   func testClosingWindowAsksToRetryFailedProjectSave() async throws {
     let model = try makeModel()
     let id = try await model.addEpisode()
@@ -356,7 +356,7 @@ final class ProjectModelTests: XCTestCase {
     var asked = 0
     await WorkspaceView.finishClosing(model) {
       asked += 1
-      // 첫 물음에서 사용자가 문제를 고치고 다시 시도를 고른다.
+      // At the first prompt the user fixes the problem and chooses retry.
       try? FileManager.default.removeItem(at: projectFile)
       try? saved.write(to: projectFile)
       return asked == 1
@@ -367,8 +367,8 @@ final class ProjectModelTests: XCTestCase {
     XCTAssertEqual(try store.loadProject().episodes.first?.title, "바꾼 제목")
   }
 
-  /// 휴지통에서 ⌘Z로 꺼낸 회차를 다시 고치면 그 내용이 디스크에 저장된다.
-  /// (지울 때 회차의 변경 번호를 0으로 되돌리면, 저장 줄이 기억하는 옛 번호보다 작아 새 저장을 "옛 저장"으로 보고 건너뛰었다.)
+  /// Editing an episode restored from the trash with ⌘Z saves that content to disk.
+  /// (If deletion reset the episode's change number to 0, it would be below the old number the save queue remembers, and new saves would be skipped as "old".)
   func testEditsAfterRestoringFromTrashAreSaved() async throws {
     let model = try makeModel()
     let id = try await model.addEpisode()
@@ -390,7 +390,7 @@ final class ProjectModelTests: XCTestCase {
     await model.finishFileUndos()
     XCTAssertEqual(model.episodes.map(\.id), [id])
 
-    // 회차 전환처럼 디스크에서 다시 읽어 연 뒤 한 글자 고친다.
+    // Reopen by reading from disk like an episode switch, then edit one character.
     let version = try store.readEpisodeVersion(id)
     textView.replaceAllText(with: version.text)
     model.autosaver.begin(episode: id, version: version)
@@ -402,8 +402,8 @@ final class ProjectModelTests: XCTestCase {
     XCTAssertFalse(model.autosaver.hasUnsavedChanges)
   }
 
-  /// "새 회차에도 쓰기": 작품 기본 목표가 project.json에 저장되고 그 뒤 만드는 회차가 그 목표로 시작한다.
-  /// 회차 목표와 함께 바꾸면 ⌘Z 한 번에 둘 다 되돌아간다.
+  /// "새 회차에도 쓰기": the project default goal is saved to project.json and episodes created afterwards start with that goal.
+  /// Changed together with the episode goal, one ⌘Z reverts both.
   func testDefaultEpisodeGoalAppliesToNewEpisodesAndUndoesWithGoal() async throws {
     let model = try makeModel()
     let first = try await model.addEpisode()
@@ -436,7 +436,7 @@ final class ProjectModelTests: XCTestCase {
     XCTAssertEqual(model.project.settings.defaultEpisodeGoal, 5_000)
   }
 
-  /// 설정 창 "모든 회차에 적용": 모든 회차 목표가 바뀌어 저장되고 ⌘Z 한 번에 되돌아간다.
+  /// Settings "apply to all episodes": all episode goals change and save, and one ⌘Z reverts them.
   func testSetGoalForAllEpisodesSavesAndUndoes() async throws {
     let model = try makeModel()
     let a = try await model.addEpisode()
@@ -455,7 +455,7 @@ final class ProjectModelTests: XCTestCase {
     XCTAssertEqual(model.episode(b)?.goal, 4_000)
   }
 
-  /// 설정 창은 맨 마지막으로 앞에 있던 작품을 본다. 다른 작품 창이 닫혀도 지금 작품은 남는다.
+  /// Settings looks at the most recently front project. The current project remains even when another project window closes.
   func testActiveWorkspaceKeepsLastActivatedModel() throws {
     let first = try makeModel()
     let second = try makeModel()

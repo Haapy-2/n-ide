@@ -5,7 +5,7 @@ struct NovelEditorApp: App {
   @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
   var body: some Scene {
-    // 앱을 열면 작품 선택 창이 먼저 뜬다. Finder에서 .novel을 두 번 클릭한 경우도 이 창이 받아서 작품을 연다.
+    // Launching the app shows the project picker first. Double-clicking a .novel in Finder is also received by this window, which opens the project.
     Window("작품 선택", id: AppScene.picker) {
       ProjectPickerView()
     }
@@ -19,20 +19,20 @@ struct NovelEditorApp: App {
       ViewCommands()
     }
 
-    // 작품마다 작업 공간 창 하나. 창의 값은 작품 폴더 URL이다.
+    // One workspace window per project. The window's value is the project folder URL.
     WindowGroup(for: URL.self) { $url in
       if let url {
         WorkspaceWindow(url: url)
       }
     }
     .defaultSize(width: 1100, height: 760)
-    // 바깥에서 들어온 파일 열기 요청으로 빈 작업 공간 창이 생기지 않게 한다.
+    // Prevents empty workspace windows from external file-open requests.
     .handlesExternalEvents(matching: [])
 
     Settings {
       SettingsView()
     }
-    // 창 크기는 고정(SettingsView.windowSize). 크기 조절 테두리도 없다.
+    // Fixed window size (SettingsView.windowSize). No resize border either.
     .windowResizability(.contentSize)
   }
 }

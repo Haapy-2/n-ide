@@ -1,48 +1,48 @@
 import NovelCore
 import SwiftUI
 
-/// 사이드바의 회차 목록. 한 줄: `번호  제목  글자 수`. 글자 수는 목표 기준(설정)과 같은 값이고, 설정에서 숨길 수 있다.
+/// Sidebar episode list. One row: `number  title  count`. The count uses the goal basis (setting) and can be hidden in Settings.
 ///
-/// 선택 표시는 시스템 것을 쓰지 않고 은은한 회색 배경 하나만 직접 그린다.
-/// 시스템 선택은 누르는 순간 파란 강조색으로 칠했다가 편집기로 초점이 넘어가면 회색으로 바뀌어
-/// 번쩍이는 것처럼 보이고, 이를 끌 방법이 없다.
+/// The system selection isn't used; a single subtle gray background is drawn by hand.
+/// The system selection paints accent blue on click, then turns gray when focus moves to the editor,
+/// which looks like a flash, and there's no way to turn that off.
 struct EpisodeList: View {
   let episodes: [EpisodeMeta]
-  /// 회차 묶음 이름(PLAN 8장 B안). 어느 회차가 어느 묶음인지는 회차의 `group`.
+  /// Episode group names (PLAN ch.8 option B). Which episode belongs to which group is the episode's `group`.
   var groups: [EpisodeGroup] = []
   @Binding var selection: EpisodeID?
-  /// 여러 개 고른 회차(⌘클릭·⇧클릭). 묶기에 쓴다. 편집기는 `selection` 하나만 연다.
+  /// Multiple selected episodes (⌘-click, ⇧-click). Used for grouping. The editor opens only `selection`.
   @Binding var marked: Set<EpisodeID>
-  /// 줄 안쪽 왼쪽 여백. "회차" 제목·번호·제목이 모두 이 값을 써서 창 닫기 버튼과 같은 선에서 시작한다.
-  /// 실행 중에 재며(nil이면 아직 안 잼), 작업 공간이 들고 있다: 목록이 검색 패널과 바뀔 때마다 새로 재면
-  /// 잰 값이 올 때까지 한 번 기본값으로 그려져 글자가 옆으로 튄다.
+  /// Row inner left padding. The "회차" header, numbers and titles all use it to start on the close button's line.
+  /// Measured at runtime (nil = not yet) and held by the workspace: re-measuring every time the list swaps with the search panel
+  /// would draw once with the default until the value arrives, making text jump sideways.
   @Binding var measuredInset: CGFloat?
-  /// nil이면(미리보기) 메뉴와 드래그가 없다.
+  /// nil (preview) = no menus or dragging.
   var onRename: ((EpisodeID) -> Void)? = nil
-  /// 여러 개 고른 회차 위의 우클릭 `N개 회차 이름 변경…`
+  /// Right-click `N개 회차 이름 변경…` on multiple selected episodes
   var onBatchRename: ((Set<EpisodeID>) -> Void)? = nil
   var onTrash: ((EpisodeID) -> Void)? = nil
   var onSetGoal: ((EpisodeID) -> Void)? = nil
   var onAddAfter: ((EpisodeID) -> Void)? = nil
-  /// 드래그로 옮기기: 보이는 줄 번호(묶음 제목 줄 포함, `EpisodeGrouping.drop`)
+  /// Drag to move: visible row indices (including group header rows, `EpisodeGrouping.drop`)
   var onMove: ((IndexSet, Int) -> Void)? = nil
-  /// 묶기(이름을 묻는 창을 띄운다), 묶음 풀기, 묶음 이름 변경, 이미 있는 묶음에 넣기
+  /// Group (shows a name prompt), ungroup, rename group, add to an existing group
   var onGroup: ((Set<EpisodeID>) -> Void)? = nil
   var onUngroup: ((GroupID) -> Void)? = nil
   var onRenameGroup: ((GroupID) -> Void)? = nil
   var onAddToGroup: ((Set<EpisodeID>, GroupID) -> Void)? = nil
-  /// 사이드바에 초점이 있을 때 ⌘Z(false)·⇧⌘Z(true). 바로 되돌리지 않고 확인 창을 거친다.
+  /// ⌘Z (false) / ⇧⌘Z (true) while the sidebar has focus. Goes through a confirmation instead of undoing directly.
   var onUndoCommand: ((_ isRedo: Bool) -> Void)? = nil
-  /// 회차의 글자 수 칸. nil이면(미리보기) 회차 정보에 든 값을 보여준다.
+  /// The episode's count box. nil (preview) shows the value in the episode info.
   var countBox: ((EpisodeID) -> EpisodeCountBox)? = nil
-  /// 회차를 클릭하면 사이드바가 키보드 초점을 받는다. 초점이 있을 때: ↑↓ 이동, ↩ 이름 변경, ⌘⌫ 휴지통.
+  /// Clicking an episode gives the sidebar keyboard focus. With focus: ↑↓ move, ↩ rename, ⌘⌫ trash.
   @FocusState private var isFocused: Bool
   @AppStorage(AppSettingKey.characterCountGoalBasis) private var basis: CharacterCountBasis = .withSpaces
   @AppStorage(AppSettingKey.sidebarShowsCharacterCount) private var showsCount = true
   @AppStorage(AppSettingKey.collapsedEpisodeGroups) private var collapsedText = ""
 
   private var contentInset: CGFloat { measuredInset ?? TrafficLightOffsetReader.contentInset(for: nil) }
-  /// 줄 좌우 여백 0: 회색 선택 칸이 줄 끝까지 차서, 글자를 버튼 선에 맞춰도 칸이 잘리지 않는다.
+  /// Row horizontal insets 0: the gray selection rect fills to the row end, so aligning text to the button line doesn't clip the rect.
   private static let rowInsets = EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0)
   var body: some View {
     ScrollViewReader { proxy in
@@ -53,7 +53,7 @@ struct EpisodeList: View {
 
   private var list: some View {
     List {
-      // 시스템 구역 제목은 줄과 왼쪽 시작점이 달라 번호와 맞출 수 없어서, 같은 여백을 쓰는 제목 줄을 직접 둔다.
+      // The system section header starts at a different left edge than rows and can't align with numbers, so a header row with the same padding is used.
       Text("회차")
         .font(.system(size: 11, weight: .semibold))
         .foregroundStyle(Color.inkMuted)
@@ -61,7 +61,7 @@ struct EpisodeList: View {
         .padding(.top, 4)
         .padding(.bottom, 2)
         .frame(maxWidth: .infinity, alignment: .leading)
-        // 줄 왼쪽 끝에서 잰다. 여백이 바뀌어도 줄 끝은 그대로라 값이 흔들리지 않는다.
+        // Measured from the row's left edge. The edge stays put when padding changes, so the value doesn't wobble.
         .background(TrafficLightOffsetReader { measuredInset = TrafficLightOffsetReader.contentInset(for: $0) })
         .listRowInsets(Self.rowInsets)
         .listRowBackground(Color.clear)
@@ -70,22 +70,22 @@ struct EpisodeList: View {
         ForEach(rows) { row in
           switch row {
           case .group(let group, let count, let collapsed):
-            // moveDisabled를 붙이면 macOS 목록이 이 줄 바로 위에 놓을 자리를 만들지 않아 묶음 맨 앞 회차를
-            // 묶음 밖으로 뺄 수 없다. 제목 줄을 끌어도 EpisodeGrouping.drop이 회차가 아니라서 무시한다.
+            // With moveDisabled, the macOS list makes no drop slot right above this row, so the first episode of a group
+            // couldn't be dragged out of it. Dragging the header row itself is ignored by EpisodeGrouping.drop since it isn't an episode.
             groupHeader(group, count: count, collapsed: collapsed)
           case .episode(let episode, let number, _, let inGroup):
             episodeRow(episode, number: number, inGroup: inGroup)
           }
         }
-        // 드래그로 순서 바꾸기(보이는 줄 번호 그대로 넘긴다). 번호는 순서로 매기므로 함께 바뀐다(파일 이름은 그대로).
+        // Reorder by drag (visible row indices passed as is). Numbers follow order, so they change too (file names don't).
         .onMove(perform: onMove)
       }
     }
-    // 시스템 기본 최소 줄 높이를 없애 줄 사이에 클릭 안 되는 틈이 생기지 않게 한다.
+    // Remove the system default minimum row height so no unclickable gaps appear between rows.
     .environment(\.defaultMinListRowHeight, 0)
     .focusable()
     .focused($isFocused)
-    // 초점 표시(파란 테두리)는 그리지 않는다. 선택한 회차의 회색 칸으로 충분하다.
+    // No focus ring (blue outline). The selected episode's gray rect is enough.
     .focusEffectDisabled()
     .onKeyPress(.upArrow) { move(by: -1) }
     .onKeyPress(.downArrow) { move(by: 1) }
@@ -94,10 +94,10 @@ struct EpisodeList: View {
       onRename(selection)
       return .handled
     }
-    // ⌘⌫ 같은 ⌘ 조합은 메뉴가 먼저 가져가서 여기까지 오지 않는다. 그래서 회차 메뉴가 이 값을 보고
-    // 사이드바에 초점이 있을 때만 "휴지통으로 이동"의 단축키를 ⌘⌫로 바꿔 처리한다(EpisodeCommands).
+    // ⌘ combos like ⌘⌫ are taken by the menu first and never get here. So the episode menu reads this value
+    // and remaps "Move to Trash" to ⌘⌫ only while the sidebar has focus (EpisodeCommands).
     .focusedValue(\.episodeSidebarFocused, isFocused)
-    // 편집 메뉴의 실행 취소·다시 실행이 창까지 올라가기 전에 여기서 받는다(확인 창을 띄우려고).
+    // Catch Edit menu undo/redo here before they climb to the window (to show a confirmation).
     .onCommand(Selector(("undo:"))) { onUndoCommand?(false) }
     .onCommand(Selector(("redo:"))) { onUndoCommand?(true) }
   }
@@ -105,7 +105,7 @@ struct EpisodeList: View {
   private var grouping: EpisodeGrouping.List { .init(episodes: episodes, groups: groups) }
   private var collapsed: Set<GroupID> { Self.collapsedGroups(collapsedText) }
 
-  /// 접힌 묶음(설정 `collapsedEpisodeGroups`, 쉼표로 이은 묶음 ID)
+  /// Collapsed groups (setting `collapsedEpisodeGroups`, group IDs joined by commas)
   static func collapsedGroups(_ text: String) -> Set<GroupID> {
     Set(text.split(separator: ",").map { GroupID(rawValue: String($0)) })
   }
@@ -117,7 +117,7 @@ struct EpisodeList: View {
     collapsedText = set.map(\.rawValue).sorted().joined(separator: ",")
   }
 
-  /// 묶음 제목 줄: ▸/▾ + 이름 + 회차 수. 누르면 접고 편다. 두 번 누르면 이름 변경.
+  /// Group header row: ▸/▾ + name + episode count. Click to collapse/expand. Double-click to rename.
   private func groupHeader(_ group: EpisodeGroup, count: Int, collapsed: Bool) -> some View {
     HStack(spacing: 6) {
       Image(systemName: "chevron.right")
@@ -162,9 +162,9 @@ struct EpisodeList: View {
       basis: showsCount ? basis : nil,
       isSelected: episode.id == selection || marked.contains(episode.id), inset: contentInset,
       indent: inGroup ? Self.groupIndent : 0)
-      // 두 번 클릭하면 이름 변경. 한 번 클릭 선택은 두 번 클릭 판정을 기다리지 않고 바로 한다.
+      // Double-click renames. Single-click selection happens immediately without waiting for double-click detection.
       .onTapGesture(count: 2) { onRename?(episode.id) }
-      // ⌘클릭: 고른 것에 넣고 빼기. ⇧클릭: 지금 회차부터 여기까지. 그냥 클릭: 이 회차만.
+      // ⌘-click: toggle in the selection. ⇧-click: from the current episode to here. Plain click: just this episode.
       .simultaneousGesture(
         TapGesture().modifiers(.command).onEnded { toggleMarked(episode.id) }
           .exclusively(before: TapGesture().modifiers(.shift).onEnded { markRange(to: episode.id) })
@@ -179,7 +179,7 @@ struct EpisodeList: View {
       .accessibilityAddTraits(episode.id == selection ? [.isButton, .isSelected] : .isButton)
   }
 
-  /// 우클릭 메뉴. 여러 개 고른 회차 위에서 열면 묶기·묶음에 넣기는 고른 회차 모두에 한다.
+  /// Context menu. Opened on multiple selected episodes, group / add to group apply to all of them.
   @ViewBuilder
   private func episodeMenu(_ episode: EpisodeMeta) -> some View {
     if let onAddAfter, let onRename, let onTrash, let onSetGoal {
@@ -205,7 +205,7 @@ struct EpisodeList: View {
         Button("묶음 풀기") { onUngroup(group) }
       }
       Divider()
-      // 휴지통은 한 회차씩이라(되돌리기도 한 회차 단위) 여러 개 고른 위에서는 이 줄만이라고 밝힌다.
+      // Trash works one episode at a time (undo too), so on a multi-selection it says it applies to this row only.
       Button(targets.count > 1 ? "이 회차만 휴지통으로 이동…" : "휴지통으로 이동…") { onTrash(episode.id) }
     }
   }
@@ -220,15 +220,15 @@ struct EpisodeList: View {
     isFocused = true
   }
 
-  /// 지금 회차(편집기에 열린 것)부터 누른 회차까지 보이는 회차를 모두 고른다(접힌 묶음 안은 빼고).
+  /// Select all visible episodes from the current one (open in the editor) to the clicked one (excluding those inside collapsed groups).
   private func markRange(to id: EpisodeID) {
     guard let anchor = selection, episodes.contains(where: { $0.id == anchor }) else { return toggleMarked(id) }
     marked = Set(EpisodeGrouping.visibleRange(from: anchor, to: id, in: grouping, collapsed: collapsed))
     isFocused = true
   }
 
-  /// 고른 회차 줄이 보이게 스크롤한다(작품을 열 때, 메뉴·단축키·검색 결과로 옮길 때). 접힌 묶음 안이면 묶음을 편다.
-  /// 펼친 줄은 다음 화면 갱신에 생겨서 스크롤은 한 차례 뒤에 한다.
+  /// Scroll so the selected row is visible (on project open, and when moving via menu, shortcut or search result). Expands a collapsed group if needed.
+  /// Expanded rows appear on the next refresh, so scrolling happens one turn later.
   private func show(_ id: EpisodeID?, with proxy: ScrollViewProxy) {
     guard let id, let episode = episodes.first(where: { $0.id == id }) else { return }
     if let group = episode.group, collapsed.contains(group) { toggleCollapsed(group) }
@@ -247,19 +247,19 @@ struct EpisodeList: View {
   }
 }
 
-/// 회차 한 줄의 보이는 부분: 글자 + 회색 선택 칸 + 클릭 영역.
-/// 글자 수는 회차마다 따로 있는 칸(`EpisodeCountBox`)에서 읽는다. 타이핑 중에는 0.2초마다 지금 회차의 글자 수 하나만
-/// 바뀌는데, 이 줄만 다시 그려지고 나머지 줄과 작업 공간은 그대로다.
+/// Visible part of one episode row: text + gray selection rect + hit area.
+/// Counts are read from a per-episode box (`EpisodeCountBox`). While typing only the current episode's count changes every 0.2 s,
+/// so only this row redraws; other rows and the workspace stay put.
 private struct EpisodeRowCell: View {
   let number: Int
   let title: String
   let box: EpisodeCountBox?
   let fallbackCount: CharacterCount?
-  /// nil이면 글자 수를 숨긴다(설정).
+  /// nil hides the count (setting).
   let basis: CharacterCountBasis?
   let isSelected: Bool
   let inset: CGFloat
-  /// 묶음 안 회차는 조금 들여 쓴다(번호 칸 앞).
+  /// Episodes in a group are slightly indented (before the number column).
   var indent: CGFloat = 0
 
   private var count: Int? {
@@ -268,16 +268,16 @@ private struct EpisodeRowCell: View {
   }
 
   var body: some View {
-    // 클릭 영역 = 회색 선택 칸 전체. 줄 여백을 0으로 하고 여백을 칸 안쪽에 직접 넣어
-    // 글자뿐 아니라 칸의 빈 곳을 눌러도 선택되게 한다.
+    // Hit area = the whole gray selection rect. Row insets are 0 and padding goes inside the rect,
+    // so clicking the rect's blank area selects, not just the text.
     EpisodeRow(number: number, title: title, count: count)
       .padding(.leading, indent)
       .padding(.horizontal, inset)
       .padding(.vertical, 6)
       .frame(maxWidth: .infinity, alignment: .leading)
       .rowHighlight(isSelected: isSelected)
-      // 회색 칸 사이의 1pt 틈도 클릭 영역에 넣는다. 틈을 줄 여백(listRowInsets)으로 두면
-      // 그곳을 누를 때 아무 반응이 없어 목록이 버벅이는 것처럼 느껴진다.
+      // The 1 pt gap between gray rects is included in the hit area too. As row insets (listRowInsets) the gap
+      // wouldn't respond to clicks, making the list feel laggy.
       .padding(.vertical, 1)
       .contentShape(Rectangle())
   }
@@ -286,7 +286,7 @@ private struct EpisodeRowCell: View {
 private struct EpisodeRow: View {
   let number: Int
   let title: String
-  /// 아직 센 적 없는 회차는 nil(비워 둔다).
+  /// nil (left blank) for episodes never counted.
   let count: Int?
 
   var body: some View {
@@ -294,7 +294,7 @@ private struct EpisodeRow: View {
       Text("\(number)")
         .font(.system(size: 11).monospacedDigit())
         .foregroundStyle(Color.inkMuted)
-        // 왼쪽 정렬: 1이든 100이든 "회차" 제목 아래 같은 선에서 시작하고, 제목도 모두 같은 선에서 시작한다.
+        // Left-aligned: whether 1 or 100, it starts on the same line under the "회차" header, and titles all start on one line too.
         .frame(minWidth: 26, alignment: .leading)
       Text(title.isEmpty ? "제목 없음" : title)
         .font(.system(size: 13))

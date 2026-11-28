@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import NovelCore
 
-/// 외부 변경 확인과 충돌 스냅샷. 잘못 판단하면 다른 편집기에서 고친 원고를 앱이 덮어쓰므로 꼼꼼히 본다.
+/// External-change checks and conflict snapshots. A wrong decision would overwrite a manuscript edited in another editor, so check thoroughly.
 struct ExternalChangeTests {
   private func makeStore(_ folder: TestFolder) throws -> (ProjectStore, EpisodeID) {
     let store = try ProjectStore.create(at: folder.url.appending(path: "작품.novel"), title: "x")
@@ -11,7 +11,7 @@ struct ExternalChangeTests {
     return (store, id)
   }
 
-  /// 다른 편집기가 저장한 것처럼 쓴다. 시각이 같은 값으로 찍히지 않게 1초 뒤로 맞춘다.
+  /// Write as another editor would save. Shift the time by 1 s so it isn't stamped with the same value.
   private func externalWrite(_ text: String, store: ProjectStore, id: EpisodeID, secondsLater: TimeInterval = 1) throws {
     let url = store.layout.episodeFile(id)
     let before = FileStamp(of: url)?.modified ?? Date()
@@ -44,7 +44,7 @@ struct ExternalChangeTests {
     #expect(disk.text == "다른 편집기에서 고침")
   }
 
-  /// 크기가 같은 변경도 놓치지 않는다(시각이 다르면 내용을 비교한다).
+  /// Changes of equal size aren't missed (different times trigger a content comparison).
   @Test func sameSizeEditIsDetected() throws {
     let folder = try TestFolder()
     defer { folder.remove() }
@@ -60,7 +60,7 @@ struct ExternalChangeTests {
     }
   }
 
-  /// 내용은 같고 시각만 바뀐 경우(다른 앱이 그대로 다시 저장)는 바뀐 것이 아니다. 새 시각을 기억한다.
+  /// Same content with only the time changed (another app re-saved as is) is not a change. The new time is remembered.
   @Test func touchWithoutContentChangeIsUnchanged() throws {
     let folder = try TestFolder()
     defer { folder.remove() }
@@ -89,7 +89,7 @@ struct ExternalChangeTests {
     #expect(try store.checkEpisode(id, against: known) == .missing)
   }
 
-  // MARK: - 저장 직전 확인
+  // MARK: - Pre-save check
 
   @Test func writeSucceedsWhenUnchanged() throws {
     let folder = try TestFolder()
@@ -104,7 +104,7 @@ struct ExternalChangeTests {
       return
     }
     #expect(try store.readEpisode(id) == "앱에서 고침")
-    // 방금 쓴 상태를 기준으로 다시 확인하면 바뀌지 않은 것이다(앱 자신의 저장을 외부 변경으로 보지 않는다).
+    // Rechecking against the just-written state reports no change (the app's own save isn't seen as an external change).
     #expect(try store.checkEpisode(id, against: version) == .unchanged(version))
   }
 
@@ -125,7 +125,7 @@ struct ExternalChangeTests {
     #expect(try store.readEpisode(id) == "다른 편집기에서 고침", "디스크의 외부 변경이 그대로 남아야 한다")
   }
 
-  /// 사용자가 "앱 내용 유지"를 고르면 디스크의 지금 상태를 기준으로 다시 써서 덮어쓴다.
+  /// When the user chooses "keep app content", rewrite against the current disk state and overwrite.
   @Test func writeAfterChoosingAppVersionOverwrites() throws {
     let folder = try TestFolder()
     defer { folder.remove() }
@@ -158,7 +158,7 @@ struct ExternalChangeTests {
     #expect(try store.readEpisode(id) == "되살림")
   }
 
-  // MARK: - 충돌 스냅샷
+  // MARK: - Conflict snapshots
 
   @Test func conflictSnapshotKeepsAppText() throws {
     let folder = try TestFolder()

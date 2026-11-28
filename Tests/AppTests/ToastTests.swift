@@ -1,7 +1,7 @@
 import XCTest
 @testable import NovelEditor
 
-/// 실제 알림 시간(기본 2초)을 기다리지 않으려고 짧은 시간으로 만든다. 기기가 바빠도 흔들리지 않게 여유를 넉넉히 둔다.
+/// A short duration so the test doesn't wait the real toast time (default 2 s). Generous margins so it doesn't flake when the machine is busy.
 @MainActor
 final class ToastTests: XCTestCase {
   private let short = Duration.milliseconds(300)
@@ -16,7 +16,7 @@ final class ToastTests: XCTestCase {
     XCTAssertNil(center.current)
   }
 
-  /// 설정 "알림 유지 시간": 없으면 2초, 범위 밖은 0.5~5초로, 단위는 0.5초로 맞춘다.
+  /// Setting "toast duration": 2 s if absent, out-of-range clamped to 0.5–5 s, snapped to 0.5 s steps.
   func testStoredDuration() throws {
     let defaults = try XCTUnwrap(UserDefaults(suiteName: "ToastTests-\(UUID().uuidString)"))
     XCTAssertEqual(ToastCenter.storedDuration(defaults), .seconds(2))

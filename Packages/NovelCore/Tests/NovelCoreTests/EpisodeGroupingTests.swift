@@ -3,7 +3,7 @@ import Testing
 @testable import NovelCore
 
 struct EpisodeGroupingTests {
-  /// 1화~n화. 제목이 곧 원래 번호라 순서를 읽기 쉽다.
+  /// Episodes 1–n. Titles equal the original numbers, so order is easy to read.
   private func list(_ count: Int, groups: [EpisodeGroup] = []) -> EpisodeGrouping.List {
     EpisodeGrouping.List(episodes: (1...count).map { EpisodeMeta(title: "\($0)", goal: 5_000) }, groups: groups)
   }
@@ -27,7 +27,7 @@ struct EpisodeGroupingTests {
     #expect(result.groups == [part])
   }
 
-  /// 한 묶음 가운데 회차를 빼서 새로 묶어도 원래 묶음은 이어진 채로 남는다.
+  /// Pulling an episode out of the middle of a group into a new group leaves the original group contiguous.
   @Test func groupingFromInsideAnotherGroupKeepsBothContiguous() {
     var start = list(6)
     let first = EpisodeGroup(title: "1부")
@@ -64,7 +64,7 @@ struct EpisodeGroupingTests {
     #expect(members(result, part.id) == ["1", "2", "5"])
   }
 
-  /// 앱 밖에서 고쳐 흩어진 묶음, 없는 묶음 표시, 빈 묶음을 바로잡는다. 회차는 하나도 잃지 않는다.
+  /// Fixes groups scattered by outside edits, dangling group marks and empty groups. No episode is lost.
   @Test func normalizeRepairsScatteredAndDanglingGroups() {
     let part = EpisodeGroup(title: "1부")
     let empty = EpisodeGroup(title: "빈 묶음")
@@ -81,13 +81,13 @@ struct EpisodeGroupingTests {
     #expect(Set(result.episodes.map(\.id)) == Set(start.episodes.map(\.id)))
   }
 
-  // MARK: - 드래그로 놓기 (줄 번호는 보이는 줄: 묶음 제목 줄 포함)
+  // MARK: - Drag and drop (row indices are visible rows, including group header rows)
 
   @Test func droppingInsideAGroupJoinsIt() {
     let part = EpisodeGroup(title: "1부")
     let start = list(5)
     let grouped = EpisodeGrouping.group(ids(start, "1", "2", "3"), as: part, in: start)
-    // 5화를 1화와 2화 사이로 끌어 놓음(줄: 0 1부, 1 「1」, 2 「2」, 3 「3」, 4 「4」, 5 「5」)
+    // Drag episode 5 between 1 and 2 (rows: 0 1부, 1 「1」, 2 「2」, 3 「3」, 4 「4」, 5 「5」)
     let result = EpisodeGrouping.drop([5], before: 2, in: grouped, collapsed: [])
 
     #expect(members(result, part.id) == ["1", "5", "2", "3"])
@@ -97,7 +97,7 @@ struct EpisodeGroupingTests {
     let part = EpisodeGroup(title: "1부")
     let start = list(4)
     let grouped = EpisodeGrouping.group(ids(start, "1", "2"), as: part, in: start)
-    // 1화를 묶음 끝(2화 뒤)으로
+    // Episode 1 to the end of the group (after 2)
     let result = EpisodeGrouping.drop([1], before: 3, in: grouped, collapsed: [])
 
     #expect(members(result, part.id) == ["2", "1"])
@@ -107,7 +107,7 @@ struct EpisodeGroupingTests {
     let part = EpisodeGroup(title: "1부")
     let start = list(5)
     let grouped = EpisodeGrouping.group(ids(start, "1", "2", "3"), as: part, in: start)
-    // 2화를 맨 끝으로
+    // Episode 2 to the very end
     let result = EpisodeGrouping.drop([2], before: 6, in: grouped, collapsed: [])
 
     #expect(members(result, part.id) == ["1", "3"])
@@ -118,7 +118,7 @@ struct EpisodeGroupingTests {
     let part = EpisodeGroup(title: "1부")
     let start5 = list(5)
     let grouped = EpisodeGrouping.group(ids(start5, "1", "2", "3"), as: part, in: start5)
-    // 줄: 0 1부, 1 「1」, 2 「2」, 3 「3」, 4 「4」, 5 「5」. 1화를 묶음 제목 위로
+    // Rows: 0 1부, 1 「1」, 2 「2」, 3 「3」, 4 「4」, 5 「5」. Episode 1 above the group header
     let result = EpisodeGrouping.drop([1], before: 0, in: grouped, collapsed: [])
 
     #expect(titles(result) == ["1", "2", "3", "4", "5"])
@@ -130,7 +130,7 @@ struct EpisodeGroupingTests {
     let part = EpisodeGroup(title: "1부")
     let start5 = list(5)
     let grouped = EpisodeGrouping.group(ids(start5, "1", "2", "3"), as: part, in: start5)
-    // 4화를 묶음 제목과 1화 사이로
+    // Episode 4 between the group header and episode 1
     let result = EpisodeGrouping.drop([4], before: 1, in: grouped, collapsed: [])
 
     #expect(members(result, part.id) == ["4", "1", "2", "3"])
@@ -142,7 +142,7 @@ struct EpisodeGroupingTests {
     let start6 = list(6)
     var grouped = EpisodeGrouping.group(ids(start6, "1", "2", "3"), as: first, in: start6)
     grouped = EpisodeGrouping.group(ids(grouped, "4", "5"), as: second, in: grouped)
-    // 줄: 0 1부, 1~3 「1」~「3」, 4 2부, 5 「4」, 6 「5」, 7 「6」. 4화를 2부 제목 위(1부 끝 바로 뒤)로
+    // Rows: 0 1부, 1–3 「1」–「3」, 4 2부, 5 「4」, 6 「5」, 7 「6」. Episode 4 above the 2부 header (right after the end of 1부)
     let result = EpisodeGrouping.drop([5], before: 4, in: grouped, collapsed: [])
 
     #expect(titles(result) == ["1", "2", "3", "4", "5", "6"])
@@ -155,7 +155,7 @@ struct EpisodeGroupingTests {
     let part = EpisodeGroup(title: "1부")
     let start4 = list(4)
     let grouped = EpisodeGrouping.group(ids(start4, "1", "2"), as: part, in: start4)
-    // 줄: 0 1부, 1 「1」, 2 「2」, 3 「3」, 4 「4」
+    // Rows: 0 1부, 1 「1」, 2 「2」, 3 「3」, 4 「4」
     let own = EpisodeGrouping.drop([1], before: 3, in: grouped, collapsed: [])
     #expect(members(own, part.id) == ["2", "1"])
 
@@ -168,7 +168,7 @@ struct EpisodeGroupingTests {
     let part = EpisodeGroup(title: "1부")
     let start5 = list(5)
     let grouped = EpisodeGrouping.group(ids(start5, "2", "3"), as: part, in: start5)
-    // 줄: 0 「1」, 1 1부(접힘), 2 「4」, 3 「5」
+    // Rows: 0 「1」, 1 1부 (collapsed), 2 「4」, 3 「5」
     let below = EpisodeGrouping.drop([3], before: 2, in: grouped, collapsed: [part.id])
     #expect(titles(below) == ["1", "2", "3", "5", "4"])
     #expect(members(below, part.id) == ["2", "3"])
@@ -178,7 +178,7 @@ struct EpisodeGroupingTests {
     #expect(members(above, part.id) == ["2", "3"])
   }
 
-  // MARK: - 보이는 줄로 움직이기
+  // MARK: - Moving by visible rows
 
   @Test func neighborSkipsCollapsedMembers() {
     let part = EpisodeGroup(title: "1부")
@@ -189,7 +189,7 @@ struct EpisodeGroupingTests {
     #expect(EpisodeGrouping.visibleNeighbor(of: id("2"), step: 1, in: grouped, collapsed: [part.id]) == id("5"))
     #expect(EpisodeGrouping.visibleNeighbor(of: id("5"), step: -1, in: grouped, collapsed: [part.id]) == id("2"))
     #expect(EpisodeGrouping.visibleNeighbor(of: id("6"), step: 1, in: grouped, collapsed: [part.id]) == nil)
-    // 고른 회차가 접힌 묶음 안이면(묶음을 접은 뒤) 가장 가까운 보이는 회차로
+    // If the selected episode is inside a collapsed group (collapsed after selecting), go to the nearest visible episode
     #expect(EpisodeGrouping.visibleNeighbor(of: id("3"), step: 1, in: grouped, collapsed: [part.id]) == id("5"))
     #expect(EpisodeGrouping.visibleNeighbor(of: id("4"), step: -1, in: grouped, collapsed: [part.id]) == id("2"))
     #expect(EpisodeGrouping.visibleNeighbor(of: id("2"), step: 1, in: grouped, collapsed: []) == id("3"))
@@ -205,7 +205,7 @@ struct EpisodeGroupingTests {
     #expect(range.map { id in grouped.episodes.first { $0.id == id }!.title } == ["1", "2", "5", "6"])
   }
 
-  // MARK: - 사이드바 줄
+  // MARK: - Sidebar rows
 
   @Test func rowsShowHeadersAndHideCollapsedMembersButKeepNumbers() {
     let part = EpisodeGroup(title: "1부")
@@ -218,7 +218,7 @@ struct EpisodeGroupingTests {
     #expect(open.count == 5)
     #expect(open[1] == .group(part, count: 2, collapsed: false))
     #expect(closed.count == 3)
-    // 접어도 4화의 번호는 4다(작품 전체 번호).
+    // Even collapsed, episode 4's number is 4 (project-wide number).
     guard case .episode(let episode, let number, _, let inGroup) = closed[2] else {
       Issue.record("4화 줄이 아님")
       return
@@ -226,7 +226,7 @@ struct EpisodeGroupingTests {
     #expect(episode.title == "4" && number == 4 && !inGroup)
   }
 
-  // MARK: - 저장 형식
+  // MARK: - Storage format
 
   @Test func versionOneFileReadsWithoutGroupsAndSavesAsVersionTwo() throws {
     let folder = try TestFolder()

@@ -12,7 +12,7 @@ struct MultiCursorTests {
     cursor.ranges.map { (text as NSString).substring(with: $0) }
   }
 
-  // MARK: - ⌘D 다음 일치
+  // MARK: - ⌘D next match
 
   @Test func addsNextAfterNewestThenWrapsToStart() throws {
     let text = "민준 가 민준 나 민준"
@@ -44,7 +44,7 @@ struct MultiCursorTests {
     #expect(cursor.addNext(in: text) == .added(NSRange(location: 8, length: 3)))
   }
 
-  /// 자모를 따로 적은 한글도 같은 말로 고른다(검색과 같은 규칙). 길이는 다르다.
+  /// Decomposed Hangul is selected as the same word too (same rule as search). Lengths differ.
   @Test func matchesDecomposedHangul() throws {
     let decomposed = "민준".decomposedStringWithCanonicalMapping
     let text = "민준 \(decomposed)"
@@ -55,7 +55,7 @@ struct MultiCursorTests {
     #expect(found.length != 2)
   }
 
-  /// 한 글자를 가르는 일치(피부색이 붙은 이모지 안의 이모지)는 건너뛴다(E3).
+  /// Matches splitting one character (an emoji inside a skin-tone emoji) are skipped (E3).
   @Test func skipsMatchSplittingOneCharacter() throws {
     let text = "👍 👍🏽 👍"
     var cursor = try #require(MultiCursor(selection: NSRange(location: 0, length: 2), wholeWord: false))
@@ -84,7 +84,7 @@ struct MultiCursorTests {
     #expect(cursor.addNext(in: text) == .limitReached)
   }
 
-  // MARK: - 여러 자리 고치기
+  // MARK: - Editing many spots
 
   @Test func editPlacesTextAndShiftsLaterRanges() throws {
     let text = "민준 가 민준"
@@ -95,7 +95,7 @@ struct MultiCursorTests {
     #expect(edit.inserted == [NSRange(location: 0, length: 3), NSRange(location: 6, length: 3)])
   }
 
-  /// 낡은 자리로 고치지 않는다(D1): 본문 밖, 겹침, 같은 자리, 뒤죽박죽 순서.
+  /// Never edit with stale spots (D1): outside the body, overlapping, same spot, out of order.
   @Test func editRefusesStaleOrOverlappingRanges() {
     let one = [""]
     let two = ["", ""]
@@ -106,7 +106,7 @@ struct MultiCursorTests {
     #expect(MultiCursor.edit([NSRange(location: 0, length: 1)], texts: two, textLength: 7) == nil, "개수가 다름")
   }
 
-  // MARK: - 입력기 범위 옮기기
+  // MARK: - Mapping IME ranges
 
   @Test func movesReplacementAroundFirstCursorToEveryCursor() throws {
     let anchors = [NSRange(location: 3, length: 0), NSRange(location: 8, length: 0)]
@@ -116,7 +116,7 @@ struct MultiCursorTests {
     #expect(targets == [NSRange(location: 2, length: 1), NSRange(location: 7, length: 1)])
   }
 
-  /// 자리마다 자기 길이를 쓴다(자모를 따로 적은 한글처럼 같은 말인데 길이가 다른 선택, E2).
+  /// Each spot uses its own length (selections of the same word with different lengths, like decomposed Hangul, E2).
   @Test func keepsEachAnchorsOwnLength() {
     let anchors = [NSRange(location: 0, length: 2), NSRange(location: 5, length: 4)]
 
@@ -125,7 +125,7 @@ struct MultiCursorTests {
     #expect(targets == [NSRange(location: 0, length: 2), NSRange(location: 5, length: 4)])
   }
 
-  /// 맨 앞 자리 둘레가 아니면(재변환·한자 변환) 옮기지 않는다(I2).
+  /// Not mapped unless around the leading spot (reconversion, Hanja conversion) (I2).
   @Test func refusesReplacementNotAroundFirstCursor() {
     let anchors = [NSRange(location: 3, length: 0), NSRange(location: 8, length: 0)]
 
@@ -135,13 +135,13 @@ struct MultiCursorTests {
     #expect(MultiCursor.targets(forReplacement: NSRange(location: 0, length: 3), around: [NSRange(location: 3, length: 0), NSRange(location: 5, length: 0)], textLength: 10) == nil, "옮긴 범위끼리 겹침")
   }
 
-  /// 두벌식이 표시된 글자 없이 조합하는 순서(16장 5번 ⓐ)를 세 자리에 재생하면 모두 같은 글이 된다.
+  /// Replaying the 2-set no-display composition sequence (ch.16 #5 ⓐ) at three spots yields the same text everywhere.
   @Test func replaysReplacementModeTypingOnThreeCursors() throws {
     var text = "민준 가 민준 나 민준"
     var cursor = try #require(MultiCursor(selection: NSRange(location: 0, length: 2), wholeWord: true))
     _ = cursor.addNext(in: text)
     _ = cursor.addNext(in: text)
-    // (넣을 글, 맨 앞 커서 앞 몇 글자를 바꾸나: nil이면 선택·커서 자리 그대로)
+    // (text to insert, how many chars before the leading caret to replace: nil keeps the selection/caret position)
     let calls: [(String, Int?)] = [("ㄷ", nil), ("도", 1), ("동", 1), ("도", 1), ("유", nil), ("윤", 1), (" ", nil)]
     for (insert, before) in calls {
       let anchors = cursor.ranges
@@ -164,7 +164,7 @@ struct MultiCursorTests {
     #expect(cursor.ranges.map(\.length) == [0, 0, 0])
   }
 
-  // MARK: - 지우기
+  // MARK: - Deleting
 
   @Test func deleteTargetsTakeSelectionOrUpToStop() {
     let text = "가👍🏽 나다" as NSString
@@ -178,7 +178,7 @@ struct MultiCursorTests {
     #expect(forward == [emoji], "⌦도 같은 함수로")
   }
 
-  /// 맞닿은 커서를 지우면 한 자리에서 만나 하나로 합쳐진다(E4).
+  /// Deleting touching carets makes them meet at one spot and merge (E4).
   @Test func cursorsThatMeetMerge() throws {
     var cursor = try #require(MultiCursor(selection: NSRange(location: 0, length: 1), wholeWord: false))
     _ = cursor.addNext(in: "가가가")
@@ -192,7 +192,7 @@ struct MultiCursorTests {
     #expect(cursor.ranges == [NSRange(location: 0, length: 0)])
   }
 
-  /// 맞닿은 자리를 지운 뒤의 되돌리기 기록은 빈 범위들이 한 점에서 만난다. 하나로 합쳐야 되돌릴 수 있다(E4).
+  /// The undo record after deleting touching spots has empty ranges meeting at one point. They must merge to be undoable (E4).
   @Test func meetingPointsJoinForUndo() throws {
     let joined = MultiCursor.joinedAtMeetingPoints(
       [NSRange(location: 0, length: 0), NSRange(location: 0, length: 0), NSRange(location: 0, length: 1), NSRange(location: 2, length: 0)],
@@ -213,13 +213,13 @@ struct MultiCursorTests {
     #expect(merged == [NSRange(location: 0, length: 4), NSRange(location: 5, length: 0), NSRange(location: 7, length: 1)])
   }
 
-  // MARK: - 움직이기 (E5)
+  // MARK: - Moving (E5)
 
   private func twoCarets(_ first: Int, _ second: Int) throws -> MultiCursor {
     try #require(MultiCursor(ranges: [NSRange(location: first, length: 0), NSRange(location: second, length: 0)], wholeWord: false))
   }
 
-  /// ⇧로 늘리면 붙박인 끝은 그대로라, 반대로 움직이면 선택이 줄어든다.
+  /// Extending with ⇧ keeps the fixed end, so moving the other way shrinks the selection.
   @Test func extendingKeepsAnchorSoReverseShrinks() throws {
     var cursor = try twoCarets(2, 10)
 
@@ -233,7 +233,7 @@ struct MultiCursorTests {
     #expect(cursor.ranges == [NSRange(location: 5, length: 0), NSRange(location: 13, length: 0)])
   }
 
-  /// ⌘D로 고른 선택은 앞에서 뒤로: ⇧←는 끝을 당겨 줄인다.
+  /// Selections made by ⌘D go front to back: ⇧← pulls the end in to shrink.
   @Test func findSelectionsAreForward() throws {
     let text = "민준 가 민준"
     var cursor = try #require(MultiCursor(selection: range(of: "민준", in: text), wholeWord: false))
@@ -244,7 +244,7 @@ struct MultiCursorTests {
     #expect(words(cursor, in: text) == ["민", "민"])
   }
 
-  /// 움직여 만난 커서는 하나로, 겹친 선택은 첫 선택의 방향으로 합친다(E4).
+  /// Carets meeting while moving merge; overlapping selections merge in the first selection's direction (E4).
   @Test func movedCursorsThatMeetMerge() throws {
     var carets = try twoCarets(3, 5)
     carets.move(to: [0, 0], extending: false)
@@ -272,7 +272,7 @@ struct MultiCursorTests {
     #expect(MultiCursor.paragraphEnd(at: 0, in: text) == NSMaxRange(emoji))
   }
 
-  // MARK: - 복사와 붙여 넣기 (E7)
+  // MARK: - Copy and paste (E7)
 
   @Test func copyJoinsSelectionsWithNewlines() {
     let text = "민준 가 도윤 나" as NSString

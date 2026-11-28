@@ -5,7 +5,7 @@ import Testing
 struct ImageLineTests {
   private let id = "3f2a9c1e-7b4d-4e8a-9c2f-1a2b3c4d5e6f"
 
-  // MARK: - 그림 줄로 보는 것
+  // MARK: - Treated as image lines
 
   @Test func appInsertedLineIsAnImage() {
     let line = ImageLine.markdown(fileName: "\(id).png")
@@ -33,7 +33,7 @@ struct ImageLineTests {
     #expect(ImageLine.parse("![](../images/..)")?.source == .outside(path: "../images/.."))
   }
 
-  // MARK: - 글로 두는 것
+  // MARK: - Left as text
 
   @Test func linesThatStayText() {
     let texts = [
@@ -56,7 +56,7 @@ struct ImageLineTests {
     }
   }
 
-  // MARK: - 문단과 순서
+  // MARK: - Paragraphs and order
 
   @Test func isImageLineLooksAtOneParagraph() {
     let text = "앞 글\n![](../images/a.png)\n뒤 글" as NSString
@@ -88,7 +88,7 @@ struct ImageLineTests {
     #expect(ImageLine.mayContainImageLine("") == false)
   }
 
-  // MARK: - 다른 기능이 그림 줄을 빼는지
+  // MARK: - Other features skip image lines
 
   @Test func characterCountSkipsImageLines() {
     let line = ImageLine.markdown(fileName: "\(id).png")
@@ -118,7 +118,7 @@ struct ImageLineTests {
     #expect(cursor.addNext(in: text) == .noMore)
   }
 
-  // MARK: - project.json의 그림 이름
+  // MARK: - Image names in project.json
 
   @Test func imageNamesRoundTripAndEmptyIsNotWritten() throws {
     let encoder = JSONEncoder()

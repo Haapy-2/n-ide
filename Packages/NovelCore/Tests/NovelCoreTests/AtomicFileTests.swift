@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import NovelCore
 
-/// 원자적 쓰기. 원고 유실과 바로 이어지는 부분이라 실패 경우까지 확인한다.
+/// Atomic writes. Directly tied to manuscript loss, so failure cases are checked too.
 struct AtomicFileTests {
   @Test func writesNewFile() throws {
     let folder = try TestFolder()
@@ -35,7 +35,7 @@ struct AtomicFileTests {
     let file = folder.url.appending(path: "a.md")
     try AtomicFile.write(Data("지켜야 할 원고".utf8), to: file)
 
-    // 폴더를 읽기 전용으로 바꿔 임시 파일을 못 만들게 한다(디스크가 꽉 찬 상황 흉내).
+    // Make the folder read-only so the temp file can't be created (simulating a full disk).
     try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: folder.url.path(percentEncoded: false))
 
     #expect(throws: ProjectError.self) {
@@ -55,7 +55,7 @@ struct AtomicFileTests {
     }
     #expect(try folder.fileNames(in: folder.url).isEmpty)
   }
-  /// 하드 링크를 못 만드는 디스크(exFAT 외장 디스크 등)에서 쓰는 길: 새 이름이면 넣고, 있는 이름이면 덮지 않는다.
+  /// Path used on disks that can't make hard links (exFAT external disks etc.): insert if the name is new, never overwrite an existing name.
   @Test func placeWithoutLinkNeverOverwrites() throws {
     let folder = try TestFolder()
     defer { folder.remove() }
@@ -77,7 +77,7 @@ struct AtomicFileTests {
 }
 
 
-/// 저장 실패 까닭을 나눠 앱이 알맞은 안내를 고르게 한다.
+/// Classify save failure causes so the app picks fitting guidance.
 struct WriteProblemTests {
   @Test func readOnlyFolderIsNoPermission() throws {
     let folder = try TestFolder()

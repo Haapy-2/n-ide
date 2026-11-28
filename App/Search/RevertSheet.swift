@@ -1,8 +1,8 @@
 import NovelCore
 import SwiftUI
 
-/// 전체 바꾸기 되돌리기 창(PLAN 14장 5번). 왼쪽은 지금 되돌리면 바뀌는 곳이 남은 회차(기본 모두 체크),
-/// 오른쪽은 고른 회차의 `지금 → 되돌린 뒤` 비교. 체크하지 않은 회차는 파일도 편집기도 건드리지 않는다.
+/// Replace-all revert sheet (PLAN ch.14 #5). Left: episodes that still have spots that would change if reverted now (all checked by default),
+/// right: the chosen episode's `now → after revert` diff. Unchecked episodes are untouched in both file and editor.
 struct RevertSheet: View {
   let session: RevertSession
   let episodes: [EpisodeMeta]
@@ -66,8 +66,8 @@ struct RevertSheet: View {
     .frame(minWidth: 760, idealWidth: 860, minHeight: 460, idealHeight: 560)
   }
 
-  /// 고른 줄은 다른 화면과 같은 직접 그린 회색 칸. 시스템 선택(`List(selection:)`)은 강조색 칸 위에서
-  /// 색 토큰 글자가 흰색으로 바뀌지 않아 글자가 묻힌다.
+  /// The selected row is the same custom-drawn gray rect as other screens. With system selection (`List(selection:)`) on the accent rect
+  /// color-token text doesn't turn white, so the text gets buried.
   private var candidateList: some View {
     ScrollViewReader { proxy in
       List {
@@ -83,8 +83,8 @@ struct RevertSheet: View {
               session.focused = candidate.id
               listFocused = true
             }
-            // 보조키 클릭은 칸 전체(빈 곳 포함)에서 보통 클릭보다 먼저 받는다.
-            // ⌘클릭: 고른 줄은 그대로 두고 체크만 바꾼다. ⇧클릭: 마지막으로 바꾼 줄부터 범위로.
+            // Modifier clicks are received on the whole row (including blank areas) before plain clicks.
+            // ⌘-click: keep the selected row and toggle only the check. ⇧-click: range from the last changed row.
             .highPriorityGesture(TapGesture().modifiers(.command).onEnded { session.toggle(candidate.id) })
             .highPriorityGesture(TapGesture().modifiers(.shift).onEnded { session.extend(to: candidate.id) })
             .id(candidate.id)
@@ -133,7 +133,7 @@ struct RevertSheet: View {
     let index = episodes.firstIndex { $0.id == candidate.id }
     let title = index.map { episodes[$0].title } ?? ""
     return HStack(spacing: 8) {
-      // 실제 체크 칸이라 손쉬운 사용(VoiceOver)으로도 켜고 끈다. ⇧클릭은 줄 칸의 동작이 먼저 받는다.
+      // A real checkbox, so it toggles with accessibility (VoiceOver) too. ⇧-click is received by the row action first.
       Toggle(isOn: Binding(get: { isChecked }, set: { _ in session.toggle(candidate.id) })) { EmptyView() }
         .toggleStyle(.checkbox)
         .labelsHidden()

@@ -2,9 +2,9 @@ import Foundation
 import NovelCore
 import XCTest
 
-/// 비교 엔진 속도. 메인 스레드 밖에서 돌지만, 스냅샷을 누르면 바로 보여야 하므로 짧아야 한다.
-/// 더미 5,000자 회차를 고쳐 쓴 판(문단 몇 개 고치기·지우기·넣기)과 비교하고, 이어 붙인 10만 자도 잰다.
-/// 최악: 문단이 하나도 안 겹치는 10만 자 두 개.
+/// Diff engine speed. Runs off the main thread, but must be short since clicking a snapshot should show it immediately.
+/// Compares a 5,000-char dummy episode with a rewritten version (a few paragraphs edited, deleted, inserted), and a concatenated 100k chars too.
+/// Worst case: two 100k-char texts sharing no paragraphs.
 final class TextDiffPerformanceTests: XCTestCase {
   func testDiff() throws {
     guard let path = ProcessInfo.processInfo.environment["NOVEL_PERF_PROJECT"] else {
@@ -16,14 +16,14 @@ final class TextDiffPerformanceTests: XCTestCase {
 
     report("diff_5k_ms", try samples(text, edited(text)))
     report("diff_100k_ms", try samples(long, edited(long)))
-    // 모든 문단 앞에 글자를 붙여 겹치는 줄이 없게 만든다.
+    // Prefix every paragraph with a character so no lines overlap.
     let unrelated = long.split(separator: "\n", omittingEmptySubsequences: false).map { "다른 \($0)" }.joined(separator: "\n")
     report("diff_100k_unrelated_ms", try samples(long, unrelated, count: 5))
-    // 줄 안 비교를 한도 없이 했을 때(한도 2,000줄을 정한 근거)
+    // Unlimited in-line comparison (the basis for the 2,000-line cap)
     report("diff_100k_unrelated_inline_ms", try samples(long, unrelated, count: 5, inlineLimit: .max))
   }
 
-  /// 10문단마다 하나는 어절을 바꾸고, 하나는 지우고, 하나는 새로 넣는다.
+  /// Every 10 paragraphs: one gets a word changed, one deleted, one newly inserted.
   private func edited(_ text: String) -> String {
     var lines = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
     var index = lines.count - 1

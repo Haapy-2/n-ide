@@ -1,20 +1,20 @@
 import AppKit
 import NovelCore
 
-/// 여러 커서에서 화살표·지우기 키(PLAN 16장 E5). 목표 자리는 커서마다 글과 줄 배치에서 직접 계산한다:
-/// 편집기 이동 명령을 자리마다 부르면 커서 1,000개에 키 하나 약 90ms라 목표(16ms)를 넘는다(측정).
-/// 계산 결과가 커서 하나일 때의 편집기와 같은지는 앱 테스트가 모든 자리에서 비교한다.
+/// Arrow and delete keys with multi-cursor (PLAN ch.16 E5). Targets are computed per caret directly from text and layout:
+/// calling editor movement commands per spot takes ~90 ms per key for 1,000 carets, over the 16 ms target (measured).
+/// App tests compare the result against the single-cursor editor at every spot.
 enum CursorMotion {
   case characterBackward, characterForward
   case wordBackward, wordForward
   case lineStart, lineEnd
   case paragraphStart, paragraphEnd
-  /// ⇧⌥↑↓: 문단 처음·끝, 이미 거기면 앞·뒤 문단의 처음·끝
+  /// ⇧⌥↑↓: paragraph start/end; if already there, the previous/next paragraph's start/end
   case paragraphBackward, paragraphForward
   case documentStart, documentEnd
   case lineUp, lineDown
 
-  /// 선택이 있는데 ⇧ 없이 움직이면 앞쪽 명령은 선택 앞에서, 뒤쪽 명령은 선택 뒤에서 시작한다(편집기와 같다).
+  /// Moving without ⇧ while there's a selection starts backward commands at the selection start and forward ones at its end (same as the editor).
   var isBackward: Bool {
     switch self {
     case .characterBackward, .wordBackward, .lineStart, .paragraphStart, .paragraphBackward, .documentStart, .lineUp: true
@@ -27,7 +27,7 @@ enum CursorMotion {
 
 extension ManuscriptTextView {
 
-  /// 키 명령 → (움직임, ⇧로 늘리기)
+  /// Key command → (motion, extend with ⇧)
   static let multiCursorMoves: [Selector: (CursorMotion, Bool)] = [
     #selector(moveLeft(_:)): (.characterBackward, false),
     #selector(moveBackward(_:)): (.characterBackward, false),
@@ -69,7 +69,7 @@ extension ManuscriptTextView {
     #selector(moveDownAndModifySelection(_:)): (.lineDown, true),
   ]
 
-  /// 지우기 키 → 커서만 있을 때 지울 끝
+  /// Delete key → end to delete to with a bare caret
   static let multiCursorDeletions: [Selector: CursorMotion] = [
     #selector(deleteBackward(_:)): .characterBackward,
     #selector(deleteForward(_:)): .characterForward,
@@ -79,14 +79,14 @@ extension ManuscriptTextView {
     #selector(deleteToEndOfLine(_:)): .lineEnd,
   ]
 
-  /// 화면만 넘기고 커서는 그대로인 명령. 여러 커서를 둔 채 편집기에 넘긴다.
+  /// Commands that only scroll and leave carets alone. Passed to the editor with multi-cursor kept.
   static let multiCursorScrolls: Set<Selector> = [
     #selector(scrollPageUp(_:)), #selector(scrollPageDown(_:)), #selector(scrollLineUp(_:)), #selector(scrollLineDown(_:)),
     #selector(scrollToBeginningOfDocument(_:)), #selector(scrollToEndOfDocument(_:)),
     #selector(centerSelectionInVisibleArea(_:)),
   ]
 
-  /// 모든 자리를 함께 움직인다. 만나서 하나가 되면 여러 커서를 끝낸다.
+  /// Move all spots together. End multi-cursor if they merge into one.
   func moveMultiCursor(_ motion: CursorMotion, extending: Bool) {
     guard let session = multiCursor else { return }
     if session.marked != nil { finishComposition() }
@@ -121,7 +121,7 @@ extension ManuscriptTextView {
     needsDisplay = true
   }
 
-  /// 커서 `index`에서 한 번 움직인 자리. 위아래는 목표 가로 위치(글 상자 좌표)도 돌려준다.
+  /// Position after one move from caret `index`. Vertical moves also return the target horizontal position (text container coords).
   func cursorHead(_ motion: CursorMotion, from index: Int, goalX: CGFloat?) -> (head: Int, goalX: CGFloat?) {
     let text = string as NSString
     let length = text.length
@@ -147,7 +147,7 @@ extension ManuscriptTextView {
     }
   }
 
-  /// 커서만 있을 때 지우기 키가 지울 끝. 줄 끝에서 줄 끝까지 지우기(⌘⌦)는 줄바꿈을 지운다(편집기와 같다).
+  /// End deleted by a delete key with a bare caret. Delete-to-line-end at the line end (⌘⌦) deletes the newline (same as the editor).
   func deletionStop(_ motion: CursorMotion, from index: Int) -> Int {
     let stop = cursorHead(motion, from: index, goalX: nil).head
     let text = string as NSString
@@ -155,7 +155,7 @@ extension ManuscriptTextView {
     return MultiCursor.characterEnd(after: index, in: text)
   }
 
-  /// 커서가 놓인 화면 줄의 글자 범위(줄바꿈 포함). 줄이 접히는 자리는 다음 줄로 본다.
+  /// Character range of the screen line holding the caret (including the newline). A wrap point counts as the next line.
   private func visualLine(at index: Int) -> NSRange {
     guard let layoutManager, let textContainer else { return NSRange(location: index, length: 0) }
     let length = (string as NSString).length
@@ -168,7 +168,7 @@ extension ManuscriptTextView {
     return layoutManager.characterRange(forGlyphRange: glyphs, actualGlyphRange: nil)
   }
 
-  /// 화면 줄에서 커서가 갈 수 있는 끝(줄바꿈 앞)
+  /// The furthest a caret can go on a screen line (before the newline)
   private func lineContentEnd(_ line: NSRange) -> Int {
     let text = string as NSString
     let end = NSMaxRange(line)
@@ -192,8 +192,8 @@ extension ManuscriptTextView {
       target = visualLine(at: next)
     }
     guard target.length > 0, let row = caretLine(at: target.location) else { return (target.location, x) }
-    // `characterIndexForInsertion`(클릭과 같은 길)은 커서 1,000개에 33ms라(Debug 측정) 글자 칸으로 직접 고른다.
-    // 한 글자 가운데(자모를 따로 적은 한글 등)에 서지 않게 그 글자 앞뒤 중 가까운 쪽으로.
+    // `characterIndexForInsertion` (the click path) takes 33 ms for 1,000 carets (Debug measurement), so pick by glyph rects directly.
+    // Don't land inside one character (e.g. decomposed Hangul); go to the nearer of its start/end.
     guard let layoutManager, let textContainer else { return (index, x) }
     var fraction: CGFloat = 0
     let glyph = layoutManager.glyphIndex(for: NSPoint(x: x, y: row.midY), in: textContainer, fractionOfDistanceThroughGlyph: &fraction)

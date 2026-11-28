@@ -2,13 +2,13 @@ import Foundation
 import NovelCore
 import Observation
 
-/// 열린 작품 하나의 회차 목록과 그 저장. 회차 추가·이름 변경·휴지통으로 보내기·순서 변경을 맡는다.
-/// `project.json` 저장은 본문 자동 저장과 같은 저장 줄(`SaveQueue`)로 보내 순서를 지킨다.
+/// One open project's episode list and its saving. Handles adding, renaming, trashing and reordering episodes.
+/// `project.json` saves go through the same save queue (`SaveQueue`) as body autosave to keep order.
 @MainActor
 @Observable
 final class ProjectModel {
   private(set) var project: ProjectFile
-  /// `project.json` 저장이 끝내 실패했을 때의 설명. 화면에 띄운다.
+  /// Description shown when a `project.json` save ultimately failed.
   var errorMessage: String?
 
   let store: ProjectStore
@@ -16,24 +16,24 @@ final class ProjectModel {
   @ObservationIgnored let autosaver: EpisodeAutosaver
   @ObservationIgnored let counter: CharacterCounter
   @ObservationIgnored private var projectChange = 0
-  /// 휴지통으로 옮기는 중인 회차. 목록에서 빠지기 전이라도 전체 바꾸기가 쓰지 않게 한다.
+  /// Episodes being moved to the trash. Even before leaving the list, replace all won't write to them.
   @ObservationIgnored private var leaving: Set<EpisodeID> = []
-  /// 아직 안 끝난 `project.json` 저장 수
+  /// Number of unfinished `project.json` saves
   @ObservationIgnored private var projectSaves = 0
-  /// 회차별 글자 수(화면용). `project` 안에 두면 글자 수 하나가 바뀔 때마다 `project`를 읽는 화면 전체
-  /// (작업 공간 + 사이드바 500줄)가 다시 계산된다(측정 17.5ms, 타이핑 중 0.2초마다). 그래서 회차마다 따로 두어
-  /// 그 회차의 줄만 다시 그리게 하고, `project.json`에 쓸 때 합친다.
+  /// Per-episode counts (for display). Inside `project`, every count change would recompute every view reading `project`
+  /// (workspace + 500 sidebar rows; measured 17.5 ms, every 0.2 s while typing). So they're kept per episode
+  /// so only that row redraws, and merged when writing `project.json`.
   @ObservationIgnored private var countBoxes: [EpisodeID: EpisodeCountBox] = [:]
-  /// 파일을 휴지통으로 옮기고 휴지통 안의 새 위치를 돌려준다(되돌리기 때 다시 꺼내려고).
-  /// 테스트에서는 진짜 휴지통 대신 다른 곳으로 옮기도록 바꿔 끼운다.
+  /// Move a file to the trash and return its new location there (to bring it back on undo).
+  /// Tests swap this to move elsewhere instead of the real Trash.
   @ObservationIgnored private let moveToTrash: @Sendable (URL) throws -> URL
-  /// 글자 수만 바뀌었을 때 project.json 저장을 미뤄 묶는 시간(docs/PERFORMANCE.md 2장).
+  /// Delay batching `project.json` saves when only counts changed (docs/PERFORMANCE.md ch.2).
   @ObservationIgnored private let countSaveDelay: Duration
   @ObservationIgnored private var countSave: Task<Void, Never>?
   @ObservationIgnored private var fileUndoTail: Task<Void, Never>?
-  /// 아직 안 끝난 되돌리기 파일 옮기기 수. 앱 종료가 기다린다.
+  /// Number of unfinished undo file moves. Quit waits for them.
   @ObservationIgnored private var fileUndos = 0
-  /// 마지막 `project.json` 저장이 실패했다. 앱을 끌 때 다시 시도하고, 그래도 안 되면 묻는다.
+  /// The last `project.json` save failed. Retried at quit; if it still fails, ask.
   @ObservationIgnored private var projectSaveFailed = false
 
   init(
@@ -44,7 +44,7 @@ final class ProjectModel {
     moveToTrash: @escaping @Sendable (URL) throws -> URL = ProjectModel.systemTrash,
     backup: EmergencyBackup? = nil
   ) {
-    // 앱 밖에서 고쳐 흩어진 묶음은 열 때 바로잡는다(회차는 그대로, 순서만 모음). 다음 저장 때 파일에도 들어간다.
+    // Groups scattered by outside edits are fixed on open (episodes kept, only order gathered). Written to the file on the next save.
     var project = project
     let list = EpisodeGrouping.normalized(.init(episodes: project.episodes, groups: project.groups))
     project.episodes = list.episodes
@@ -59,7 +59,7 @@ final class ProjectModel {
     autosaver = EpisodeAutosaver(store: store, queue: queue, delay: autosaveDelay)
     counter = CharacterCounter(interval: countDelay)
     counter.onCount = { [weak self] id, count in self?.recordCount(count, for: id) }
-    // 휴지통 옮기기와 되돌리기 파일 옮기기도 넣는다. 도중에 끄면 파일은 옮겨졌는데 목록(project.json)에는 남는다.
+    // Trash moves and undo file moves are included too. Quitting midway would leave files moved but still in the list (project.json).
     autosaver.hasProjectWork = { [weak self] in
       self.map {
         $0.countSave != nil || $0.projectSaves > 0 || $0.projectSaveFailed || !$0.leaving.isEmpty || $0.fileUndos > 0
@@ -68,7 +68,7 @@ final class ProjectModel {
     autosaver.finishProjectWork = { [weak self] in await self?.finishProjectSaves() }
     autosaver.episodeTitle = { [weak self] id in self?.project.episodes.first { $0.id == id }?.title ?? "" }
     autosaver.projectTitle = { [weak self] in self?.project.title ?? "" }
-    // init 안이라 `project`만 쓰면 매개변수(연 때의 목록)를 가리킨다. 지금 목록은 `self.project`.
+    // Inside init, plain `project` refers to the parameter (the list at open). The current list is `self.project`.
     autosaver.isListed = { [weak self] id in
       guard let self, !self.leaving.contains(id) else { return false }
       return self.project.episodes.contains { $0.id == id }
@@ -78,15 +78,15 @@ final class ProjectModel {
 
   var episodes: [EpisodeMeta] { project.episodes }
 
-  /// 회차 정보(글자 수는 지금 값). 화면의 body에서 부르면 그 화면이 이 회차의 글자 수 변화를 따라 다시 그려지므로,
-  /// body에서는 `countBox(for:)`를 줄 단위 뷰에 넘겨 쓴다.
+  /// Episode info (count is the current value). Calling this from a view's body would make that view redraw on this episode's count changes,
+  /// so in bodies pass `countBox(for:)` to per-row views instead.
   func episode(_ id: EpisodeID) -> EpisodeMeta? {
     guard var episode = project.episodes.first(where: { $0.id == id }) else { return nil }
     if let box = countBoxes[id] { episode.characterCount = box.value }
     return episode
   }
 
-  /// 그 회차의 글자 수 칸. 없으면(새 회차) 만든다.
+  /// That episode's count box. Created if absent (new episode).
   func countBox(for id: EpisodeID) -> EpisodeCountBox {
     if let box = countBoxes[id] { return box }
     let box = EpisodeCountBox(nil)
@@ -94,18 +94,18 @@ final class ProjectModel {
     return box
   }
 
-  // MARK: - 회차 바꾸기
+  // MARK: - Episode changes
 
-  /// 새 회차를 `after` 바로 뒤(없으면 맨 끝)에 만든다. 빈 본문 파일을 먼저 쓰고 목록에 넣는다.
-  /// `undoManager`를 주면 ⌘Z로 방금 만든 회차를 휴지통으로 보낼 수 있다(⇧⌘Z로 다시 꺼냄).
+  /// Create a new episode right after `after` (or at the end). Writes an empty body file first, then adds it to the list.
+  /// With `undoManager`, ⌘Z sends the just-created episode to the trash (⇧⌘Z brings it back).
   @discardableResult
   func addEpisode(after: EpisodeID? = nil, undoManager: UndoManager? = nil) async throws -> EpisodeID {
-    // 묶음 안 회차 뒤에 만들면 같은 묶음에 들어간다(다음 화를 이어 쓰는 경우).
+    // Created after an episode in a group, it joins that group (continuing to the next chapter).
     let group = after.flatMap { id in project.episodes.first { $0.id == id }?.group }
     let episode = EpisodeMeta(title: "", goal: project.settings.defaultEpisodeGoal, group: group)
     let store = store
     let id = episode.id
-    // 본문 파일이 먼저 있어야 목록에만 있고 파일은 없는 회차가 생기지 않는다.
+    // The body file must exist first so there's never an episode in the list without a file.
     try await Task.detached { try store.writeEpisode("", id: id) }.value
     let index = after.flatMap { id in project.episodes.firstIndex { $0.id == id } }.map { $0 + 1 }
     let insertAt = index ?? project.episodes.endIndex
@@ -115,7 +115,7 @@ final class ProjectModel {
     return id
   }
 
-  /// 이름을 바꾼 까닭. 이름 변경 스냅샷 메모에 붙는다(되돌리기·다시 실행은 `UndoManager`를 보고 따로 붙인다).
+  /// Why it was renamed. Appended to the rename snapshot memo (undo/redo are appended separately by checking `UndoManager`).
   enum RenameReason {
     case single
     case batch
@@ -124,13 +124,13 @@ final class ProjectModel {
 
   struct RenameOutcome: Equatable {
     var renamed = 0
-    /// 이름은 바꿨지만 스냅샷을 남기지 못한 회차 수
+    /// Number of episodes renamed whose snapshot couldn't be taken
     var unsnapshotted = 0
   }
 
-  /// 이름 변경(한 회차·여러 회차·스냅샷 복원). 앞뒤 공백을 자르고, 실제로 바뀌는 회차만 바꾼다.
-  /// 바뀌는 회차마다 그때 본문과 바뀌기 전 제목을 `rename` 스냅샷으로 남긴다. `undoManager`를 주면 ⌘Z 한 번에
-  /// 모두 되돌아가고, 되돌리기·다시 실행도 이름이 바뀌는 것이라 스냅샷을 남긴다.
+  /// Rename (single, batch, snapshot restore). Trims whitespace and changes only episodes that actually change.
+  /// Each changed episode gets a `rename` snapshot with its body and old title at that time. With `undoManager`, one ⌘Z
+  /// reverts all, and undo/redo also take snapshots since they change names too.
   @discardableResult
   func renameEpisodes(
     _ titles: [EpisodeID: String], reason: RenameReason, undoManager: UndoManager? = nil
@@ -138,7 +138,7 @@ final class ProjectModel {
     await applyRenames(titles, reason: reason, undoManager: undoManager).value
   }
 
-  /// 여러 회차 이름 변경 창: 규칙을 지금 목록의 제목에 목록 순서대로 적용한다(창을 연 뒤 바뀐 제목도 반영).
+  /// Batch rename sheet: apply the rule to the current list's titles in list order (reflecting titles changed after the sheet opened).
   @discardableResult
   func renameEpisodes(
     _ ids: Set<EpisodeID>, by rule: EpisodeTitleBatch.Rule, undoManager: UndoManager? = nil
@@ -149,7 +149,7 @@ final class ProjectModel {
     return await renameEpisodes(renamed, reason: .batch, undoManager: undoManager)
   }
 
-  /// 목록 바꾸기와 되돌리기 등록은 그 자리에서(동기로) 한다. 되돌리기 처리 안에서 다시 불려 다시 실행이 쌓인다.
+  /// List change and undo registration happen in place (synchronously). Called again inside undo handling, so redo stacks up.
   private func applyRenames(
     _ titles: [EpisodeID: String], reason: RenameReason, undoManager: UndoManager?
   ) -> Task<RenameOutcome, Never> {
@@ -198,7 +198,7 @@ final class ProjectModel {
 
   private static func quoted(_ title: String) -> String { title.isEmpty ? "(제목 없음)" : "'\(title)'" }
 
-  /// 회차 목표 글자 수. `undoManager`를 주면 ⌘Z로 되돌릴 수 있다.
+  /// Episode goal character count. With `undoManager`, ⌘Z can revert it.
   func setGoal(_ id: EpisodeID, to goal: Int, undoManager: UndoManager? = nil) async {
     guard goal > 0, let index = project.episodes.firstIndex(where: { $0.id == id }),
       project.episodes[index].goal != goal
@@ -208,8 +208,8 @@ final class ProjectModel {
     await replaceEpisodes(with: episodes, actionName: "목표 글자 수", undoManager: undoManager).value
   }
 
-  /// 작품 기본 목표 글자 수(새 회차에 쓰는 값, project.json의 작품별 설정). `undoManager`를 주면 ⌘Z로 되돌릴 수 있다.
-  /// 되돌리기 기록은 그 자리에서(동기로) 한다. 회차 목표와 같은 순간에 부르면 ⌘Z 한 번에 둘 다 되돌아간다.
+  /// Project default goal (used for new episodes, per-project setting in project.json). With `undoManager`, ⌘Z can revert it.
+  /// The undo record is registered in place (synchronously). Called in the same moment as the episode goal, one ⌘Z reverts both.
   @discardableResult
   func setDefaultEpisodeGoal(_ goal: Int, undoManager: UndoManager? = nil) -> Task<Void, Never> {
     let previous = project.settings.defaultEpisodeGoal
@@ -222,7 +222,7 @@ final class ProjectModel {
     return startProjectSave()
   }
 
-  /// 모든 회차의 목표를 한 번에 바꾼다(설정 창 "모든 회차에 적용"). ⌘Z 한 번에 모두 되돌아간다.
+  /// Change all episode goals at once (Settings "apply to all episodes"). One ⌘Z reverts all.
   func setGoalForAllEpisodes(_ goal: Int, undoManager: UndoManager? = nil) async {
     guard goal > 0, project.episodes.contains(where: { $0.goal != goal }) else { return }
     let episodes = project.episodes.map { episode in
@@ -233,8 +233,8 @@ final class ProjectModel {
     await replaceEpisodes(with: episodes, actionName: "모든 회차 목표", undoManager: undoManager).value
   }
 
-  /// 드래그로 순서 바꾸기. 자리는 사이드바의 보이는 줄 번호(묶음 제목 줄 포함, `EpisodeGrouping.rows`)이고,
-  /// 옮긴 회차의 묶음도 놓은 자리로 정한다(`EpisodeGrouping.drop`). `undoManager`를 주면 ⌘Z로 직전 순서로 되돌릴 수 있다.
+  /// Reorder by drag. Positions are the sidebar's visible row indices (including group headers, `EpisodeGrouping.rows`),
+  /// and the moved episode's group is set by the drop position (`EpisodeGrouping.drop`). With `undoManager`, ⌘Z restores the previous order.
   func moveEpisodes(
     rows source: IndexSet, before destination: Int, collapsed: Set<GroupID> = [], undoManager: UndoManager? = nil
   ) async {
@@ -243,9 +243,9 @@ final class ProjectModel {
     await replaceList(next, actionName: "순서 변경", undoManager: undoManager).value
   }
 
-  // MARK: - 회차 묶음 (PLAN 8장 B안)
+  // MARK: - Episode groups (PLAN ch.8 option B)
 
-  /// 고른 회차들을 새 묶음으로. 떨어져 있으면 맨 앞 회차 자리로 모은다. 만든 묶음의 ID.
+  /// Make the chosen episodes a new group. If scattered, gathered at the first episode's position. Returns the new group's ID.
   @discardableResult
   func groupEpisodes(_ ids: Set<EpisodeID>, title: String, undoManager: UndoManager? = nil) async -> GroupID? {
     let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -277,10 +277,10 @@ final class ProjectModel {
 
   private var list: EpisodeGrouping.List { .init(episodes: project.episodes, groups: project.groups) }
 
-  /// 회차 목록(순서·제목)을 통째로 바꾸고 저장을 시작한다. 되돌리기에는 바꾸기 전 목록을 기록한다.
-  /// 되돌리기 처리 안에서 다시 이 함수를 부르므로 다시 실행(⇧⌘Z)이 자동으로 쌓인다.
-  /// 기록은 반드시 그 자리에서(동기로) 해야 UndoManager가 되돌리기/다시 실행을 제대로 구분한다.
-  /// 회차 목록만 바꾸고 파일은 건드리지 않으므로 되돌려도 본문에는 영향이 없다.
+  /// Replace the whole episode list (order, titles) and start saving. Undo records the list before the change.
+  /// This function is called again inside undo handling, so redo (⇧⌘Z) stacks up automatically.
+  /// Registration must happen in place (synchronously) for UndoManager to tell undo from redo correctly.
+  /// Only the episode list changes, not files, so undoing doesn't affect bodies.
   @discardableResult
   private func replaceEpisodes(
     with episodes: [EpisodeMeta], actionName: String, undoManager: UndoManager?
@@ -288,7 +288,7 @@ final class ProjectModel {
     replaceList(.init(episodes: episodes, groups: project.groups), actionName: actionName, undoManager: undoManager)
   }
 
-  /// 회차 목록과 묶음 이름을 함께 바꾼다. 되돌리면 둘 다 바꾸기 전으로 돌아간다.
+  /// Change the episode list and group names together. Undo reverts both.
   @discardableResult
   private func replaceList(
     _ list: EpisodeGrouping.List, actionName: String, undoManager: UndoManager?
@@ -296,20 +296,20 @@ final class ProjectModel {
     let previous = self.list
     undoManager?.registerUndo(withTarget: self) { model in
       MainActor.assumeIsolated {
-        // 그 사이 회차가 추가·삭제됐으면 그 변화를 덮어쓰지 않도록, 같은 회차들일 때만 되돌린다.
+        // Revert only if it's the same set of episodes, so episodes added or deleted meanwhile aren't overwritten.
         guard Set(model.project.episodes.map(\.id)) == Set(previous.episodes.map(\.id)) else { return }
         model.replaceList(previous, actionName: actionName, undoManager: undoManager)
       }
     }
     undoManager?.setActionName(actionName)
-    // 글자 수는 되돌리기 대상이 아니다. 따로 들고 있는 지금 값(countBoxes)이 저장 때 들어간다.
+    // Counts aren't part of undo. The separately held current values (countBoxes) go in at save time.
     project.episodes = list.episodes
     project.groups = list.groups
     return startProjectSave()
   }
 
-  /// 회차를 휴지통으로 옮긴다. 휴지통으로 못 옮기면 아무것도 바꾸지 않고 오류를 던진다(영구 삭제로 대신하지 않음).
-  /// `undoManager`를 주면 ⌘Z로 휴지통에서 꺼내 원래 자리에 되돌릴 수 있다.
+  /// Move an episode to the trash. If it can't be trashed, change nothing and throw (no permanent delete as a substitute).
+  /// With `undoManager`, ⌘Z takes it out of the trash back to its original position.
   func trashEpisode(_ id: EpisodeID, undoManager: UndoManager? = nil) async throws {
     guard let index = project.episodes.firstIndex(where: { $0.id == id }) else { return }
     let record = TrashRecord(episode: project.episodes[index], index: index)
@@ -317,8 +317,8 @@ final class ProjectModel {
     registerUndoByRestoring(record, actionName: "휴지통으로 이동", undoManager: undoManager)
   }
 
-  /// `project.json`에 없는 회차 파일(`unlistedEpisodes`)을 목록 끝에 "되찾은 회차"로 넣고 저장한다. 넣은 수를 돌려준다.
-  /// 작품을 연 뒤 화면을 막지 않고 부른다. 찾는 사이 만들거나 휴지통으로 보낸 회차는 넣지 않는다.
+  /// Append episode files missing from `project.json` (`unlistedEpisodes`) at the end as "recovered episodes" and save. Returns how many.
+  /// Called after the project opens without blocking the screen. Episodes created or trashed during the search aren't added.
   func adoptUnlistedEpisodes() async -> Int {
     let store = store
     let listed = Set(project.episodes.map(\.id))
@@ -335,13 +335,13 @@ final class ProjectModel {
     return fresh.count
   }
 
-  // MARK: - 휴지통과 되돌리기
+  // MARK: - Trash and undo
 
-  /// 휴지통으로 보낸(또는 보낼) 회차 하나의 기록. 되돌리기와 다시 실행이 같은 기록을 주고받는다.
+  /// Record of one trashed (or to-be-trashed) episode. Undo and redo pass the same record back and forth.
   final class TrashRecord {
     let episode: EpisodeMeta
     let index: Int
-    /// 휴지통 안의 위치. 휴지통에 있을 때만 값이 있다.
+    /// Location inside the trash. Has a value only while in the trash.
     var trashedURL: URL?
 
     init(episode: EpisodeMeta, index: Int) {
@@ -352,13 +352,13 @@ final class ProjectModel {
 
   private func moveToTrash(_ record: TrashRecord) async throws {
     let id = record.episode.id
-    // 저장을 기다리고 파일을 옮기는 동안에도 회차는 목록에 남아 있다. 그 틈에 전체 바꾸기가 쓰기 시작하면
-    // 옮긴 자리에 본문 파일이 새로 생기므로, 먼저 "떠나는 중"으로 표시해 새 쓰기를 막는다(이미 시작한 쓰기는 flush가 기다린다).
+    // While waiting for the save and moving the file, the episode stays in the list. If replace all started writing in that gap,
+    // a new body file would appear at the old spot, so mark it "leaving" first to block new writes (writes already started are awaited by flush).
     leaving.insert(id)
     defer { leaving.remove(id) }
-    // 지우기 전에 고친 내용을 저장해 둔다. 휴지통에서 꺼냈을 때 마지막 내용이 들어 있도록.
+    // Save edits before deleting, so the latest content is there when restored from the trash.
     await autosaver.flush()
-    // 그래도 저장하지 못했으면 옮기지 않는다. 옮기면 휴지통에는 옛 본문만 가고 메모리의 마지막 원고는 버려진다.
+    // If it still couldn't be saved, don't move it. Moving would send only the old body to the trash and discard the latest manuscript in memory.
     guard autosaver.pendingText(for: id) == nil else { throw UnsavedEpisodeError() }
     let file = store.layout.episodeFile(id)
     let moveToTrash = moveToTrash
@@ -370,7 +370,7 @@ final class ProjectModel {
     await saveProject()
   }
 
-  /// 휴지통에서 꺼내 원래 자리(그사이 목록이 줄었으면 맨 끝)에 다시 넣는다. 같은 이름의 파일이 이미 있으면 덮어쓰지 않는다.
+  /// Take it out of the trash back to its original position (the end if the list shrank). Never overwrite an existing file of the same name.
   private func restoreFromTrash(_ record: TrashRecord) async throws {
     guard !project.episodes.contains(where: { $0.id == record.episode.id }) else { return }
     if let trashed = record.trashedURL {
@@ -379,17 +379,17 @@ final class ProjectModel {
       record.trashedURL = nil
     }
     project.episodes.insert(record.episode, at: min(record.index, project.episodes.count))
-    // 그사이 묶음 모양이 바뀌었으면 묶음 규칙(이어진 회차)에 맞게 다시 모은다.
+    // If group shapes changed meanwhile, regather to satisfy the group rule (contiguous episodes).
     let list = EpisodeGrouping.normalized(.init(episodes: project.episodes, groups: project.groups))
     project.episodes = list.episodes
     project.groups = list.groups
     await saveProject()
   }
 
-  // 되돌리기 기록은 반드시 그 자리에서(동기로) 한다. 파일 옮기기는 그 뒤에 Task로 한다.
-  // 그래야 UndoManager가 되돌리기와 다시 실행을 제대로 구분해 쌓는다.
+  // Undo registration must happen in place (synchronously). File moves happen afterwards in a Task.
+  // That way UndoManager stacks undo and redo correctly.
 
-  /// ⌘Z를 누르면 이 회차를 휴지통으로 보내도록 기록한다(새 회차 되돌리기, 휴지통 꺼내기의 다시 실행).
+  /// Register ⌘Z to send this episode to the trash (undo of new episode, redo of restore-from-trash).
   private func registerUndoByTrashing(_ record: TrashRecord, actionName: String, undoManager: UndoManager?) {
     undoManager?.registerUndo(withTarget: self) { model in
       MainActor.assumeIsolated {
@@ -400,7 +400,7 @@ final class ProjectModel {
     undoManager?.setActionName(actionName)
   }
 
-  /// ⌘Z를 누르면 이 회차를 휴지통에서 꺼내도록 기록한다(휴지통으로 이동 되돌리기, 새 회차의 다시 실행).
+  /// Register ⌘Z to take this episode out of the trash (undo of move-to-trash, redo of new episode).
   private func registerUndoByRestoring(_ record: TrashRecord, actionName: String, undoManager: UndoManager?) {
     undoManager?.registerUndo(withTarget: self) { model in
       MainActor.assumeIsolated {
@@ -411,8 +411,8 @@ final class ProjectModel {
     undoManager?.setActionName(actionName)
   }
 
-  /// 파일 옮기기는 누른 순서대로 하나씩 한다. ⌘Z·⇧⌘Z를 빠르게 이어 누르면 따로 돈 작업이 서로 끼어들어,
-  /// 목록에는 있는데 파일은 휴지통에 있는 회차가 생길 수 있다.
+  /// File moves run one at a time in press order. Pressing ⌘Z/⇧⌘Z quickly in a row would let separate tasks interleave,
+  /// leaving an episode in the list whose file is in the trash.
   private func enqueueFileUndo(_ work: @escaping () async throws -> Void) {
     let previous = fileUndoTail
     fileUndos += 1
@@ -427,7 +427,7 @@ final class ProjectModel {
     }
   }
 
-  /// 되돌리기로 시작한 파일 옮기기가 모두 끝날 때까지 기다린다. 줄의 마지막 일은 앞의 일과 그 뒤 목록 저장까지 기다린다.
+  /// Wait until all undo-initiated file moves finish. The last item in the queue waits for earlier ones and the list save after them.
   func finishFileUndos() async {
     await fileUndoTail?.value
   }
@@ -439,10 +439,10 @@ final class ProjectModel {
     return resulting as URL
   }
 
-  // MARK: - 글자 수
+  // MARK: - Character count
 
-  /// 센 글자 수를 회차 목록에 적는다. 바뀌었을 때만 적고, project.json 저장은 미뤄서 묶는다.
-  /// (입력이 멈출 때마다 쓰지 않으려는 것. 저장 전에 앱이 꺼져도 그 회차를 다시 열면 다시 센다.)
+  /// Record counted values in the episode list. Only when changed, and `project.json` saves are deferred and batched.
+  /// (To avoid writing on every pause in typing. If the app quits before saving, reopening that episode recounts.)
   func recordCount(_ count: CharacterCount, for id: EpisodeID) {
     guard project.episodes.contains(where: { $0.id == id }) else { return }
     let box = countBox(for: id)
@@ -457,7 +457,7 @@ final class ProjectModel {
     }
   }
 
-  /// 미뤄 둔 글자 수 저장을 지금 한다(창을 닫을 때).
+  /// Perform the deferred count save now (on window close).
   func saveCountsNow() async {
     guard let task = countSave else { return }
     task.cancel()
@@ -465,11 +465,11 @@ final class ProjectModel {
     await saveProject()
   }
 
-  // MARK: - 저장
+  // MARK: - Saving
 
-  /// 휴지통·되돌리기 파일 옮기기를 기다리고, 미뤄 둔 글자 수 저장을 지금 하고, 시작된 `project.json` 저장이 모두
-  /// 끝날 때까지 기다린다(창 닫기, 앱 종료).
-  /// 이름을 바꾸자마자 앱을 꺼도 바뀐 목록이 디스크에 남게 하려는 것.
+  /// Wait for trash/undo file moves, perform the deferred count save now, and wait until all started `project.json` saves
+  /// finish (window close, quit).
+  /// So the changed list is on disk even if the app quits right after a rename.
   func finishProjectSaves() async {
     await finishFileUndos()
     while !leaving.isEmpty { try? await Task.sleep(for: .milliseconds(2)) }
@@ -477,11 +477,11 @@ final class ProjectModel {
     while projectSaves > 0 {
       try? await Task.sleep(for: .milliseconds(2))
     }
-    // 앞서 실패한 저장은 아무도 다시 시도하지 않으므로 여기서 한 번 더 한다.
+    // Nobody retries an earlier failed save, so try once more here.
     if projectSaveFailed { await saveProject() }
   }
 
-  /// 저장을 시작만 하고 돌아온다. 시작한 순간부터 "안 끝난 저장"으로 센다(바로 뒤에 앱을 꺼도 기다리게).
+  /// Only start the save and return. It counts as "unfinished" from the moment it starts (so quitting right after still waits).
   private func startProjectSave() -> Task<Void, Never> {
     projectSaves += 1
     return Task {
@@ -513,12 +513,12 @@ final class ProjectModel {
   }
 }
 
-/// 휴지통으로 보내려는 회차의 마지막 원고를 아직 저장하지 못했다(디스크 꽉 참, 권한 없음 등).
+/// The latest manuscript of the episode being trashed couldn't be saved yet (disk full, no permission etc.).
 struct UnsavedEpisodeError: LocalizedError {
   var errorDescription: String? { "이 회차의 마지막 원고를 아직 저장하지 못했어요. 저장된 뒤에 다시 시도해 주세요." }
 }
 
-/// 회차 하나의 글자 수를 담는 칸. 값이 바뀌면 이 칸을 읽는 뷰(사이드바의 그 줄)만 다시 그려진다.
+/// Box holding one episode's count. When it changes, only views reading this box (that sidebar row) redraw.
 @MainActor
 @Observable
 final class EpisodeCountBox {

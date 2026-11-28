@@ -3,11 +3,11 @@ import Synchronization
 import Testing
 @testable import NovelCore
 
-/// 저장 줄. "늦게 끝난 옛 저장이 최신 원고를 되돌리는 일"이 없어야 한다 (SPEC 6장).
+/// The save queue. "An old save finishing late reverting the latest manuscript" must never happen (SPEC ch.6).
 struct SaveQueueTests {
   private let fast: [Duration] = [.milliseconds(5), .milliseconds(5), .milliseconds(5)]
 
-  /// 옛 저장(변경 1)이 새 저장(변경 2)보다 늦게 도착하는 경우를 그대로 재현한다.
+  /// Reproduces exactly the case where an old save (change 1) arrives after a new save (change 2).
   @Test func lateOldSaveDoesNotOverwriteNewerText() async throws {
     let folder = try TestFolder()
     defer { folder.remove() }
@@ -23,8 +23,8 @@ struct SaveQueueTests {
     #expect(try store.readEpisode(id) == "새 원고")
   }
 
-  /// 쓰기 함수가 "쓰지 않았다"(외부 변경과 충돌)고 알리면 그 번호를 저장된 것으로 세지 않는다.
-  /// 세면 같은 번호의 다음 저장이 "옛 저장"으로 건너뛰어지고 메모리에 붙잡은 원고까지 지워진다.
+  /// If the write function reports "not written" (external-change conflict), that number doesn't count as saved.
+  /// Counting it would skip the next save with the same number as "old" and even discard the manuscript held in memory.
   @Test func writeThatDidNotHappenIsNotCounted() async throws {
     let queue = SaveQueue(retryDelays: fast)
     let id = EpisodeID.make()
@@ -68,7 +68,7 @@ struct SaveQueueTests {
     let a = EpisodeID.make()
     let b = EpisodeID.make()
     #expect(try await queue.save(.episode(a), change: 5) {} == .written)
-    // 다른 회차는 번호가 따로 간다.
+    // Other episodes have separate numbering.
     #expect(try await queue.save(.episode(b), change: 1) {} == .written)
     #expect(try await queue.save(.project, change: 1) {} == .written)
   }
@@ -89,7 +89,7 @@ struct SaveQueueTests {
     #expect(attempts.withLock { $0 } == 3)
   }
 
-  /// 다시 시도하기 전마다 알려 준다(상태 줄 "다시 시도 중"). 처음부터 성공하면 부르지 않는다.
+  /// Reports before each retry (status bar "retrying"). Not called if the first attempt succeeds.
   @Test func reportsEachRetry() async throws {
     let queue = SaveQueue(retryDelays: fast)
     let attempts = Mutex(0)
@@ -117,12 +117,12 @@ struct SaveQueueTests {
         throw ProjectError.writeFailed(URL(filePath: "/x"), reason: "디스크 꽉 참")
       }
     }
-    // 처음 1번 + 재시도 3번
+    // First attempt + 3 retries
     #expect(attempts.withLock { $0 } == 4)
     #expect(await queue.lastWrittenChange(for: .project) == nil)
   }
 
-  /// 옛 저장이 실패해서 재시도를 기다리는 사이에 새 저장이 끝나면, 옛 저장은 다시 쓰지 않고 포기한다.
+  /// If a new save finishes while an old failed save waits to retry, the old save gives up instead of writing again.
   @Test func retryingOldSaveYieldsToNewerSave() async throws {
     let queue = SaveQueue(retryDelays: [.milliseconds(200), .milliseconds(200), .milliseconds(200)])
     let content = Mutex("")

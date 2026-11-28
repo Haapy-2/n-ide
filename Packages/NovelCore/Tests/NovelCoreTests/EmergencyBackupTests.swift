@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import NovelCore
 
-/// 작품 폴더에 저장하지 못한 원고를 작품 밖에 따로 두었다가 다음에 열 때 되살린다.
+/// Manuscripts that couldn't be saved to the project folder are kept outside it and restored on the next open.
 struct EmergencyBackupTests {
   @Test func writesAndFindsOnlyThisProjectsEpisodes() throws {
     let folder = try TestFolder()
@@ -100,7 +100,7 @@ struct EmergencyBackupTests {
     #expect(try store.snapshots(of: id).isEmpty)
   }
 
-  /// 지금 파일을 읽지 못하면(UTF-8이 아님 등) `복원 전` 스냅샷 없이 덮지 않는다. 덮으면 그 파일 내용은 어디에도 남지 않는다.
+  /// If the current file can't be read (not UTF-8 etc.), don't overwrite without a `복원 전` snapshot. Overwriting would lose that file's content entirely.
   @Test func restoreRefusesWhenCurrentFileCannotBeRead() throws {
     let folder = try TestFolder()
     defer { folder.remove() }

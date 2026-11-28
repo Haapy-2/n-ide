@@ -1,7 +1,7 @@
 import NovelCore
 import SwiftUI
 
-/// 작업 공간 창 하나: 작품 폴더를 백그라운드에서 열고(필요하면 복구), 다 열리면 작업 공간을 보여준다.
+/// One workspace window: opens the project folder in the background (recovering if needed), then shows the workspace once open.
 struct WorkspaceWindow: View {
   let url: URL
   @Environment(\.openWindow) private var openWindow
@@ -18,7 +18,7 @@ struct WorkspaceWindow: View {
     Group {
       switch state {
       case .loading:
-        // 목표가 0.3초 이내라 안내 문구 없이 종이만 잠깐 보인다.
+        // The target is under 0.3 s, so just the paper shows briefly without a message.
         Color.paper.frame(minWidth: 720, minHeight: 480)
       case .loaded(let model):
         WorkspaceView(model: model)
@@ -41,7 +41,7 @@ struct WorkspaceWindow: View {
   private func load() async {
     let url = url
     do {
-      // 파일 읽기와 복구는 메인 스레드 밖에서.
+      // File reading and recovery off the main thread.
       var (project, recovery) = try await Task.detached { try ProjectStore(root: url).open() }.value
       RecentProjects.record(url: url, title: project.title, episodeCount: project.episodes.count)
       recoveryNotice = Self.notice(for: recovery)

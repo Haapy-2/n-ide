@@ -1,14 +1,14 @@
 import AppKit
 import NovelCore
 
-/// 같은 말 여러 커서의 편집기 쪽 상태(⌘D, PLAN 16장). 계산은 NovelCore `MultiCursor`.
+/// Editor-side state of same-word multi-cursor (⌘D, PLAN ch.16). Computation is NovelCore `MultiCursor`.
 final class MultiCursorSession {
   var cursor: MultiCursor
-  /// 표시된 글자 방식(16장 5번 ⓑ)으로 조합 중일 때 자리마다 조합 중인 글 범위. 앞에서부터, 맨 앞이 입력기와 이어진 자리.
+  /// Per-spot composing range during displayed-text composition (ch.16 #5 ⓑ). In order; the first is the spot tied to the IME.
   var marked: [NSRange]?
-  /// 지금 만들고 있는 한 글자의 되돌리기 기록. 입력기가 그 글자를 고치는 동안은 같은 기록의 범위만 늘린다.
+  /// Undo record of the character being built. While the IME edits it, only that record's range grows.
   var input: MultiInputUnit?
-  /// 위아래로 잇달아 움직이는 동안 자리마다 지킬 가로 위치(짧은 줄을 지나도 돌아오게). 다른 명령이 오면 잊는다.
+  /// Per-spot horizontal position kept during consecutive up/down moves (so it returns after passing short lines). Forgotten on any other command.
   var goalX: [CGFloat]?
 
   init(cursor: MultiCursor) {
@@ -16,11 +16,11 @@ final class MultiCursorSession {
   }
 }
 
-/// 자리마다 한 번에 고친 것의 되돌리기 기록. `ranges`는 지금 본문에서 고친 글이 놓인 자리, `originals`는 고치기 전 글.
+/// Undo record of one simultaneous edit across spots. `ranges` are where edited text sits in the current body, `originals` the pre-edit text.
 final class MultiInputUnit {
   var ranges: [NSRange]
   let originals: [String]
-  /// 되돌린 뒤 놓을 커서들(16장 U2)
+  /// Carets to place after undo (ch.16 U2)
   let cursorsBefore: [NSRange]
 
   init(ranges: [NSRange], originals: [String], cursorsBefore: [NSRange]) {
@@ -29,7 +29,7 @@ final class MultiInputUnit {
     self.cursorsBefore = cursorsBefore
   }
 
-  /// 입력기가 이 기록의 글자들만 고치는가(자리마다 고칠 범위가 기록 범위 안).
+  /// Whether the IME edits only this record's characters (each spot's edit range inside the record range).
   func covers(_ targets: [NSRange]) -> Bool {
     guard targets.count == ranges.count else { return false }
     return zip(ranges, targets).allSatisfy { unit, target in
@@ -38,23 +38,23 @@ final class MultiInputUnit {
   }
 }
 
-/// 여러 커서일 때 `ManuscriptTextView`가 입력기와의 약속(`NSTextInputClient`)을 직접 맡는다. 커서가 하나면 이 파일의 코드는 돌지 않는다.
-/// 본문은 실제로 모든 자리에서 고치고(뒤에서부터, `shouldChangeText` → 고치기 → `didChangeText` 한 길),
-/// `NSTextView`의 선택은 늘 맨 앞 자리다(입력기와 이어진 커서, 16장 5번). 나머지 자리는 직접 그린다.
-/// 이 상태에서는 조합 중에도 텍스트 저장소를 고친다(CLAUDE.md 예외): 조합 범위를 `NSTextView`가 아니라 여기서 들고 있어서
-/// 어긋날 속 상태가 없다. 계산이 맞지 않는 상황(낡은 범위, 맨 앞 커서 밖을 가리키는 입력기)이 오면 고치지 않고 여러 커서를 끝낸다.
+/// With multi-cursor, `ManuscriptTextView` handles the IME contract (`NSTextInputClient`) directly. With one cursor this file's code doesn't run.
+/// The body is really edited at every spot (back to front, one path: `shouldChangeText` → edit → `didChangeText`),
+/// and `NSTextView`'s selection is always the leading spot (the caret tied to the IME, ch.16 #5). Other spots are drawn directly.
+/// In this state text storage is edited even during composition (CLAUDE.md exception): composition ranges are held here, not in `NSTextView`,
+/// so there's no internal state to drift. When the math doesn't hold (stale ranges, IME pointing outside the leading caret), don't edit; end multi-cursor.
 extension ManuscriptTextView {
 
   var multiCursorRanges: [NSRange]? { multiCursor?.cursor.ranges }
 
   // MARK: - ⌘D
 
-  /// 편집 메뉴 명령을 키보드 초점이 있는 편집기로 보낸다(초점이 사이드바·검색 칸이면 아무 일도 없다).
+  /// Send Edit menu commands to the editor with keyboard focus (nothing happens if focus is on the sidebar or a search field).
   static func sendSelectNextOccurrence() {
     NSApp.sendAction(#selector(selectNextOccurrence(_:)), to: nil, from: nil)
   }
 
-  /// 커서만 있으면 커서 아래 단어를 고르고, 고른 말이 있으면 다음 같은 말을 하나 더 고른다(VS Code ⌘D).
+  /// With a bare caret, select the word under it; with a selection, add the next occurrence (VS Code ⌘D).
   @objc func selectNextOccurrence(_ sender: Any?) {
     guard multiCursorEnabled else { return }
     finishComposition()
@@ -98,7 +98,7 @@ extension ManuscriptTextView {
     }
   }
 
-  /// 여러 커서를 끝내고 맨 앞 자리 하나로(Esc). 조합 중이면 먼저 확정한다.
+  /// End multi-cursor, keeping the leading spot only (Esc). Commit composition first if composing.
   func endMultiCursor() {
     guard let session = multiCursor else { return }
     finishComposition()
@@ -107,7 +107,7 @@ extension ManuscriptTextView {
     if NSMaxRange(primary) <= (string as NSString).length { setSelectedRange(primary) }
   }
 
-  /// 상태만 버린다. 본문·선택은 건드리지 않는다(다른 길이 본문이나 선택을 막 바꾸는 중일 때).
+  /// Drop the state only. Body and selection are untouched (another path is in the middle of changing them).
   func dropMultiCursor() {
     guard let session = multiCursor else { return }
     if session.marked != nil {
@@ -127,9 +127,9 @@ extension ManuscriptTextView {
     setSelectedRange(primary)
   }
 
-  // MARK: - 입력기
+  // MARK: - IME
 
-  /// 표시된 글자 방식. 처리했으면 true, 아니면 여러 커서를 끝냈으니 부르는 쪽이 보통 입력으로 넘긴다.
+  /// Displayed-text mode. True if handled; otherwise multi-cursor was ended and the caller falls back to normal input.
   func multiCursorSetMarkedText(_ text: String, selectedRange: NSRange, replacementRange: NSRange) -> Bool {
     guard let session = multiCursor else { return false }
     let anchors = session.marked ?? session.cursor.ranges
@@ -150,7 +150,7 @@ extension ManuscriptTextView {
     return true
   }
 
-  /// 확정 글(표시된 글자 방식의 마지막) 또는 표시된 글자 없는 방식의 한 글자. 처리했으면 true.
+  /// Committed text (end of displayed-text mode) or one character in no-display mode. True if handled.
   func multiCursorInsertText(_ text: String, replacementRange: NSRange) -> Bool {
     guard let session = multiCursor else { return false }
     let anchors = session.marked ?? session.cursor.ranges
@@ -168,7 +168,7 @@ extension ManuscriptTextView {
     return true
   }
 
-  /// 입력기가 조합을 끝냄(한/영 전환 등, 16장 I5). 자리마다 지금 글 그대로 확정한다.
+  /// The IME ended composition (input source switch etc., ch.16 I5). Commit the current text at every spot.
   func multiCursorUnmark() {
     guard let session = multiCursor, session.marked != nil else { return }
     session.marked = nil
@@ -180,7 +180,7 @@ extension ManuscriptTextView {
     return MultiCursor.targets(forReplacement: replacementRange, around: anchors, textLength: (string as NSString).length)
   }
 
-  /// 키 명령(화살표·지우기·엔터·탭·Esc). 처리했으면 true. 아직 여러 커서로 하지 않는 명령은 여러 커서를 끝내고 false.
+  /// Key commands (arrows, delete, Return, Tab, Esc). True if handled. Commands not yet supported in multi-cursor end it and return false.
   func multiCursorDoCommand(_ selector: Selector) -> Bool {
     guard let session = multiCursor else { return false }
     if let (motion, extending) = Self.multiCursorMoves[selector] {
@@ -207,7 +207,7 @@ extension ManuscriptTextView {
     }
   }
 
-  /// 지우기 키: 자리마다 선택이 있으면 그 선택, 커서만 있으면 커서에서 `motion`만큼. 모든 자리가 ⌘Z 한 단위.
+  /// Delete keys: each spot's selection if any, otherwise `motion` from the caret. All spots are one ⌘Z unit.
   private func deleteAtMultiCursor(_ motion: CursorMotion) {
     guard let session = multiCursor else { return }
     let ranges = session.cursor.ranges
@@ -224,9 +224,9 @@ extension ManuscriptTextView {
     }
   }
 
-  // MARK: - 복사와 붙여 넣기 (16장 E7)
+  // MARK: - Copy and paste (ch.16 E7)
 
-  /// ⌘C: 고른 글을 줄바꿈으로 이어 복사(VS Code). 모두 빈 선택이면 아무것도 하지 않는다(커서 하나일 때와 같다).
+  /// ⌘C: copy the selections joined by newlines (VS Code). If all are empty, do nothing (same as with one cursor).
   func multiCursorCopy(to pasteboard: NSPasteboard) {
     guard let session = multiCursor,
       let text = MultiCursor.copiedText(session.cursor.ranges, in: string as NSString)
@@ -235,7 +235,7 @@ extension ManuscriptTextView {
     pasteboard.setString(text, forType: .string)
   }
 
-  /// ⌘X: 복사한 뒤 고른 글을 모든 자리에서 지운다(⌘Z 한 단위).
+  /// ⌘X: copy, then delete the selections at every spot (one ⌘Z unit).
   func multiCursorCut(to pasteboard: NSPasteboard) {
     guard let session = multiCursor, session.cursor.ranges.contains(where: { $0.length > 0 }) else { return }
     finishComposition()
@@ -247,7 +247,7 @@ extension ManuscriptTextView {
     selectPrimary()
   }
 
-  /// ⌘V: 줄 수가 커서 수와 같으면 한 줄씩, 아니면 모든 자리에 같은 글(⌘Z 한 단위). 글이 아닌 것(그림)은 넣지 않는다.
+  /// ⌘V: one line per cursor if the line count equals the cursor count, otherwise the same text at every spot (one ⌘Z unit). Non-text (images) isn't pasted.
   func multiCursorPaste(from pasteboard: NSPasteboard) {
     guard let session = multiCursor, let text = pasteboard.string(forType: .string) else { return }
     finishComposition()
@@ -259,10 +259,10 @@ extension ManuscriptTextView {
     scrollRangeToVisible(session.cursor.ranges[0])
   }
 
-  // MARK: - 고치기와 되돌리기
+  // MARK: - Editing and undo
 
-  /// 자리마다 한 번에 고친다. 메인 스레드에서 기다림 없이 끝난다(16장 D6). 고쳤으면 자리마다 새 글이 놓인 범위.
-  /// 범위가 낡았으면(16장 D1) 아무것도 고치지 않고 nil.
+  /// Edit all spots at once. Finishes on the main thread without waiting (ch.16 D6). Returns each spot's new-text range if edited.
+  /// If ranges are stale (ch.16 D1), edit nothing and return nil.
   private func applyMultiCursor(_ targets: [NSRange], texts: [String], extendingInput: Bool) -> [NSRange]? {
     guard let session = multiCursor, let storage = textStorage,
       let edit = MultiCursor.edit(targets, texts: texts, textLength: storage.length)
@@ -301,8 +301,8 @@ extension ManuscriptTextView {
     return edit.inserted
   }
 
-  /// 뒤에서부터 자리마다 고친다. `beginEditing`으로 묶지 않는다: 묶으면 첫 자리~끝 자리 전체가 한 번 바뀐 것으로 잡혀
-  /// 그만큼을 다시 처리한다(10만 자, 커서 2개라도 글 처음·끝이면 69ms). 자리마다면 고친 곳만(커서 100개 3.2ms, 측정).
+  /// Edit spot by spot from the back. Not wrapped in `beginEditing`: that would register first-to-last spot as one change
+  /// and reprocess all of it (69 ms for 100k chars with just 2 cursors at start and end). Per spot, only edited parts (100 cursors 3.2 ms, measured).
   private func replaceEach(_ changes: [TextChange], in storage: NSTextStorage) {
     for change in changes.reversed() {
       storage.replaceCharacters(in: change.range, with: NSAttributedString(string: change.text, attributes: style.textAttributes))
@@ -315,8 +315,8 @@ extension ManuscriptTextView {
     }
   }
 
-  /// 한 번에 고친 것 되돌리기(다시 실행도 같은 함수). 자리가 본문 밖이면(있어서는 안 되는 상태) 아무것도 바꾸지 않는다.
-  /// 되돌린 뒤에는 그때의 커서들로 다시 여러 커서가 된다.
+  /// Undo of one simultaneous edit (redo uses the same function). If a spot is outside the body (must not happen), change nothing.
+  /// After undo, multi-cursor resumes with the carets of that time.
   private func revertMultiInput(_ unit: MultiInputUnit) {
     finishComposition()
     dropMultiCursor()
@@ -349,9 +349,9 @@ extension ManuscriptTextView {
     needsDisplay = true
   }
 
-  // MARK: - 그리기
+  // MARK: - Drawing
 
-  /// 맨 앞 말고 다른 자리의 선택 바탕. 글자 아래에 그린다.
+  /// Selection background of non-leading spots. Drawn under the glyphs.
   func drawMultiCursorSelections(in rect: NSRect) {
     guard let ranges = multiCursor?.cursor.ranges.dropFirst(), let layoutManager, let textContainer else { return }
     NSColor.selectionToken.setFill()
@@ -367,7 +367,7 @@ extension ManuscriptTextView {
     }
   }
 
-  /// 맨 앞 말고 다른 자리의 커서. 맨 앞 커서가 그려져 있을 때만(`extraCaretsOn`).
+  /// Carets of non-leading spots. Only while the leading caret is drawn (`extraCaretsOn`).
   func drawMultiCursorCarets(in rect: NSRect) {
     guard extraCaretsOn, let ranges = multiCursor?.cursor.ranges.dropFirst() else { return }
     insertionPointColor.setFill()
@@ -377,14 +377,14 @@ extension ManuscriptTextView {
     }
   }
 
-  /// 시스템이 맨 앞 커서를 켜는 그리기 안에서 다른 커서도 그린다. 그 칸들은 `invalidateExtraCarets`로
-  /// 이 그리기에 들어와 있어, 다음 화면 갱신을 기다리지 않고 같은 순간에 켜진다.
+  /// Other carets are drawn inside the system's draw that turns the leading caret on. Their rects were added to this draw
+  /// via `invalidateExtraCarets`, so they turn on at the same moment without waiting for the next refresh.
   func drawExtraCaretsWithFirst() {
     extraCaretsOn = true
     drawMultiCursorCarets(in: visibleRect)
   }
 
-  /// 창이 비활성화되는 등 시스템이 커서를 직접 끌 때.
+  /// When the system turns the caret off directly, e.g. on window deactivation.
   func turnOffExtraCarets() {
     guard extraCaretsOn else { return }
     extraCaretsOn = false
@@ -403,7 +403,7 @@ extension ManuscriptTextView {
     return caretRect(in: line.offsetBy(dx: textContainerOrigin.x, dy: textContainerOrigin.y))
   }
 
-  /// `index` 앞에 놓인 커서의 줄 칸(글 상자 좌표, 폭 1pt, x가 커서 자리). 줄이 접히는 자리는 다음 줄 처음.
+  /// Line rect of a caret placed before `index` (text container coords, 1 pt wide, x is the caret position). At a wrap point, the next line's start.
   func caretLine(at index: Int) -> NSRect? {
     guard let layoutManager, let textContainer else { return nil }
     let length = (string as NSString).length
@@ -415,8 +415,8 @@ extension ManuscriptTextView {
       line.size.width = 1
       return line
     }
-    // 글자 상자(`boundingRect`)는 글자 모양이 그려지는 넓이라 커서 자리와 다르다(Pretendard에서 12pt쯤).
-    // 커서 자리는 그 글자가 놓인 자리(`location`), 글 끝은 빈 범위의 선택 칸.
+    // The glyph box (`boundingRect`) is where the glyph's shape is drawn, which differs from the caret position (about 12 pt in Pretendard).
+    // The caret position is where the glyph is placed (`location`); at text end, the empty-range selection rect.
     let glyph = layoutManager.glyphIndexForCharacter(at: index)
     var line = layoutManager.lineFragmentRect(forGlyphAt: min(glyph, layoutManager.numberOfGlyphs - 1), effectiveRange: nil)
     if glyph < layoutManager.numberOfGlyphs {

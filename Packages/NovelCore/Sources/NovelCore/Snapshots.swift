@@ -1,33 +1,33 @@
 import Foundation
 
-/// 스냅샷 종류. 파일 이름 끝(`<시각>-<종류>.md`)에 그대로 들어간다.
+/// Snapshot kind. Goes verbatim at the end of the file name (`<time>-<kind>.md`).
 public enum SnapshotKind: String, Sendable, CaseIterable {
-  /// 직접 찍음(⌥⌘S)
+  /// Taken manually (⌥⌘S)
   case manual
-  /// 설정한 간격마다
+  /// Every configured interval
   case auto
-  /// 회차를 떠날 때(전환·창 닫기·앱 종료)
+  /// On leaving an episode (switch, window close, quit)
   case leave
-  /// 복원 직전의 본문
+  /// Body right before a restore
   case restore
-  /// 외부 변경과 충돌했을 때 앱 쪽 본문
+  /// App-side body on an external-change conflict
   case conflict
-  /// 충돌에서 앱 쪽을 골라 덮어쓴 바깥 본문
+  /// External body overwritten when the app side was chosen in a conflict
   case external
-  /// 작품 전체 바꾸기 직전의 본문
+  /// Body right before project-wide replace
   case replace
-  /// 작품 전체 바꾸기 직후의 본문. `replace`와 짝으로 그 바꾸기가 무엇을 바꿨는지 남는다.
+  /// Body right after project-wide replace. Paired with `replace`, it records what that replace changed.
   case replaced
-  /// 전체 바꾸기를 되돌리기(또는 다시 바꾸기) 직전의 본문. 다시 바꾸기가 이것으로 되돌린 자리를 알아낸다.
+  /// Body right before reverting (or redoing) replace all. Redo uses it to locate the reverted spots.
   case revert
-  /// 회차 이름이 바뀔 때의 본문. 바뀌기 전 제목을 `.title`에 함께 둬서 복원하면 제목도 돌아간다.
-  /// 기록용이라 메모가 있어도 보관 개수로 지운다. `.keep`이 있을 때만 지킨다.
+  /// Body when an episode is renamed. The old title is kept in `.title` so restoring brings the title back too.
+  /// A record, so pruned by keep count even with a memo. Protected only when `.keep` exists.
   case rename
-  /// 같은 말 여러 커서(⌘D)로 들어가기 직전의 본문. 파일 이름에 대문자를 넣지 않으려고 이름을 따로 준다.
+  /// Body right before entering same-word multi-cursor (⌘D). Named explicitly to keep uppercase out of file names.
   case multiCursor = "multicursor"
 
-  /// 보관 개수를 넘으면 지워도 되는 종류. 지울 수 있는 것을 하나씩 적는 허용 목록이라,
-  /// 나중에 종류가 늘어도 여기에 적지 않으면 지워지지 않는다.
+  /// Kinds that may be deleted beyond the keep count. An allowlist naming each deletable kind,
+  /// so kinds added later aren't deleted unless listed here.
   public var isPrunable: Bool {
     switch self {
     case .auto, .leave, .rename, .multiCursor: true
@@ -35,30 +35,30 @@ public enum SnapshotKind: String, Sendable, CaseIterable {
     }
   }
 
-  /// 고친 글을 담는 종류. 마지막 스냅샷과 같으면 찍지 않고, 못 찍었으면 다음 간격이나 떠날 때 다시 찍는다.
+  /// Kinds holding edited text. Not taken if equal to the last snapshot; if it failed, retaken at the next interval or on leave.
   public var capturesEdits: Bool { self == .auto || self == .leave }
 }
 
-/// 스냅샷 하나. 목록 파일 없이 파일 이름에서 바로 만든다(본문은 `readSnapshot`으로 따로 읽는다).
+/// One snapshot. Built directly from the file name, no index file (the body is read separately with `readSnapshot`).
 public struct Snapshot: Hashable, Sendable, Identifiable {
   public let episodeID: EpisodeID
   public let kind: SnapshotKind
-  /// 파일 이름의 시각(초 단위)
+  /// Time from the file name (second resolution)
   public let date: Date
   public let url: URL
-  /// 같은 초·같은 종류로 또 찍었을 때 붙는 번호(처음 것은 1)
+  /// Number appended when taken again at the same second and kind (the first is 1)
   let sequence: Int
-  /// 정렬용 `yyyyMMdd-HHmmss`
+  /// `yyyyMMdd-HHmmss` for sorting
   let stamp: String
 
   public var id: String { url.lastPathComponent }
-  /// 메모는 본문과 섞이지 않게 같은 이름의 `.memo` 파일에 둔다(복원할 때 본문에 들어가지 않도록).
+  /// The memo lives in a same-named `.memo` file so it doesn't mix with the body (and never enters the body on restore).
   var memoURL: URL { url.deletingPathExtension().appendingPathExtension("memo") }
   var titleURL: URL { url.deletingPathExtension().appendingPathExtension("title") }
   var keepURL: URL { url.deletingPathExtension().appendingPathExtension("keep") }
 
-  /// `20261111-094512-auto.md`, `20261111-094512-auto-2.md`를 읽는다. 모르는 모양이면 nil(목록에도 정리에도 안 잡힘).
-  /// 시각은 `DateFormatter` 대신 숫자를 직접 잘라 달력으로 만든다(`DateFormatter`는 50개 목록에 12.6ms).
+  /// Parses `20261111-094512-auto.md`, `20261111-094512-auto-2.md`. nil for unknown shapes (excluded from the list and pruning).
+  /// Time is built by slicing digits into a calendar instead of `DateFormatter` (`DateFormatter` costs 12.6 ms for a 50-item list).
   init?(url: URL, episodeID: EpisodeID, calendar: Calendar = Snapshot.calendar) {
     let name = url.lastPathComponent
     guard !name.hasPrefix("."), url.pathExtension == "md" else { return nil }
@@ -79,7 +79,7 @@ public struct Snapshot: Hashable, Sendable, Identifiable {
     let fields = DateComponents(
       year: number(0..<4), month: number(4..<6), day: number(6..<8),
       hour: number(8..<10), minute: number(10..<12), second: number(12..<14))
-    // 13월, 25시 같은 없는 시각은 모르는 파일로 본다.
+    // Nonexistent times like month 13 or hour 25 are treated as unknown files.
     guard fields.isValidDate(in: calendar), let date = calendar.date(from: fields) else { return nil }
     self.episodeID = episodeID
     self.kind = kind
@@ -89,14 +89,14 @@ public struct Snapshot: Hashable, Sendable, Identifiable {
     self.stamp = stamp
   }
 
-  /// 파일 이름의 시각은 이 기기의 시간대 기준, 양력.
+  /// File name times are in this device's time zone, Gregorian calendar.
   static var calendar: Calendar {
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = .current
     return calendar
   }
 
-  /// 파일 이름용 시각 `yyyyMMdd-HHmmss`. 이름순이 시간순이 되도록 자릿수를 고정한다.
+  /// File name time `yyyyMMdd-HHmmss`. Fixed width so name order is time order.
   static func stamp(for date: Date) -> String {
     let c = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
     func pad(_ value: Int?, _ width: Int) -> String {
@@ -112,11 +112,11 @@ extension Character {
 }
 
 extension ProjectStore {
-  /// 본문을 `snapshots/<회차ID>/<시각>-<종류>.md`로 남긴다. 이미 있는 스냅샷은 덮지 않고 같은 초면 `-2`, `-3`을 붙인다.
-  /// `skipIfSameAsLatest`이면 가장 최근 스냅샷(종류 무관)과 내용이 같을 때 찍지 않고 nil을 돌려준다.
-  /// 메모가 비어 있지 않으면 같은 이름의 `.memo`에 함께 쓴다. 본문을 먼저 써서, 메모 쓰기가 실패해도 본문은 남는다.
-  /// `title`은 그때의 회차 제목(`.title`, 빈 제목도 쓴다). 본문 → 제목 → 메모 순서라 뒤가 실패해도 앞은 남는다.
-  /// `fullSync`는 `AtomicFile.write`와 같다: 바로 뒤에 본문을 F_FULLFSYNC로 쓰는 곳(전체 바꾸기)에서만 끈다.
+  /// Keep the body as `snapshots/<episodeID>/<time>-<kind>.md`. Existing snapshots are never overwritten; same-second ones get `-2`, `-3`.
+  /// With `skipIfSameAsLatest`, nothing is taken (returns nil) when content equals the latest snapshot (any kind).
+  /// A non-empty memo is written to a same-named `.memo` too. The body is written first, so it survives a failed memo write.
+  /// `title` is the episode title at that time (`.title`, written even if empty). Order is body → title → memo, so earlier parts survive later failures.
+  /// `fullSync` is as in `AtomicFile.write`: off only where the body is written with F_FULLFSYNC right after (replace all).
   @discardableResult
   public func writeSnapshot(
     _ text: String, episode id: EpisodeID, kind: SnapshotKind, memo: String? = nil, title: String? = nil,
@@ -130,10 +130,10 @@ extension ProjectStore {
     let stamp = Snapshot.stamp(for: date)
     let base = "\(stamp)-\(kind.rawValue)"
     let data = Data(text.utf8)
-    // 같은 초·같은 종류의 가장 큰 번호 다음부터. 정리로 지워진 앞 번호를 다시 쓰면 새 스냅샷이 가장 오래된 것으로
-    // 정렬되어 곧바로 정리된다.
+    // Start after the highest number for the same second and kind. Reusing an earlier number freed by pruning would sort the new snapshot as oldest
+    // and get it pruned immediately.
     var number = (try snapshots(of: id).filter { $0.stamp == stamp && $0.kind == kind }.map(\.sequence).max() ?? 0) + 1
-    // 이름이 있으면 다음 번호로. 같은 순간에 다른 곳(충돌 스냅샷 등)이 같은 이름을 써도 서로 덮지 않는다.
+    // If the name exists, take the next number. Even if another writer (a conflict snapshot etc.) uses the same name at the same moment, neither overwrites the other.
     while true {
       let name = number == 1 ? "\(base).md" : "\(base)-\(number).md"
       let url = folder.appending(path: name, directoryHint: .notDirectory)
@@ -153,7 +153,7 @@ extension ProjectStore {
     return snapshot
   }
 
-  /// 스냅샷을 찍을 때의 회차 제목. 이름 변경 스냅샷에만 있다.
+  /// Episode title when the snapshot was taken. Present only on rename snapshots.
   public func readTitle(_ snapshot: Snapshot) -> String? {
     guard Self.isRegularFile(snapshot.titleURL),
       let data = FileManager.default.contents(atPath: snapshot.titleURL.path(percentEncoded: false))
@@ -161,9 +161,9 @@ extension ProjectStore {
     return String(data: data, encoding: .utf8)
   }
 
-  /// 보관 개수로 지우지 않게 표시한다(이름 변경 스냅샷). 다른 종류는 메모로 지킨다.
-  /// 표시를 먼저 쓰고 본문이 아직 있는지 본다: 정리는 지우기 직전에 표시를 보므로, 그사이 이미 지워졌으면
-  /// 표시를 거두고 false.
+  /// Mark as exempt from keep-count pruning (rename snapshots). Other kinds are protected by a memo.
+  /// Write the mark first, then check the body still exists: pruning checks the mark right before deleting, so if it was already deleted meanwhile,
+  /// withdraw the mark and return false.
   @discardableResult
   public func keep(_ snapshot: Snapshot) throws -> Bool {
     try AtomicFile.write(Data(), to: snapshot.keepURL)
@@ -174,18 +174,18 @@ extension ProjectStore {
     return true
   }
 
-  /// 보관 개수로 지우지 않는 것인지. 이름 변경은 `.keep`, 나머지는 메모가 그 표시다.
+  /// Whether it's exempt from keep-count pruning. For renames `.keep` is the mark, for others the memo.
   public func isKept(_ snapshot: Snapshot) -> Bool {
     Self.isRegularFile(snapshot.kind == .rename ? snapshot.keepURL : snapshot.memoURL)
   }
 
-  /// 한 회차의 스냅샷 목록, 오래된 것부터. 파일 이름만 읽는다. 폴더가 없으면 빈 목록.
+  /// One episode's snapshot list, oldest first. Only file names are read. Empty list if the folder is missing.
   public func snapshots(of id: EpisodeID) throws -> [Snapshot] {
     let folder = layout.snapshotFolder(id)
     guard FileManager.default.fileExists(atPath: folder.path(percentEncoded: false)) else { return [] }
     let urls = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
     let calendar = Snapshot.calendar
-    // 이름만 스냅샷처럼 생긴 폴더·바로가기는 목록에 넣지 않는다(읽을 수도 없고, 정리가 지우면 안 된다).
+    // Folders or aliases merely named like snapshots aren't listed (they can't be read, and pruning must not delete them).
     return urls.compactMap { url in
       Snapshot(url: url, episodeID: id, calendar: calendar).flatMap { Self.isRegularFile(url) ? $0 : nil }
     }.sorted {
@@ -201,13 +201,13 @@ extension ProjectStore {
     return text
   }
 
-  /// 바로가기(심볼릭 링크)를 따라가지 않고 그 자리의 것이 보통 파일인지 본다.
+  /// Check whether the item there is a regular file without following aliases (symbolic links).
   private static func isRegularFile(_ url: URL) -> Bool {
     var info = stat()
     return lstat(url.path(percentEncoded: false), &info) == 0 && (info.st_mode & S_IFMT) == S_IFREG
   }
 
-  /// 메모가 없으면 nil.
+  /// nil if there's no memo.
   public func readMemo(_ snapshot: Snapshot) -> String? {
     guard let data = FileManager.default.contents(atPath: snapshot.memoURL.path(percentEncoded: false)) else {
       return nil
@@ -215,7 +215,7 @@ extension ProjectStore {
     return String(data: data, encoding: .utf8)
   }
 
-  /// 앞뒤 공백을 다듬어 쓴다. 비우면 메모 파일을 없앤다(본문 스냅샷은 그대로).
+  /// Trim surrounding whitespace before writing. An empty memo removes the memo file (the body snapshot stays).
   public func writeMemo(_ memo: String, for snapshot: Snapshot, fullSync: Bool = true) throws {
     let trimmed = memo.trimmingCharacters(in: .whitespacesAndNewlines)
     if trimmed.isEmpty {
@@ -226,21 +226,21 @@ extension ProjectStore {
     }
   }
 
-  /// `auto`·`leave`·`rename`·`multicursor`를 함께 세어 `limit`개를 넘으면 오래된 것부터 바로 지운다(휴지통 아님). 지운 목록을 돌려준다.
-  /// 다른 종류와 모르는 파일은 세지도 지우지도 않는다. 지키기로 한 것(`isKept`)도 세지도 지우지도 않는다.
+  /// Count `auto`·`leave`·`rename`·`multicursor` together and delete the oldest beyond `limit` immediately (not to Trash). Returns the deleted list.
+  /// Other kinds and unknown files are neither counted nor deleted. Protected ones (`isKept`) are neither counted nor deleted either.
   @discardableResult
   public func pruneSnapshots(of id: EpisodeID, keeping limit: Int) throws -> [Snapshot] {
     let prunable = try snapshots(of: id).filter { $0.kind.isPrunable && !isKept($0) }
-    // 0 이하가 들어와도 전부 지우지 않도록 적어도 하나는 남긴다.
+    // Keep at least one so a value ≤ 0 never deletes everything.
     let excess = prunable.count - max(limit, 1)
     guard excess > 0 else { return [] }
     let removed = Array(prunable.prefix(excess))
     var done: [Snapshot] = []
     for snapshot in removed {
-      // 목록에서 이미 걸렀지만, 그 사이에 바뀌었을 수 있어 지우기 직전에 한 번 더 본다(폴더를 지우면 안의 것이 통째로 사라진다).
-      // 그사이 지키기로 했으면(판에서 메모를 단 직후 등) 건너뛴다.
+      // Already filtered in the list, but it may have changed since, so check once more right before deleting (deleting a folder removes everything inside).
+      // Skip if it became protected meanwhile (e.g. right after a memo was added in the panel).
       guard Self.isRegularFile(snapshot.url), !isKept(snapshot) else { continue }
-      // 딸린 파일을 먼저 지운다. 도중에 멈춰도 남는 것은 목록에 보이는 본문이라 다음 정리가 마저 지운다.
+      // Delete companion files first. If interrupted, what remains is the body visible in the list, which the next prune finishes.
       for sidecar in [snapshot.memoURL, snapshot.titleURL] where Self.isRegularFile(sidecar) {
         try FileManager.default.removeItem(at: sidecar)
       }

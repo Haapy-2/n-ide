@@ -1,7 +1,7 @@
 import Foundation
 
-/// 작품 폴더 하나를 읽고 쓴다. 모든 쓰기는 원자적이다.
-/// 메서드는 모두 동기 함수라서, 앱은 메인 스레드가 아닌 곳에서 부른다.
+/// Reads and writes one project folder. All writes are atomic.
+/// All methods are synchronous, so the app calls them off the main thread.
 public struct ProjectStore: Sendable {
   public let layout: ProjectLayout
 
@@ -9,9 +9,9 @@ public struct ProjectStore: Sendable {
     layout = ProjectLayout(root: root)
   }
 
-  // MARK: - 작품
+  // MARK: - Project
 
-  /// 새 작품 폴더를 만든다. 같은 이름의 폴더가 있으면 건드리지 않고 실패한다.
+  /// Create a new project folder. If a folder with the same name exists, fail without touching it.
   @discardableResult
   public static func create(at root: URL, title: String) throws -> ProjectStore {
     let fileManager = FileManager.default
@@ -26,13 +26,13 @@ public struct ProjectStore: Sendable {
     return store
   }
 
-  /// `project.json`을 엄격하게 읽는다. 깨졌으면 복구하지 않고 오류를 던진다. 작품을 열 때는 `open()`을 쓴다.
+  /// Read `project.json` strictly. If broken, throw without recovering. Use `open()` when opening a project.
   public func loadProject() throws -> ProjectFile {
     try Self.decodeProject(at: layout.projectFile)
   }
 
-  /// 저장하기 전에 지금 파일이 정상이면 `project.json.bak`으로 남긴다. 깨진 파일로 백업을 덮어쓰지 않는다.
-  /// 백업은 덤이라 실패해도 본 저장은 한다. 백업 실패로 본 저장까지 멈추면 바뀐 회차 목록이 통째로 사라진다.
+  /// Before saving, keep the current file as `project.json.bak` if it's valid. A broken file never overwrites the backup.
+  /// The backup is a bonus, so the real save proceeds even if it fails. Stopping the real save on a backup failure would lose the changed episode list entirely.
   public func saveProject(_ project: ProjectFile) throws {
     let current = layout.projectFile
     if let data = FileManager.default.contents(atPath: current.path(percentEncoded: false)),
@@ -41,7 +41,7 @@ public struct ProjectStore: Sendable {
       try? AtomicFile.write(data, to: layout.projectBackupFile)
     }
     let encoder = JSONEncoder()
-    // 사람이 텍스트 편집기로 열어도 읽기 쉽게 들여쓰고, 키 순서를 고정해 git 비교도 깔끔하게 한다.
+    // Indented for readability in a text editor, with fixed key order for clean git diffs.
     encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
     try AtomicFile.write(try encoder.encode(project), to: current)
   }
@@ -54,7 +54,7 @@ public struct ProjectStore: Sendable {
   }
 
   static func decodeProject(data: Data, url: URL) throws -> ProjectFile {
-    // 버전부터 확인한다. 더 새 형식이면 전체를 해석하기 전에 거부해야 엉뚱한 오류가 나지 않는다.
+    // Check the version first. A newer format must be rejected before decoding everything, to avoid misleading errors.
     guard let header = try? JSONDecoder().decode(VersionHeader.self, from: data) else {
       throw ProjectError.corruptProjectFile(url)
     }
@@ -68,7 +68,7 @@ public struct ProjectStore: Sendable {
     return project
   }
 
-  // MARK: - 회차와 노트 본문
+  // MARK: - Episode and note bodies
 
   public func readEpisode(_ id: EpisodeID) throws -> String {
     try readText(at: layout.episodeFile(id))
@@ -86,7 +86,7 @@ public struct ProjectStore: Sendable {
     try AtomicFile.write(Data(text.utf8), to: layout.noteFile(id))
   }
 
-  /// 본문은 UTF-8 그대로 읽는다. 다른 편집기가 붙인 BOM만 떼고, 줄바꿈 등 나머지는 손대지 않는다.
+  /// Bodies are read as UTF-8 as is. Only a BOM added by other editors is stripped; newlines and everything else are untouched.
   func readText(at url: URL) throws -> String {
     guard var data = FileManager.default.contents(atPath: url.path(percentEncoded: false)) else {
       throw ProjectError.missingTextFile(url)

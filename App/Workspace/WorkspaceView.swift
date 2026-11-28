@@ -1,20 +1,20 @@
 import NovelCore
 import SwiftUI
 
-/// 작품 하나의 작업 공간: 유리 사이드바(회차 목록) + 불투명 종이 편집 영역.
+/// Workspace for one project: glass sidebar (episode list) + opaque paper editor area.
 struct WorkspaceView: View {
-  /// nil이면 미리보기·스냅샷용이라 본문을 읽지 않고 목록을 바꿀 수 없다.
+  /// nil is for previews/snapshots: bodies aren't read and the list can't change.
   private let model: ProjectModel?
   private let previewProject: ProjectFile?
   @AppStorage(AppSettingKey.sidebarSeesThroughWindow) private var sidebarSeesThroughWindow = true
   @AppStorage(AppSettingKey.characterCountGoalBasis) private var goalBasis: CharacterCountBasis = .withSpaces
   @AppStorage(AppSettingKey.collapsedEpisodeGroups) private var collapsedText = ""
   @State private var selection: EpisodeID?
-  /// 여러 개 고른 회차(⌘클릭·⇧클릭). 묶기에 쓴다.
+  /// Multiple selected episodes (⌘-click, ⇧-click). Used for grouping.
   @State private var marked: Set<EpisodeID> = []
-  /// 보기 메뉴(⌥⌘S)와 툴바의 사이드바 버튼이 함께 쓴다.
+  /// Shared by the View menu (⌥⌘S) and the toolbar sidebar button.
   @State private var columnVisibility: NavigationSplitViewVisibility = .all
-  /// 묶을 회차(이름 묻는 창이 떠 있음)
+  /// Episodes to group (name prompt is up)
   @State private var grouping: Set<EpisodeID>?
   @State private var renamingGroup: GroupID?
   @State private var groupTitle = ""
@@ -25,39 +25,39 @@ struct WorkspaceView: View {
   @State private var settingGoal: EpisodeID?
   @State private var goalText = ""
   @State private var alertMessage: String?
-  /// 메모를 달 스냅샷. 토스트의 "메모 달기"를 누르면 채워지고, nil이 아니면 메모 칸이 뜬다.
+  /// Snapshot to attach a memo to. Filled when the toast's "메모 달기" is pressed; when non-nil the memo field appears.
   @State private var memoTarget: Snapshot?
-  /// 편집 영역 오른쪽 위 토스트(⌘S 저장, 스냅샷 찍기).
+  /// Toast at the top right of the editor (⌘S save, take snapshot).
   @State private var toasts = ToastCenter()
   @State private var memoText = ""
-  /// 열려 있는 스냅샷 판(⇧⌘S). nil이면 닫힘.
+  /// Open snapshot panel (⇧⌘S). nil = closed.
   @State private var snapshotBrowser: SnapshotBrowser?
-  /// 판을 열 때 편집기가 초점을 갖고 있었는지. 닫을 때 그 자리로 돌려준다.
+  /// Whether the editor had focus when the panel opened. Focus is returned there on close.
   @State private var editorHadFocus = false
-  /// 검색 패널을 열 때 편집기가 초점을 갖고 있었는지. 닫을 때 그 자리로 돌려준다(스냅샷 판과 같다).
+  /// Whether the editor had focus when the search panel opened. Returned there on close (same as the snapshot panel).
   @State private var searchTookEditorFocus = false
-  /// 확인을 기다리는 사이드바 되돌리기. nil이 아니면 확인 창이 뜬다.
+  /// Sidebar undo awaiting confirmation. When non-nil the confirmation appears.
   @State private var pendingUndo: PendingUndo?
   @State private var stopAskingUndo = false
-  /// 작품 전체 검색. 처음 열 때 만들고, 패널을 닫아도 문구와 결과는 남긴다(다시 열면 이어서).
+  /// Project search. Created on first open; phrase and results remain after closing (resumes on reopen).
   @State private var search: ProjectSearch?
-  /// 작품 전체 바꾸기. 검색과 함께 만든다.
+  /// Project-wide replace. Created together with search.
   @State private var replace: ProjectReplace?
-  /// 열려 있는 전체 바꾸기 되돌리기 창. nil이면 닫힘.
+  /// Open replace-all revert sheet. nil = closed.
   @State private var revertSession: RevertSession?
-  /// 바꾼 회차 목록에서 고른 회차. 편집기에 그 회차 본문이 올라간 뒤 스냅샷 판을 연다.
+  /// Episode chosen in the replaced-episodes list. The snapshot panel opens after its body is loaded into the editor.
   @State private var snapshotRequest: SnapshotRequest?
   @State private var showingSearch = false
-  /// 사이드바 두 패널의 잰 왼쪽 여백. 패널이 바뀌어도 남아야 해서 여기 둔다(EpisodeList.measuredInset).
+  /// Measured left padding for both sidebar panels. Kept here so it survives panel switches (EpisodeList.measuredInset).
   @State private var listInset: CGFloat?
   @State private var searchInset: CGFloat?
-  /// ⇧⌘F를 누를 때마다 늘려 입력 칸에 초점을 준다.
+  /// Incremented on every ⇧⌘F to focus the input field.
   @State private var searchFocusRequest = 0
-  /// 검색 결과로 가기. 편집기가 그 회차의 본문을 올린 뒤 처리한다.
+  /// Go to a search result. Handled after the editor loads that episode's body.
   @State private var reveal: TextReveal?
-  /// 창의 실행 취소 기록. 편집기는 회차별로 따로 갖고 있어서, 사이드바에 초점이 있을 때 ⌘Z가 이것을 쓴다.
+  /// The window's undo history. The editor keeps per-episode histories, so ⌘Z uses this when the sidebar has focus.
   @Environment(\.undoManager) private var undoManager
-  /// 이 창이 앞(키 창)에 오면 설정 창이 이 작품의 목표를 보여 준다.
+  /// When this window comes to the front (key window), Settings shows this project's goal.
   @Environment(\.appearsActive) private var appearsActive
 
   init(model: ProjectModel) {
@@ -84,7 +84,7 @@ struct WorkspaceView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.paper)
         .overlay { ToastOverlay(center: toasts) }
-        // 제목과 버튼을 편집 영역 쪽 툴바에 붙인다. 사이드바 쪽에 두면 사이드바 폭만큼만 보여서 긴 제목이 잘린다.
+        // Title and buttons attach to the editor-side toolbar. On the sidebar side only the sidebar width shows, cutting long titles.
         .navigationTitle(project.title)
         .navigationSubtitle(selectedEpisodeLabel)
         .toolbar {
@@ -107,10 +107,10 @@ struct WorkspaceView: View {
       }
     }
     .frame(minWidth: 720, minHeight: 480)
-    // 창 바탕을 반투명 재질로 바꾸면 그 위에 떠 있는 유리 사이드바로 창 뒤의 다른 앱과 바탕화면이 비친다.
-    // 종이(편집 영역)는 불투명 paper 색이라 본문 쪽은 비치지 않는다.
+    // Making the window background a translucent material lets other apps and the desktop show through the floating glass sidebar.
+    // The paper (editor area) is opaque paper color, so nothing shows through on the body side.
     .modifier(SeeThroughWindowBackground(isEnabled: sidebarSeesThroughWindow))
-    // 회차 메뉴(EpisodeCommands)가 지금 앞에 있는 창의 작업 공간에 명령을 보낼 수 있게 한다.
+    // Lets the episode menu (EpisodeCommands) send commands to the front window's workspace.
     .focusedSceneValue(\.workspaceActions, model == nil ? nil : actions)
     .alert("회차 이름", isPresented: isRenaming) {
       TextField("제목", text: $renameText)
@@ -178,7 +178,7 @@ struct WorkspaceView: View {
           performRevert(session.undoable.record, ids)
         })
     }
-    // 편집기 ⌘Z로 열린 회차의 전체 바꾸기만 되돌렸으면 다른 회차도 되돌릴 수 있다고 알린다.
+    // If editor ⌘Z undid only the open episode's replace all, say the other episodes can be reverted too.
     .onReceive(NotificationCenter.default.publisher(for: .NSUndoManagerDidUndoChange)) { note in
       guard let manager = note.object as? UndoManager, let model, model.autosaver.ownsEditorUndo(manager),
         manager.redoActionName == ProjectReplace.actionName, let replace, let last = replace.history.last
@@ -188,11 +188,11 @@ struct WorkspaceView: View {
         action: last.entries.count > 1 ? .init(title: "모든 회차 되돌리기") { beginRevert() } : nil,
         duration: .seconds(5))
     }
-    // 판이 보고 있던 회차에서 벗어나면(메뉴·단축키로 회차를 옮기거나 휴지통으로 보냄) 판을 닫는다.
+    // Close the panel when leaving the episode it was showing (moving via menu/shortcut or trashing it).
     .onChange(of: selection) {
       if snapshotBrowser?.episodeID != selection { closeSnapshots() }
       if snapshotRequest?.episodeID != selection { snapshotRequest = nil }
-      // 메뉴·단축키·검색으로 회차를 옮기면 여러 개 고른 것을 그 회차 하나로 줄인다.
+      // Moving episodes via menu/shortcut/search shrinks a multi-selection to that one episode.
       if let selection, !marked.contains(selection) { marked = [selection] }
     }
     .onChange(of: project.episodes.map(\.id)) { old, new in
@@ -200,21 +200,21 @@ struct WorkspaceView: View {
         EpisodeViewStates.shared.lastOpened(among: new) ?? new.first
       }
     }
-    // 창을 닫을 때 남은 저장을 마친다(Task가 저장기를 붙잡고 있어 창이 사라져도 끝까지 저장된다).
+    // Finish pending saves on window close (a Task retains the saver, so saving completes even after the window is gone).
     .onChange(of: appearsActive, initial: true) {
       if appearsActive, let model { ActiveWorkspace.shared.activate(model, undoManager: undoManager) }
     }
     .onDisappear {
       if let model { ActiveWorkspace.shared.deactivate(model) }
       if let model {
-        // 떠날 때 스냅샷과 저장은 편집기가 아직 있는 지금 시작하고, 끝나기를 기다리는 것만 Task로 한다.
+        // Leave snapshot and save start now while the editor still exists; only waiting for completion is in the Task.
         model.autosaver.startFinishing()
         Task { await Self.finishClosing(model) }
       }
     }
   }
 
-  /// 사이드바 자리: 회차 목록, 또는 검색 패널(⇧⌘F).
+  /// Sidebar slot: the episode list, or the search panel (⇧⌘F).
   @ViewBuilder
   private var sidebar: some View {
     if showingSearch, let search, let replace {
@@ -222,7 +222,7 @@ struct WorkspaceView: View {
         search: search, replace: replace, episodes: project.episodes, focusRequest: searchFocusRequest,
         measuredInset: $searchInset,
         onReveal: { target in
-          // 결과는 회차 목록이 바뀌면 다시 찾지만, 다시 찾기가 끝나기 전에 누른 결과는 지운 회차를 가리킬 수 있다.
+          // Results are re-searched when the episode list changes, but a result clicked before that finishes may point at a deleted episode.
           guard project.episodes.contains(where: { $0.id == target.episodeID }) else { return }
           selection = target.episodeID
           reveal = target
@@ -269,8 +269,8 @@ struct WorkspaceView: View {
     }
   }
 
-  /// 회차 목록이 바뀐 뒤(휴지통, ⌘Z, 앱 밖에서 고침)의 선택. 보던 회차가 사라지면 같은 자리(없으면 위) 회차로,
-  /// 고른 회차가 없는데 목록이 비지 않았으면(마지막 회차를 ⌘Z로 되살림) `fallback`으로. 여러 개 고른 것은 남은 회차만.
+  /// Selection after the episode list changes (trash, ⌘Z, outside edits). If the viewed episode vanished, the one at the same position (or above);
+  /// if nothing is selected but the list isn't empty (last episode restored with ⌘Z), `fallback`. A multi-selection keeps only remaining episodes.
   static func afterListChange(
     selection: EpisodeID?, marked: Set<EpisodeID>, old: [EpisodeID], new: [EpisodeID],
     whenNothingSelected fallback: () -> EpisodeID?
@@ -282,7 +282,7 @@ struct WorkspaceView: View {
     return (new.isEmpty ? nil : new[min(oldIndex, new.count - 1)], remaining)
   }
 
-  // MARK: - 회차 묶음
+  // MARK: - Episode groups
 
   private func beginGrouping(_ ids: Set<EpisodeID>) {
     guard !ids.isEmpty else { return }
@@ -328,7 +328,7 @@ struct WorkspaceView: View {
         recordCount: { model.recordCount($0, for: $1) })
     }
     if !showingSearch { searchTookEditorFocus = model.autosaver.yieldFocus() }
-    // 검색 패널은 사이드바 자리에 뜨므로, 사이드바를 가려 둔 채면 펴야 보인다.
+    // The search panel appears in the sidebar slot, so with the sidebar hidden it must be shown.
     if columnVisibility == .detailOnly { columnVisibility = .all }
     showingSearch = true
     searchFocusRequest += 1
@@ -348,7 +348,7 @@ struct WorkspaceView: View {
       EpisodeEditorPane(
         autosaver: model.autosaver, counter: model.counter, episodeID: selection,
         goal: project.episodes.first { $0.id == selection }?.goal ?? 0,
-        // 글자 수는 body에서 읽지 않는다(읽으면 글자 수가 바뀔 때마다 작업 공간 전체가 다시 계산된다).
+        // Counts aren't read in body (reading them would recompute the whole workspace on every count change).
         knownCount: { model.countBox(for: selection).value },
         reveal: reveal,
         onShown: { episodeShown($0) },
@@ -358,10 +358,10 @@ struct WorkspaceView: View {
     }
   }
 
-  // MARK: - 회차 명령
+  // MARK: - Episode commands
 
   private var actions: WorkspaceActions {
-    // 스냅샷 판이 열린 동안에는 본문·제목을 바꾸는 명령을 막는다. 판의 "현재"는 판을 연 때의 본문과 제목이다.
+    // While the snapshot panel is open, commands that change body or title are blocked. The panel's "current" is the body and title at open time.
     let panelOpen = snapshotBrowser != nil
     return WorkspaceActions(
       addEpisode: { addEpisode(after: selection) },
@@ -385,9 +385,9 @@ struct WorkspaceView: View {
       isSidebarVisible: columnVisibility != .detailOnly)
   }
 
-  /// 선택한 회차의 앞(-1)·뒤(+1)에 보이는 회차로 옮기는 명령(접힌 묶음 안은 건너뜀). 없으면 nil.
-  /// 메뉴의 이전·다음 회차는 작품 순서 그대로 옮긴다. 접힌 묶음 안으로 가면 사이드바가 그 묶음을 펼친다(EpisodeList.show).
-  /// 사이드바의 ↑↓는 보이는 줄만 따라간다(EpisodeList.move).
+  /// Command moving to the visible episode before (-1) / after (+1) the selected one (skipping collapsed groups). nil if none.
+  /// Menu previous/next episode follows project order. Going into a collapsed group makes the sidebar expand it (EpisodeList.show).
+  /// Sidebar ↑↓ follows only visible rows (EpisodeList.move).
   private func neighbor(step: Int) -> (() -> Void)? {
     let episodes = project.episodes
     guard let selection, let index = episodes.firstIndex(where: { $0.id == selection }),
@@ -408,8 +408,8 @@ struct WorkspaceView: View {
     }
   }
 
-  /// ⌘S. 자동 저장에는 토스트를 띄우지 않고(SPEC 5장), 직접 눌러 성공했을 때만 "저장했어요".
-  /// 실패나 외부 변경 충돌은 지금처럼 상태 줄·확인 창이 알려 주므로 토스트를 띄우지 않는다.
+  /// ⌘S. No toast for autosave (SPEC ch.5); "저장했어요" only when pressed manually and successful.
+  /// Failures and external-change conflicts are already reported by the status bar and dialogs, so no toast.
   private func saveNow(_ model: ProjectModel) {
     Task {
       await model.autosaver.flush()
@@ -420,8 +420,8 @@ struct WorkspaceView: View {
     }
   }
 
-  /// 저장하면서 스냅샷 찍기(설정에서 켰을 때 ⌘S). 저장이 실패하면 찍지 않는다(실패는 상태 줄이 알림).
-  /// 글이 마지막 스냅샷과 같으면 찍지 않고 "저장했어요"만.
+  /// Snapshot on save (⌘S when enabled in Settings). No snapshot if saving fails (the status bar reports the failure).
+  /// If the text equals the last snapshot, just "저장했어요" without a snapshot.
   private func saveWithSnapshot(_ model: ProjectModel) {
     Task {
       await model.autosaver.flush()
@@ -446,7 +446,7 @@ struct WorkspaceView: View {
     }
   }
 
-  /// 저장을 먼저 끝내고 찍은 뒤 토스트를 띄운다. 메모 칸은 "메모 달기"를 누를 때만 뜬다(글 흐름을 덜 끊으려고).
+  /// Finish saving first, snapshot, then show the toast. The memo field appears only when "메모 달기" is pressed (to interrupt writing less).
   private func takeSnapshot() {
     guard let model else { return }
     Task {
@@ -459,7 +459,7 @@ struct WorkspaceView: View {
     }
   }
 
-  /// 판을 열기 전에 편집기의 조합을 끝내고 초점을 내려놓는다. 지금 본문은 이때 한 번만 복사한다.
+  /// Before opening the panel, end editor composition and release focus. The current body is copied once here.
   private func showSnapshots(preferring preferredID: String? = nil) {
     guard let model, let id = selection, snapshotBrowser == nil, let editor = model.autosaver.beginPanel() else { return }
     editorHadFocus = editor.hadFocus
@@ -470,9 +470,9 @@ struct WorkspaceView: View {
     Task { await browser.load() }
   }
 
-  // MARK: - 전체 바꾸기 되돌리기 (PLAN 14장 5번)
+  // MARK: - Revert replace all (PLAN ch.14 #5)
 
-  /// 되돌리기 창을 연다(토스트, 편집 메뉴, 사이드바·검색 패널의 ⌘Z). 한 회차만 바꾼 작업은 창 없이 바로 되돌린다.
+  /// Open the revert sheet (toast, Edit menu, ⌘Z in sidebar/search panel). Operations that changed just one episode revert directly without a sheet.
   private func beginRevert() {
     guard let replace, revertSession == nil else { return }
     Task {
@@ -492,7 +492,7 @@ struct WorkspaceView: View {
     guard let replace else { return }
     Task {
       let report = await replace.revert(record, ids)
-      // 검색 패널의 "N곳을 바꿨어요"는 이제 맞지 않으니 지우고 지금 본문으로 다시 찾는다.
+      // The search panel's "N곳을 바꿨어요" no longer holds, so clear it and search again on the current text.
       replace.clearFinished()
       toasts.show(
         ProjectReplace.summary(of: report, redo: false), systemImage: "arrow.uturn.backward",
@@ -512,8 +512,8 @@ struct WorkspaceView: View {
     }
   }
 
-  /// 창의 실행 취소 기록에도 남긴다: 사이드바·검색 패널의 ⌘Z가 회차 작업과 순서대로 되돌리기 창을 연다.
-  /// 창을 연 뒤에는 다시 실행 자리에 다시 바꾸기가 남는다(되돌린 회차가 없으면 아무것도 하지 않는다).
+  /// Also recorded in the window's undo history: ⌘Z in the sidebar/search panel opens the revert sheet in order with episode actions.
+  /// After the sheet opens, redo replace stays in the redo slot (does nothing if no episodes were reverted).
   private func registerReplaceUndo(_ replace: ProjectReplace) {
     guard let undoManager else { return }
     undoManager.registerUndo(withTarget: replace) { replace in
@@ -536,8 +536,8 @@ struct WorkspaceView: View {
     undoManager.setActionName(ProjectReplace.actionName)
   }
 
-  /// 바꾼 회차 목록(또는 토스트의 "바꾼 곳 보기"): 그 회차로 옮기고 스냅샷 판을 `바꾸기 전`을 골라 둔 채 연다.
-  /// 판은 지금 본문과 비교하므로, 회차를 옮겼으면 편집기에 그 본문이 올라간 뒤(`onShown`) 연다.
+  /// Replaced-episodes list (or the toast's "바꾼 곳 보기"): go to that episode and open the snapshot panel with `바꾸기 전` preselected.
+  /// The panel compares with the current body, so after moving episodes it opens once that body is loaded in the editor (`onShown`).
   private func showReplaced(_ entry: ProjectReplace.Report.Episode) {
     guard project.episodes.contains(where: { $0.id == entry.id }) else { return }
     closeSnapshots()
@@ -563,7 +563,7 @@ struct WorkspaceView: View {
     model?.autosaver.endPanel(hadFocus: editorHadFocus)
   }
 
-  /// 고른 스냅샷으로 되돌리고 판을 닫는다. 커서는 편집기로 돌아가고 상태 줄에 "취소"가 뜬다.
+  /// Restore to the chosen snapshot and close the panel. The caret returns to the editor and "취소" appears in the status bar.
   private func restoreSnapshot() {
     guard let model, let browser = snapshotBrowser else { return }
     Task {
@@ -572,7 +572,7 @@ struct WorkspaceView: View {
         toasts.show("제목도 되돌렸어요", systemImage: "arrow.uturn.backward")
       }
       guard restored, snapshotBrowser === browser else { return }
-      // 되돌린 본문은 검색 패널의 지난 결과("N곳을 바꿨어요", 찾은 줄)와 맞지 않는다.
+      // The restored body no longer matches the search panel's last result ("N곳을 바꿨어요", matched lines).
       replace?.clearFinished()
       search?.refresh()
       browser.cancel()
@@ -620,7 +620,7 @@ struct WorkspaceView: View {
       guard outcome.renamed > 0 else { return }
       var message = "\(outcome.renamed.formatted())개 회차 이름을 바꿨어요"
       if outcome.unsnapshotted > 0 { message += " · \(outcome.unsnapshotted.formatted())개는 스냅샷을 못 남겼어요" }
-      // 그사이 다른 작업이 실행 취소 맨 위에 올라왔으면 그것을 되돌리지 않는다.
+      // If another action reached the top of the undo stack meanwhile, don't undo it.
       toasts.show(
         message,
         action: .init(title: "되돌리기") {
@@ -641,9 +641,9 @@ struct WorkspaceView: View {
     settingGoal = id
   }
 
-  // MARK: - 사이드바 되돌리기 확인
+  // MARK: - Sidebar undo confirmation
 
-  /// 사이드바 되돌리기 확인 창. 본문(body)이 길어 컴파일러가 한 번에 못 풀어서 따로 뺐다.
+  /// Sidebar undo confirmation. Split out because the body was too long for the compiler to type-check at once.
   private var undoConfirmationDialog: UndoConfirmationDialog {
     UndoConfirmationDialog(pending: $pendingUndo, stopAsking: $stopAskingUndo, perform: performUndo)
   }
@@ -658,18 +658,18 @@ struct WorkspaceView: View {
       return isRedo ? "\(quoted)\(Self.objectParticle(name)) 다시 실행할까요?" : "\(quoted)\(Self.objectParticle(name)) 되돌릴까요?"
     }
 
-    /// 마지막 글자에 받침이 있으면 "을", 없으면 "를". 예: 이름 변경을, 새 회차를
+    /// "을" if the last character has a final consonant, otherwise "를". E.g. 이름 변경을, 새 회차를
     static func objectParticle(_ word: String) -> String {
       guard let last = word.unicodeScalars.last, (0xAC00...0xD7A3).contains(last.value) else { return "을" }
       return (last.value - 0xAC00) % 28 == 0 ? "를" : "을"
     }
   }
 
-  /// 되돌릴 것이 없으면 아무것도 하지 않는다. 확인 창이 쉬는 중이면 바로 되돌린다.
+  /// Do nothing if there's nothing to undo. Revert directly if the confirmation is resting.
   private func requestUndo(isRedo: Bool) {
     guard let undoManager, isRedo ? undoManager.canRedo : undoManager.canUndo else { return }
     let pending = PendingUndo(isRedo: isRedo, actionName: isRedo ? undoManager.redoActionName : undoManager.undoActionName)
-    // 전체 바꾸기는 되돌리기 창이 확인을 대신한다.
+    // For replace all, the revert sheet replaces the confirmation.
     if UndoConfirmation.isPaused() || pending.actionName == ProjectReplace.actionName {
       performUndo(pending)
     } else {
@@ -684,39 +684,39 @@ struct WorkspaceView: View {
     if pending.isRedo { undoManager?.redo() } else { undoManager?.undo() }
   }
 
-  /// 숫자만 받는다(쉼표·"자"는 무시). 0 이하나 숫자가 아니면 바꾸지 않는다.
-  /// `alsoForNewEpisodes`면 작품 기본 목표(project.json)도 같은 값으로 바꾼다. 메뉴 항목을 늘리지 않으려고 같은 창에서 고른다.
+  /// Accept digits only (commas and "자" ignored). Don't change for ≤ 0 or non-numbers.
+  /// With `alsoForNewEpisodes`, also set the project default goal (project.json) to the same value. Chosen in the same dialog to avoid more menu items.
   private func commitGoal(alsoForNewEpisodes: Bool) {
     guard let model, let id = settingGoal else { return }
     settingGoal = nil
     guard let goal = Int(goalText.filter(\.isNumber)), goal > 0 else { return }
-    // 두 되돌리기 기록을 같은 차례 안에서 남겨야 ⌘Z 한 번에 함께 되돌아간다.
+    // Both undo records must be registered in the same turn so one ⌘Z reverts both.
     Task {
       if alsoForNewEpisodes { model.setDefaultEpisodeGoal(goal, undoManager: undoManager) }
       await model.setGoal(id, to: goal, undoManager: undoManager)
     }
   }
 
-  /// 창을 닫을 때 남은 저장을 마친다. 원고나 회차 목록을 끝내 쓰지 못했으면 묻는다.
+  /// Finish pending saves on window close. Ask if a manuscript or the episode list ultimately couldn't be written.
   static func finishClosing(
     _ model: ProjectModel, retryProjectSave: @MainActor () -> Bool = SystemDialogs.retryProjectSaveOnClose
   ) async {
     await model.autosaver.finish()
     await model.saveCountsNow()
     rescueUnsaved(model)
-    // 회차 목록(project.json)을 끝내 못 썼으면 종료 때처럼 다시 시도할지 묻는다. 묻지 않고 닫으면 목록 변경이 조용히 사라진다.
+    // If the episode list (project.json) ultimately failed, ask whether to retry as at quit. Closing without asking would silently lose list changes.
     while model.autosaver.hasProjectWork(), retryProjectSave() {
       await model.finishProjectSaves()
     }
   }
 
-  /// 창을 닫았는데도 저장하지 못한 원고가 남았으면 다른 곳에 내보낼지 묻는다.
-  /// 안 내보내면 앱을 끌 때 다시 물을 수 있게 저장기를 붙잡아 둔다(창과 함께 사라지면 원고도 사라진다).
+  /// If unsaved manuscripts remain after closing the window, ask whether to export elsewhere.
+  /// If not exported, retain the saver so quit can ask again (if it vanished with the window, the manuscript would vanish too).
   private static func rescueUnsaved(_ model: ProjectModel) {
     let autosaver = model.autosaver
-    // 충돌 스냅샷에 그대로 남은 회차는 내보낼 원고가 아니다(종료 때와 같은 기준).
+    // Episodes intact in a conflict snapshot aren't manuscripts to export (same criterion as quit).
     guard autosaver.hasUnprotectedChanges else { return }
-    // 작품 모델은 창과 함께 사라지므로 제목을 지금 붙잡아 둔다.
+    // The project model vanishes with the window, so grab the title now.
     let titles = Dictionary(model.episodes.map { ($0.id, $0.title) }, uniquingKeysWith: { first, _ in first })
     autosaver.episodeTitle = { titles[$0] ?? "" }
     if SystemDialogs.offerRescueOnClose(autosaver.unsavedManuscripts()) {
@@ -734,7 +734,7 @@ struct WorkspaceView: View {
     Task {
       do {
         try await model.trashEpisode(id, undoManager: undoManager)
-        // 지운 회차를 보고 있었으면 바로 아래(없으면 위) 회차로 옮긴다.
+        // If the deleted episode was being viewed, move to the one right below (or above).
         if selection == id, let index {
           let remaining = model.episodes
           selection = remaining.isEmpty ? nil : remaining[min(index, remaining.count - 1)].id
@@ -745,7 +745,7 @@ struct WorkspaceView: View {
     }
   }
 
-  /// 휴지통은 지금 회차 하나에만 하므로, 여러 회차를 고른 채면 메뉴 이름에 밝힌다(묶기는 고른 회차 모두).
+  /// Trash applies only to the current episode, so with multiple selected the menu title says so (grouping applies to all selected).
   private var trashMenuTitle: String? {
     guard marked.count > 1, let selection, let index = project.episodes.firstIndex(where: { $0.id == selection }) else {
       return nil
@@ -760,9 +760,9 @@ struct WorkspaceView: View {
     return "\(KoreanParticle.attach(.objectMarker, to: name)) 휴지통으로 옮길까요?"
   }
 
-  // MARK: - 외부 변경 충돌
+  // MARK: - External-change conflicts
 
-  /// 스냅샷을 다 남긴, 사용자에게 물을 충돌 하나.
+  /// One conflict to ask the user about, fully snapshotted.
   private var readyConflict: EpisodeAutosaver.Conflict? {
     model?.autosaver.conflicts.values.first { $0.isReady }
   }
@@ -789,7 +789,7 @@ struct WorkspaceView: View {
       + retry
   }
 
-  /// 반드시 둘 중 하나를 골라야 한다. 닫기만 하면 다시 뜬다.
+  /// One of the two must be chosen. Just closing makes it reappear.
   private var isShowingConflict: Binding<Bool> {
     Binding(get: { readyConflict != nil }, set: { _ in })
   }
@@ -817,7 +817,7 @@ struct WorkspaceView: View {
   }
 }
 
-/// 켜져 있으면 창 바탕을 창 뒤가 비치는 반투명 재질로, 꺼져 있으면 시스템 기본(불투명) 바탕으로.
+/// When on, the window background is a translucent material showing what's behind; when off, the system default (opaque) background.
 private struct SeeThroughWindowBackground: ViewModifier {
   let isEnabled: Bool
 
@@ -841,7 +841,7 @@ private struct SeeThroughWindowBackground: ViewModifier {
 }
 
 extension ProjectFile {
-  /// 미리보기와 스냅샷용 500회차 작품 (본문 없음).
+  /// 500-episode project for previews and snapshots (no bodies).
   static var previewManyEpisodes: ProjectFile {
     let titles = ["귀환", "비 오는 날", "", "검의 무게", "첫 번째 의뢰", "달빛 아래에서"]
     return ProjectFile(
@@ -850,20 +850,20 @@ extension ProjectFile {
   }
 }
 
-/// 바꾼 회차 목록에서 고른 회차의 스냅샷 판 열기 요청.
+/// Request to open the snapshot panel for an episode chosen in the replaced-episodes list.
 private struct SnapshotRequest {
   let episodeID: EpisodeID
   let preferredID: String?
 }
 
-/// 사이드바 되돌리기 확인 창(맥 기본 확인 창 + "다시 묻지 않기" 체크).
+/// Sidebar undo confirmation (macOS standard confirmation + "don't ask again" checkbox).
 private struct UndoConfirmationDialog: ViewModifier {
   @Binding var pending: WorkspaceView.PendingUndo?
   @Binding var stopAsking: Bool
   let perform: (WorkspaceView.PendingUndo) -> Void
 
-  /// 확인 창을 빈 뒷배경에 단다. `dialogSuppressionToggle`은 환경값이라 작업 공간 전체에 걸면
-  /// 그 안의 다른 확인 창(전체 바꾸기, 회차 이름 등)에도 "다시 묻지 않기"가 붙는다.
+  /// The confirmation is attached to an empty background. `dialogSuppressionToggle` is an environment value, so applying it to the whole workspace
+  /// would add "don't ask again" to other confirmations inside it too (replace all, episode name etc.).
   func body(content: Content) -> some View {
     content.background { dialogHost }
   }
@@ -875,7 +875,7 @@ private struct UndoConfirmationDialog: ViewModifier {
         isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } }),
         titleVisibility: .visible, presenting: pending
       ) { pending in
-        // 엔터는 취소가 받는다. 되돌리기는 클릭이나 Tab → Space로.
+        // Return goes to Cancel. Revert by click or Tab → Space.
         Button("취소", role: .cancel) { self.pending = nil }
           .keyboardShortcut(.defaultAction)
         Button(pending.isRedo ? "다시 실행" : "되돌리기") { perform(pending) }

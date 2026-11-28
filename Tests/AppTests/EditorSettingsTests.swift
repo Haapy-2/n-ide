@@ -3,7 +3,7 @@ import SwiftUI
 import XCTest
 @testable import NovelEditor
 
-/// 기본값은 DESIGN.md 3장 값과 같아야 한다.
+/// Defaults must match the DESIGN.md ch.3 values.
 @MainActor
 final class EditorSettingsTests: XCTestCase {
   func testDefaultsMatchDesign() {
@@ -57,7 +57,7 @@ final class EditorSettingsTests: XCTestCase {
     XCTAssertEqual(textView.textStorage?.attribute(.font, at: 0, effectiveRange: nil) as? NSFont, before)
   }
 
-  /// 설정 창 미리보기: 창 폭을 바꿔도 줄바꿈 폭과 높이가 맞아 문장이 잘리지 않는다.
+  /// Settings preview: wrap width and height match after window width changes, so text isn't cut off.
   func testPreviewFitsTextAfterWidthChanges() throws {
     let host = NSHostingView(rootView: EditorPreview(style: EditorStyle()))
     let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 300, height: 400), styleMask: [.titled, .resizable], backing: .buffered, defer: false)

@@ -2,7 +2,7 @@ import AppKit
 import XCTest
 @testable import NovelEditor
 
-/// 빈 줄에는 문단 간격이 붙지 않는다(DESIGN.md 3장). 글 줄은 그대로 붙는다.
+/// Blank lines get no paragraph spacing (DESIGN.md ch.3). Text lines still do.
 @MainActor
 final class BlankLineSpacingTests: XCTestCase {
   private func lineHeights(_ text: String, style: EditorStyle = EditorStyle()) -> [CGFloat] {
@@ -27,7 +27,7 @@ final class BlankLineSpacingTests: XCTestCase {
   func testBlankLineGetsNoParagraphSpacing() {
     let style = EditorStyle()
     let full = style.lineHeight + style.lineHeight * style.paragraphSpacing
-    // 가 / 빈 줄 / 나 / 빈 줄 / 빈 줄 / 다
+    // 가 / blank / 나 / blank / blank / 다
     XCTAssertEqual(lineHeights("가\n\n나\n\n\n다", style: style), [full, style.lineHeight, full, style.lineHeight, style.lineHeight, style.lineHeight])
   }
 
@@ -41,7 +41,7 @@ final class BlankLineSpacingTests: XCTestCase {
     XCTAssertEqual(lineHeights("가\r\n\r\n나", style: style)[1], style.lineHeight)
   }
 
-  /// 띄어쓰기만 있는 줄은 빈 줄이 아니라 글 줄로 본다.
+  /// A line with only spaces counts as a text line, not a blank line.
   func testSpaceOnlyLineKeepsSpacing() {
     let style = EditorStyle()
     let full = style.lineHeight + style.lineHeight * style.paragraphSpacing

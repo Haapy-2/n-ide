@@ -3,7 +3,7 @@ import NovelCore
 import XCTest
 @testable import NovelEditor
 
-/// 작품 전체 바꾸기 실행(PLAN 14장 2번). 바꾸기 전 글을 잃지 않는지, 바꾸면 안 되는 회차를 건너뛰는지를 본다.
+/// Project-wide replace execution (PLAN ch.14 #2). Checks that pre-replace text is never lost and episodes that must not be replaced are skipped.
 @MainActor
 final class ReplaceTests: XCTestCase {
   private var folder: URL!
@@ -14,7 +14,7 @@ final class ReplaceTests: XCTestCase {
   private var open: EpisodeID!
   private var closed: EpisodeID!
   private var untouched: EpisodeID!
-  /// nil이 아니면 바꾸는 쪽이 보는 회차 목록을 이것으로 바꾼다(센 뒤 휴지통으로 간 회차 흉내).
+  /// If non-nil, the episode list seen by the replacer becomes this (simulating episodes trashed after counting).
   private var listedIDs: [EpisodeID]?
 
   private var autosaver: EpisodeAutosaver { model.autosaver }
@@ -50,7 +50,7 @@ final class ReplaceTests: XCTestCase {
     try? FileManager.default.removeItem(at: folder)
   }
 
-  /// 편집기에 회차를 올린다(작업 공간이 회차를 옮길 때와 같은 순서).
+  /// Load an episode into the editor (same order as when the workspace switches episodes).
   private func show(_ id: EpisodeID) {
     autosaver.leaveEpisode()
     if let pending = autosaver.pendingText(for: id) {
@@ -68,7 +68,7 @@ final class ReplaceTests: XCTestCase {
     autosaver.textDidChange()
   }
 
-  /// 센 뒤 확인 창이 보여 줄 것까지
+  /// Up to what the confirmation shows after counting
   private func prepare(_ query: String, _ replacement: String) async throws -> ProjectReplace.Pending {
     replace.replacement = replacement
     await replace.prepare(query: query, caseSensitive: false)
@@ -84,7 +84,7 @@ final class ReplaceTests: XCTestCase {
     return try XCTUnwrap(report)
   }
 
-  /// 바깥에서 파일을 고친다. 수정 시각이 같게 찍히지 않게 1초 뒤로 맞춘다.
+  /// Edit the file from outside. Shift the modification time by 1 s so it isn't stamped the same.
   private func writeOutside(_ text: String, to id: EpisodeID) throws {
     let url = store.layout.episodeFile(id)
     let before = FileStamp(of: url)?.modified ?? Date()
@@ -118,7 +118,7 @@ final class ReplaceTests: XCTestCase {
     XCTAssertFalse(autosaver.hasUnsavedChanges)
   }
 
-  /// 회차마다 바꾸기 전·바꾼 뒤를 짝으로, 한 번의 바꾸기는 모두 같은 시각, 메모는 저절로.
+  /// Per episode, pre/post-replace snapshots are paired; one replace shares one time; memos are automatic.
   func testLeavesBeforeAndAfterSnapshotsWithMemo() async throws {
     let report = try await replaceAll("민준", "도윤")
     await autosaver.snapshots.waitForWrites()
@@ -138,7 +138,7 @@ final class ReplaceTests: XCTestCase {
     XCTAssertEqual(try store.snapshots(of: untouched), [])
   }
 
-  /// 검색 패널의 바꾼 회차 목록: 회차 순서대로(바꾼 차례와 달리 열린 회차가 끝이 아님), 검색어를 고치면 비운다.
+  /// The search panel's replaced-episodes list: in episode order (unlike replace order, the open episode isn't last); cleared when the query changes.
   func testFinishedListsReplacedEpisodesInEpisodeOrder() async throws {
     let report = try await replaceAll("민준", "도윤")
 
@@ -208,7 +208,7 @@ final class ReplaceTests: XCTestCase {
     guard case .failed = autosaver.status else { return XCTFail("상태 줄이 실패를 알려야 한다") }
   }
 
-  /// 센 뒤 앱 밖에서 바뀌었으면 바뀐 글에서 바꾼다. 바깥에서 고친 글도 지켜진다.
+  /// If it changed outside the app after counting, replace in the changed text. Externally edited text is preserved too.
   func testReplacesInTextChangedOutsideAfterCounting() async throws {
     let pending = try await prepare("민준", "도윤")
     try writeOutside("민준이 바깥에서 고침", to: closed)
@@ -236,7 +236,7 @@ final class ReplaceTests: XCTestCase {
     XCTAssertEqual(try store.readEpisode(closed), "도윤과 도윤")
   }
 
-  /// 확인 창이 떠 있는 동안 친 글도 바꾼다.
+  /// Text typed while the confirmation is up gets replaced too.
   func testIncludesTextTypedWhileAsking() async throws {
     let pending = try await prepare("민준", "도윤")
     type(" 민준")
@@ -261,7 +261,7 @@ final class ReplaceTests: XCTestCase {
       "지운 회차의 본문 파일을 되살리지 않는다")
   }
 
-  /// 바꾸는 도중(스냅샷을 쓰는 사이) 휴지통으로 간 회차에는 쓰지 않는다. 쓰면 지운 회차 파일이 되살아난다.
+  /// Episodes trashed mid-replace (while snapshots are written) aren't written. Writing would resurrect the deleted episode file.
   func testDoesNotWriteEpisodeThatLeftTheList() async throws {
     autosaver.isListed = { [closed] in $0 != closed }
     let outcome = await autosaver.rewrite(
@@ -283,7 +283,7 @@ final class ReplaceTests: XCTestCase {
     XCTAssertEqual(textView.string, "도윤이 웃었다", "다른 회차는 바꾼다")
   }
 
-  /// 조합 중이면 끊지 않고 기다렸다가, 조합이 끝난 뒤 바꾼다. 조합하던 글자는 그대로 들어간다.
+  /// During composition, wait without breaking it and replace after it ends. The composing character goes in as is.
   func testWaitsForCompositionToEnd() async throws {
     textView.setSelectedRange(NSRange(location: textView.string.utf16.count, length: 0))
     textView.setMarkedText("ㅎ", selectedRange: NSRange(location: 1, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
@@ -301,7 +301,7 @@ final class ReplaceTests: XCTestCase {
     XCTAssertEqual(textView.string, "도윤이 웃었다하")
   }
 
-  /// 찾은 자리만 바꾸므로 커서는 같은 글자 앞에, 화면 맨 위 줄도 그대로다.
+  /// Only matches are replaced, so the caret stays before the same character and the top line on screen stays too.
   func testKeepsCaretAndScrollPosition() async throws {
     let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 800, height: 600), styleMask: [.titled], backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false
@@ -326,22 +326,22 @@ final class ReplaceTests: XCTestCase {
       topLine.replacingOccurrences(of: "민준", with: "도윤이라는 사람").prefix(14).description, "화면 맨 위 줄 그대로")
   }
 
-  // MARK: - 되돌리기·다시 바꾸기 (PLAN 14장 5번)
+  // MARK: - Revert / redo replace (PLAN ch.14 #5)
 
   private func latest() async throws -> ProjectReplace.Undoable {
     let found = await replace.latestUndoable()
     return try XCTUnwrap(found)
   }
 
-  /// 편집기에서 지금 커서 자리가 아닌 곳을 고친다(작가가 그 뒤에 고친 것).
+  /// Edit a spot in the editor other than the current caret position (the writer's later edit).
   private func edit(_ range: NSRange, to text: String) {
     textView.insertText(text, replacementRange: range)
     autosaver.textDidChange()
   }
 
-  /// 모두 되돌리면 바꾼 자리만 돌아가고, 바꾼 뒤에 쓴 글은 남는다. 열린 회차는 ⌘Z 한 번으로 되돌리기 직전으로.
+  /// Revert all restores only replaced spots, and text written after the replace stays. For the open episode one ⌘Z goes back to right before the revert.
   func testRevertAllRestoresReplacedPlacesOnly() async throws {
-    // 테스트에는 이벤트가 없어 입력 묶음이 닫히지 않는다(바꾸기·입력·되돌리기가 한 묶음이 된다). 묶음을 직접 닫는다.
+    // Tests have no events, so input groups don't close (replace, input and revert would merge into one). Groups are closed directly.
     let undo = try XCTUnwrap(textView.undoManager)
     undo.groupsByEvent = false
     _ = try await replaceAll("민준", "도윤")
@@ -370,7 +370,7 @@ final class ReplaceTests: XCTestCase {
     XCTAssertEqual(textView.string, "도윤이 웃었다 그리고 도윤", "⌘Z 한 번으로 되돌리기 직전")
   }
 
-  /// 고르지 않은 회차는 건드리지 않고, 다음에 창을 열면 그 회차만 보인다.
+  /// Unchosen episodes are untouched, and next time the sheet opens only they show.
   func testRevertOnlyCheckedEpisodes() async throws {
     _ = try await replaceAll("민준", "도윤")
 
@@ -383,7 +383,7 @@ final class ReplaceTests: XCTestCase {
     XCTAssertEqual(next.excluded, 1, "이미 되돌린 회차")
   }
 
-  /// 편집기 ⌘Z로 열린 회차만 되돌렸으면 창에는 나머지 회차만.
+  /// If editor ⌘Z reverted only the open episode, the sheet shows only the rest.
   func testEditorUndoLeavesOtherEpisodesInWindow() async throws {
     _ = try await replaceAll("민준", "도윤")
 
@@ -395,7 +395,7 @@ final class ReplaceTests: XCTestCase {
     XCTAssertEqual(next.candidates.map(\.id), [closed])
   }
 
-  /// 바꾼 뒤 고친 자리는 그대로 두고 센다. 다시 바꾸기는 되돌린 자리만 같은 말로.
+  /// Spots edited after the replace are left alone and counted. Redo replace changes only reverted spots to the same word.
   func testEditedPlaceIsKeptAndRedoReplacesOnlyReverted() async throws {
     _ = try await replaceAll("민준", "도윤")
     show(closed)
@@ -418,7 +418,7 @@ final class ReplaceTests: XCTestCase {
     XCTAssertNil(replace.reverted, "다시 바꾸기는 한 번만")
   }
 
-  /// 조합 중에 되돌리면 조합이 끝난 뒤 되돌리고, 조합하던 글자는 그대로 들어간다.
+  /// Reverting during composition reverts after composition ends, and the composing character goes in as is.
   func testRevertWaitsForComposition() async throws {
     _ = try await replaceAll("민준", "도윤")
     textView.setSelectedRange(NSRange(location: textView.string.utf16.count, length: 0))
@@ -436,7 +436,7 @@ final class ReplaceTests: XCTestCase {
     XCTAssertEqual(textView.string, "민준이 웃었다하")
   }
 
-  /// 표시된 글자 없이 조합을 잇는 입력기는 조합 중인지 알려 주지 않는다. 입력이 멈춘 뒤에 고쳐 글자가 쪼개지지 않게 한다.
+  /// An IME continuing composition without displayed text doesn't report composing. Edit after input pauses so characters don't split.
   func testOpenEpisodeWaitsForTypingPause() async throws {
     let pending = try await prepare("민준", "도윤")
     type("가")
@@ -450,7 +450,7 @@ final class ReplaceTests: XCTestCase {
     XCTAssertEqual(textView.string, "도윤이 웃었다가")
   }
 
-  /// 열린 회차를 바꾸려고 기다리는 사이에 친 찾는 말도 바뀌므로, `바꾸기 전`은 기다린 뒤 실제로 고친 글이어야 그 자리까지 되돌린다.
+  /// A search term typed while waiting to replace the open episode changes too, so `바꾸기 전` must be the text actually edited after waiting for revert to reach that spot.
   func testWordTypedWhileWaitingIsInBeforeSnapshotAndReverts() async throws {
     let pending = try await prepare("민준", "도윤")
     type("가")

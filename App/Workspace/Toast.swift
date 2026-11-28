@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// 편집 영역 오른쪽 위에 잠깐 떴다 사라지는 작은 알림.
-/// 시스템 알림이 아니라 창 안에만 뜬다. 편집기 초점·선택·한글 조합은 건드리지 않는다.
+/// Small notice that briefly appears at the top right of the editor and fades.
+/// Shown only inside the window, not as a system notification. Doesn't touch editor focus, selection or Hangul composition.
 struct Toast: Identifiable {
-  /// 토스트 오른쪽의 글자 버튼(예: "메모 달기"). 누르면 토스트가 닫힌다.
+  /// Text button on the right of the toast (e.g. "메모 달기"). Pressing it closes the toast.
   struct Action {
     let title: String
     let perform: () -> Void
@@ -11,17 +11,17 @@ struct Toast: Identifiable {
 
   let id = UUID()
   let message: String
-  /// 회색 단색 SF Symbol 이름.
+  /// Gray monochrome SF Symbol name.
   var systemImage = "checkmark"
   var action: Action?
-  /// 두 번째 글자 버튼(전체 바꾸기 뒤 `바꾼 곳 보기 · 되돌리기`)
+  /// Second text button (`바꾼 곳 보기 · 되돌리기` after replace all)
   var secondAction: Action?
-  /// nil이면 설정의 알림 유지 시간. 되돌리기 버튼이 있는 큰 작업은 길게 둔다.
+  /// nil uses the toast duration setting. Big operations with an undo button stay longer.
   var duration: Duration?
 }
 
-/// 창 하나에 하나. 한 번에 하나만 보이고, 새 알림은 이전 것을 바로 바꾼다(쌓이지 않음).
-/// 설정 "알림 유지 시간"(기본 2초) 뒤 사라지고, 마우스가 올라가 있는 동안은 기다렸다가 내려가면 다시 센다.
+/// One per window. Only one shows at a time; a new notice replaces the previous immediately (no stacking).
+/// Disappears after the "toast duration" setting (default 2 s); while hovered it waits, and restarts counting when the mouse leaves.
 @MainActor
 @Observable
 final class ToastCenter {
@@ -29,14 +29,14 @@ final class ToastCenter {
 
   @ObservationIgnored private var isHovering = false
   @ObservationIgnored private var dismissTask: Task<Void, Never>?
-  /// nil이면 띄울 때마다 설정 값을 읽는다(바꾸면 다음 알림부터 바로). 테스트는 짧은 값을 넣는다.
+  /// nil reads the setting each time it shows (changes apply from the next toast). Tests inject a short value.
   private let fixedDuration: Duration?
 
   init(duration: Duration? = nil) {
     fixedDuration = duration
   }
 
-  /// 설정 값을 0.5~5초, 0.5 단위로 맞춰 읽는다. 없으면 기본 2초.
+  /// Read the setting snapped to 0.5–5 s in 0.5 steps. Default 2 s if absent.
   static func storedDuration(_ defaults: UserDefaults = .standard) -> Duration {
     let setting = EditorSetting.toastDuration
     let seconds = defaults.object(forKey: AppSettingKey.toastDuration) == nil
@@ -70,7 +70,7 @@ final class ToastCenter {
     scheduleDismiss()
   }
 
-  /// 기다리는 작업은 하나만 둔다. 기다리는 사이 다른 토스트로 바뀌었으면 그것은 닫지 않는다.
+  /// Only one waiting task. If replaced by another toast meanwhile, that one isn't closed.
   private func scheduleDismiss() {
     dismissTask?.cancel()
     dismissTask = nil
@@ -85,7 +85,7 @@ final class ToastCenter {
   }
 }
 
-/// 편집 영역 위에 얹는 층. 오른쪽 위 자리는 안전 영역(툴바 아래)을 따라가므로 창 크기·툴바 높이를 숫자로 박지 않는다.
+/// Layer over the editor. The top-right position follows the safe area (below the toolbar), so window size and toolbar height aren't hard-coded.
 struct ToastOverlay: View {
   let center: ToastCenter
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -103,12 +103,12 @@ struct ToastOverlay: View {
     .padding(.top, ToastView.edgeInset)
     .padding(.trailing, ToastView.edgeInset)
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-    // 150ms(DESIGN.md 6장). 동작 줄이기가 켜져 있으면 움직임 없이 바로 나타나고 사라진다.
+    // 150 ms (DESIGN.md ch.6). With reduce motion on, appears and disappears instantly without animation.
     .animation(reduceMotion ? nil : .easeInOut(duration: 0.15), value: center.current?.id)
   }
 }
 
-/// 알약 모양: 회색 아이콘 + 짧은 문구(+ 글자 버튼). 바탕은 시스템 기본 유리, 색은 입히지 않는다.
+/// Pill shape: gray icon + short text (+ text button). Background is the system default glass; no color applied.
 struct ToastView: View {
   static let edgeInset: CGFloat = 12
 

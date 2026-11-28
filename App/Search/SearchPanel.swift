@@ -1,26 +1,26 @@
 import NovelCore
 import SwiftUI
 
-/// 사이드바 자리에 뜨는 작품 전체 검색 패널(DESIGN 6장). 위에 입력 칸, 아래에 회차별로 묶인 결과.
-/// 결과 한 줄 = 줄 번호 + 줄 미리 보기(일치한 곳만 accent 바탕). 누르면 그 회차의 그 자리로 간다.
+/// Project search panel shown in place of the sidebar (DESIGN ch.6). Input field on top, results grouped by episode below.
+/// Result row = line number + line preview (only the match on an accent background). Clicking goes to that spot in that episode.
 struct SearchPanel: View {
   let search: ProjectSearch
   let replace: ProjectReplace
   let episodes: [EpisodeMeta]
-  /// 바뀔 때마다 입력 칸에 초점을 준다(⇧⌘F를 다시 눌렀을 때).
+  /// Focus the input field on every change (when ⇧⌘F is pressed again).
   let focusRequest: Int
-  /// 줄 안쪽 왼쪽 여백(nil이면 아직 안 잼). 패널을 닫았다 열어도 다시 재지 않게 작업 공간이 들고 있다(EpisodeList와 같은 까닭).
+  /// Row inner left padding (nil = not measured yet). The workspace holds it so closing/reopening the panel doesn't re-measure (same reason as EpisodeList).
   @Binding var measuredInset: CGFloat?
   let onReveal: (TextReveal) -> Void
-  /// 전체 바꾸기가 끝났다(토스트, 다시 찾기).
+  /// Replace all finished (toast, search again).
   let onReplaced: (ProjectReplace.Report) -> Void
-  /// 바꾼 회차 목록에서 회차를 눌렀다(그 회차로, 스냅샷 판은 `바꾸기 전`을 골라 둔 채).
+  /// An episode was clicked in the replaced-episodes list (go there, with `바꾸기 전` preselected in the snapshot panel).
   let onShowReplaced: (ProjectReplace.Report.Episode) -> Void
   let onClose: () -> Void
   @FocusState private var fieldFocused: Bool
-  /// 마지막으로 누른 결과(회색 칸)
+  /// Last clicked result (gray rect)
   @State private var picked: PickedMatch?
-  /// 바꾼 회차 목록에서 마지막으로 누른 회차
+  /// Last clicked episode in the replaced-episodes list
   @State private var pickedReplaced: EpisodeID?
 
   private var contentInset: CGFloat { measuredInset ?? TrafficLightOffsetReader.contentInset(for: nil) }
@@ -28,7 +28,7 @@ struct SearchPanel: View {
   var body: some View {
     @Bindable var search = search
     @Bindable var replace = replace
-    // 회차 번호를 줄마다 목록 전체에서 찾지 않게 한 번 만든다(500회차 × 결과 묶음 500개면 바꿀 말을 칠 때마다 25만 번 비교).
+    // Episode numbers are built once so each row doesn't search the whole list (500 episodes × 500 result groups = 250k comparisons per keystroke of the replacement).
     let positions = Dictionary(episodes.enumerated().map { ($1.id, $0) }, uniquingKeysWith: { first, _ in first })
     VStack(alignment: .leading, spacing: 0) {
       HStack {
@@ -120,7 +120,7 @@ struct SearchPanel: View {
           ForEach(result.episodes, id: \.id) { found in
             Section {
               ForEach(Array(found.matches.enumerated()), id: \.offset) { index, match in
-                // 진짜 버튼이라 VoiceOver·키보드로도 누를 수 있다.
+                // A real button, so VoiceOver and keyboard can press it.
                 Button {
                   picked = PickedMatch(id: found.id, index: index)
                   onReveal(TextReveal(
@@ -143,7 +143,7 @@ struct SearchPanel: View {
       }
       .environment(\.defaultMinListRowHeight, 0)
     }
-    // 창에서 처음 열 때는 잴 때까지(한 번 그린 뒤) 숨긴다. 기본 여백으로 먼저 보이면 곧바로 옆으로 튄다.
+    // On first open in a window, hidden until measured (after one draw). Showing with default padding first would make it jump sideways.
     .opacity(measuredInset == nil ? 0 : 1)
     .onChange(of: search.query) {
       replace.clearFinished()
@@ -151,7 +151,7 @@ struct SearchPanel: View {
       search.schedule()
     }
     .onChange(of: search.caseSensitive) { search.schedule() }
-    // 휴지통·⌘Z로 회차 목록이 바뀌면 다시 찾는다. 그대로 두면 지운 회차의 결과가 남고, 되살린 회차는 빠진다.
+    // Search again when the episode list changes via trash or ⌘Z. Otherwise results for deleted episodes linger and restored ones are missing.
     .onChange(of: episodes.map(\.id)) { search.refresh() }
     .onChange(of: focusRequest, initial: true) { fieldFocused = true }
     .onAppear { search.refresh() }
@@ -172,14 +172,14 @@ struct SearchPanel: View {
     }
   }
 
-  /// 결과 줄에 보일 바꿀 말. 바꿀 말을 친 동안만(비어 있으면 평소 찾기 결과 그대로).
+  /// Replacement shown in result rows. Only while a replacement is typed (empty = plain search results).
   private var previewReplacement: String? {
     let replacement = replace.replacement
     guard !replacement.isEmpty, TextReplace.canReplace(search.resultQuery, with: replacement) else { return nil }
     return replacement
   }
 
-  /// 지금 결과가 지금 입력한 문구로 찾은 것이고 찾은 곳이 있을 때만. 세거나 바꾸는 중에는 막는다.
+  /// Only when the current result was found with the current phrase and has matches. Disabled while counting or replacing.
   private var canReplace: Bool {
     guard !replace.isWorking, let result = search.result, result.matchCount > 0,
       search.resultQuery == search.query, search.resultCaseSensitive == search.caseSensitive
@@ -195,7 +195,7 @@ struct SearchPanel: View {
     positions[id].map { "\($0 + 1)화" } ?? ""
   }
 
-  /// 번호 칸 옆에 둘 제목. 비었거나 번호와 같으면("1화") 겹쳐 보이지 않게 빈 문자열.
+  /// Title next to the number column. Empty string if empty or same as the number ("1화") to avoid duplication.
   private func title(_ id: EpisodeID, _ positions: [EpisodeID: Int]) -> String {
     guard let index = positions[id] else { return "" }
     let title = episodes[index].title
@@ -224,7 +224,7 @@ struct SearchPanel: View {
     .padding(.trailing, 12)
   }
 
-  /// 입력 칸 아래 한 줄: 찾는 중·결과 수·결과 없음·잘림·못 읽은 회차. 바꾼 뒤에는 바꾼 결과.
+  /// One line under the input: searching, result count, no results, truncated, unreadable episodes. After replacing, the replace result.
   private var status: String? {
     if let finished = replace.finished {
       var parts = ["\(finished.replaced.count.formatted())개 회차에서 \(finished.count.formatted())곳을 바꿨어요"]
@@ -249,7 +249,7 @@ struct SearchPanel: View {
   }
 }
 
-/// 바꾼 회차 목록의 한 줄: `3화  제목  · 12곳`. 회차 묶음 제목 줄과 같은 글씨.
+/// One row of the replaced-episodes list: `3화  제목  · 12곳`. Same typography as episode group header rows.
 private struct ReplacedEpisodeRow: View {
   let number: String
   let title: String
@@ -287,10 +287,10 @@ private struct PickedMatch: Equatable {
   let index: Int
 }
 
-/// 결과 한 줄: 줄 번호 + 미리 보기(일치한 곳만 accent 18% 바탕, DESIGN 6장).
+/// One result row: line number + preview (only the match on an 18% accent background, DESIGN ch.6).
 private struct SearchMatchRow: View {
   let match: SearchMatch
-  /// 바꿀 말을 치는 동안: 찾은 말은 지운 줄 색·취소선, 그 뒤에 바꿀 말을 넣은 줄 색으로(VS Code 검색 바꾸기와 같음).
+  /// While typing a replacement: the match in deleted-line color with strikethrough, followed by the replacement in inserted-line color (like VS Code search & replace).
   let replacement: String?
   let inset: CGFloat
   let isPicked: Bool

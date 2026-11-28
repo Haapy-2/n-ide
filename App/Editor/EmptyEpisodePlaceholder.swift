@@ -1,7 +1,7 @@
 import AppKit
 
-/// 빈 회차 본문에 흐린 안내 글을 그린다. 텍스트 저장소에는 넣지 않아(본문이 원본) 글자 수·저장·조합과 상관없다.
-/// 조합을 시작하면 조합 중인 글자가 저장소에 들어가 길이가 0이 아니게 되므로 그때 바로 사라진다.
+/// Draws faint hint text in an empty episode body. Not inserted into text storage (the body is the source), so unrelated to counts, saving or composition.
+/// Composition puts the composing character into storage, so length becomes non-zero and the hint disappears immediately.
 extension ManuscriptTextView {
   static let placeholderText = "첫 문장을 써 주세요."
 
@@ -11,13 +11,13 @@ extension ManuscriptTextView {
       x: textContainerOrigin.x + textContainer.lineFragmentPadding,
       y: textContainerOrigin.y + emptyLineBaselineFromTop)
     let attributes: [NSAttributedString.Key: Any] = [.font: style.font, .foregroundColor: NSColor.inkMuted]
-    // 줄 조각 기준을 빼면 origin이 기준선 자리가 된다(본문 첫 줄 글자와 같은 높이).
+    // Subtracting the line fragment origin makes origin the baseline position (same height as the first line's glyphs).
     (Self.placeholderText as NSString).draw(
       with: NSRect(origin: origin, size: NSSize(width: style.textWidth, height: style.lineHeight)),
       options: [], attributes: attributes)
   }
 
-  /// 비었다 ↔ 글이 있다가 바뀔 때만 첫 줄을 다시 그린다.
+  /// Redraw the first line only when switching between empty and non-empty.
   func updatePlaceholderIfNeeded() {
     let isEmpty = textStorage?.length == 0
     guard isEmpty != placeholderShown else { return }

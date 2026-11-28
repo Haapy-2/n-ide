@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import NovelCore
 
-/// 스냅샷 저장·목록·메모·정리. 정리는 실제로 파일을 지우므로 "지우면 안 되는 것"을 가장 꼼꼼히 본다.
+/// Snapshot saving, listing, memos and pruning. Pruning really deletes files, so "what must not be deleted" is checked most carefully.
 struct SnapshotTests {
   private func makeStore(_ folder: TestFolder) throws -> (ProjectStore, EpisodeID) {
     let store = try ProjectStore.create(at: folder.url.appending(path: "작품.novel"), title: "x")
@@ -21,7 +21,7 @@ struct SnapshotTests {
     try store.snapshots(of: id).map(\.id)
   }
 
-  // MARK: - 찍기와 목록
+  // MARK: - Taking and listing
 
   @Test func writesNamedFileAndReadsBack() throws {
     let folder = try TestFolder()
@@ -98,7 +98,7 @@ struct SnapshotTests {
     #expect(try store.snapshots(of: id).count == 4)
   }
 
-  // MARK: - 메모
+  // MARK: - Memos
 
   @Test func memoIsSeparateFile() throws {
     let folder = try TestFolder()
@@ -130,13 +130,13 @@ struct SnapshotTests {
     #expect(try store.readSnapshot(snapshot) == "본문", "메모를 지워도 스냅샷은 남는다")
   }
 
-  // MARK: - 정리
+  // MARK: - Pruning
 
   @Test func pruneRemovesOldestAutoAndLeaveOnly() throws {
     let folder = try TestFolder()
     defer { folder.remove() }
     let (store, id) = try makeStore(folder)
-    // 자동·떠날 때 12개 사이사이에 지우면 안 되는 종류를 끼워 둔다.
+    // Kinds that must not be deleted are interleaved among 12 automatic/leave snapshots.
     let keepKinds: [SnapshotKind] = [.manual, .restore, .conflict, .external]
     for index in 0..<12 {
       try store.writeSnapshot("\(index)", episode: id, kind: index.isMultiple(of: 2) ? .auto : .leave, at: time(index * 10))
@@ -191,7 +191,7 @@ struct SnapshotTests {
     try store.writeSnapshot("가운데", episode: id, kind: .leave, at: time(1))
     let later = try #require(try store.writeSnapshot("뒤", episode: id, kind: .auto, at: time(2)))
     try store.writeSnapshot("새", episode: id, kind: .auto, at: time(3))
-    // 나중에 메모를 단 것도 지킨다.
+    // Ones that got a memo later are protected too.
     try store.writeMemo("이것도", for: later)
 
     let removed = try store.pruneSnapshots(of: id, keeping: 1)
@@ -254,7 +254,7 @@ struct SnapshotTests {
     #expect(!SnapshotKind.multiCursor.capturesEdits, "고친 회차 표시와 따로 간다")
   }
 
-  /// 같은 초에 여러 개 찍다가 앞 번호가 정리돼도, 다음 것은 빈 번호가 아니라 뒤 번호를 받아 가장 새 것으로 남는다.
+  /// When several are taken in the same second and an earlier number is pruned, the next one takes a later number, not the freed one, and stays newest.
   @Test func sameSecondNeverReusesPrunedNumber() throws {
     let folder = try TestFolder()
     defer { folder.remove() }
@@ -269,7 +269,7 @@ struct SnapshotTests {
     #expect(try store.snapshots(of: id).map { try store.readSnapshot($0) } == ["새"])
   }
 
-  /// 지키기 직전에 정리로 지워졌으면 표시를 남기지 않는다(주인 없는 `.keep`이 다음 같은 이름을 지키지 않게).
+  /// If pruned right before being protected, no mark is left (so an orphaned `.keep` doesn't protect the next same-named one).
   @Test func keepFailsForPrunedSnapshot() throws {
     let folder = try TestFolder()
     defer { folder.remove() }
@@ -315,7 +315,7 @@ struct SnapshotTests {
     #expect(Snapshot.stamp(for: date) == "20270102-030405", "한 자리 수도 0을 채워 이름순이 시간순이 되게")
   }
 
-  // MARK: - 덮지 않기, 지우면 안 되는 것
+  // MARK: - No overwriting, things that must not be deleted
 
   @Test func neverOverwritesExistingName() throws {
     let folder = try TestFolder()
@@ -323,7 +323,7 @@ struct SnapshotTests {
     let (store, id) = try makeStore(folder)
     let snapshotFolder = store.layout.snapshotFolder(id)
     try FileManager.default.createDirectory(at: snapshotFolder, withIntermediateDirectories: true)
-    // 다른 곳이 먼저 같은 이름(과 그다음 번호)을 써 둔 경우
+    // When another writer already took the same name (and the next number)
     try Data("먼저 1".utf8).write(to: snapshotFolder.appending(path: "20261111-090000-auto.md"))
     try Data("먼저 2".utf8).write(to: snapshotFolder.appending(path: "20261111-090000-auto-2.md"))
 
@@ -352,7 +352,7 @@ struct SnapshotTests {
     let (store, id) = try makeStore(folder)
     let snapshotFolder = store.layout.snapshotFolder(id)
     try FileManager.default.createDirectory(at: snapshotFolder, withIntermediateDirectories: true)
-    // 이름만 스냅샷처럼 생긴 폴더(안에 파일)와, 본문 파일을 가리키는 바로가기
+    // A folder merely named like a snapshot (with files inside), and an alias pointing at a body file
     let fakeFolder = snapshotFolder.appending(path: "20261111-085900-auto.md")
     try FileManager.default.createDirectory(at: fakeFolder, withIntermediateDirectories: true)
     try Data("안의 파일".utf8).write(to: fakeFolder.appending(path: "중요.txt"))

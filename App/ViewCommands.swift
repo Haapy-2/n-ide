@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// 보기 메뉴: 사이드바 가리기·보기(⌥⌘S), 줄 번호 보이기. 창 탭 항목은 AppDelegate에서 끈다.
-/// 시스템 사이드바 메뉴(`SidebarCommands`)는 ⌃⌘S를 써서 스냅샷 찍기와 겹치므로 직접 만든다.
+/// View menu: hide/show sidebar (⌥⌘S), show line numbers. Window tab items are disabled in AppDelegate.
+/// The system sidebar menu (`SidebarCommands`) uses ⌃⌘S, clashing with take snapshot, so it's built by hand.
 struct ViewCommands: Commands {
   @FocusedValue(\.workspaceActions) private var actions
   @AppStorage(AppSettingKey.showsLineNumbers) private var showsLineNumbers = false

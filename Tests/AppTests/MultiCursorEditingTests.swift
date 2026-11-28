@@ -4,7 +4,7 @@ import SwiftUI
 import XCTest
 @testable import NovelEditor
 
-/// 같은 말 여러 커서(⌘D, PLAN 16장). 입력기 호출은 16장 5번 실험에서 본 순서 그대로 재생한다.
+/// Same-word multi-cursor (⌘D, PLAN ch.16). IME calls are replayed in exactly the order seen in the ch.16 #5 experiment.
 @MainActor
 final class MultiCursorEditingTests: XCTestCase {
   private var view: ManuscriptTextView!
@@ -15,7 +15,7 @@ final class MultiCursorEditingTests: XCTestCase {
   override func setUp() async throws {
     view = ManuscriptTextView.make()
     view.replaceAllText(with: "민준 가 민준 나 민준")
-    // 테스트에는 이벤트가 없어 실행 취소 묶음이 저절로 닫히지 않는다. 키 하나를 묶음 하나로 직접 닫는다.
+    // Tests have no events, so undo groups don't close by themselves. Each key is closed as one group directly.
     undo.groupsByEvent = false
   }
 
@@ -25,7 +25,7 @@ final class MultiCursorEditingTests: XCTestCase {
     undo.endUndoGrouping()
   }
 
-  /// 맨 앞 커서 앞 `count`글자(입력기가 "앞 글자를 이 글로" 바꿀 때 주는 범위)
+  /// `count` characters before the leading caret (the range the IME gives when replacing "the previous character with this")
   private func beforeCaret(_ count: Int) -> NSRange {
     NSRange(location: view.selectedRange().location - count, length: count)
   }
@@ -37,9 +37,9 @@ final class MultiCursorEditingTests: XCTestCase {
     XCTAssertEqual(view.multiCursorRanges?.map(\.location), [0, 5, 10])
   }
 
-  /// 표시된 글자 없이 조합하는 두벌식(16장 5번 ⓐ): ㄷ → 도 → 동 → 도 + 유 → 윤.
-  /// 같은 글자를 고치는 키는 기록을 늘리기만 해 묶음을 열지 않는다(실제 앱도 기록이 생길 때만 묶음이 열린다).
-  /// 그 키가 몰래 기록을 남기면 열린 묶음이 없어 예외로 드러난다.
+  /// 2-set composition without displayed text (ch.16 #5 ⓐ): ㄷ → 도 → 동 → 도 + 유 → 윤.
+  /// Keys that edit the same character only grow the record and don't open a group (the real app also opens a group only when a record is made).
+  /// If such a key secretly left a record, there'd be no open group and it would surface as an exception.
   private func typeDoyunReplacing() {
     key { view.insertText("ㄷ", replacementRange: none) }
     view.insertText("도", replacementRange: beforeCaret(1))
@@ -75,7 +75,7 @@ final class MultiCursorEditingTests: XCTestCase {
     XCTAssertNil(view.multiCursorRanges)
   }
 
-  // MARK: - 한글 입력
+  // MARK: - Hangul input
 
   func testReplacementModeHangulGoesToEveryCursor() {
     selectThree()
@@ -88,7 +88,7 @@ final class MultiCursorEditingTests: XCTestCase {
     XCTAssertFalse(view.hasMarkedText())
   }
 
-  /// 표시된 글자 방식(16장 5번 ⓑ). 조합 중에는 모든 자리가 조합 중이고, 입력기에는 맨 앞 자리의 조합 범위를 알린다.
+  /// Displayed-text mode (ch.16 #5 ⓑ). During composition every spot is composing, and the IME is told the leading spot's composing range.
   func testMarkedModeHangulGoesToEveryCursor() {
     selectThree()
 
@@ -126,7 +126,7 @@ final class MultiCursorEditingTests: XCTestCase {
     XCTAssertEqual(view.multiCursorRanges?.count, 3)
   }
 
-  /// 지우다 커서가 만나면 하나가 된다. 하나만 남으면 보통 편집기로.
+  /// Carets meeting while deleting become one. With only one left, back to the plain editor.
   func testCursorsThatMeetBecomeOne() {
     view.replaceAllText(with: "가가")
     view.setSelectedRange(NSRange(location: 0, length: 1))
@@ -138,7 +138,7 @@ final class MultiCursorEditingTests: XCTestCase {
     XCTAssertNil(view.multiCursorRanges)
   }
 
-  /// 줄 번호를 켜고 여러 커서로 엔터를 쳐도 줄 수가 맞다(자리마다 세지 않고 다 고친 뒤 한 번 센다).
+  /// With line numbers on, Return with multi-cursor keeps the line count right (counted once after all edits, not per spot).
   func testLineCountFollowsMultiCursorNewlines() {
     view.showsLineNumbers = true
     XCTAssertEqual(view.currentLineCount, 1)
@@ -149,7 +149,7 @@ final class MultiCursorEditingTests: XCTestCase {
     XCTAssertEqual(view.currentLineCount, 4)
   }
 
-  /// 맞닿은 선택을 지워 한 점에서 만나도 ⌘Z가 지운 글을 모두 되살리고(E4), 그 아래 기록은 제 글자에 적용된다.
+  /// Even when deleting touching selections meets at one point, ⌘Z restores all deleted text (E4), and records below apply to their own characters.
   func testUndoAfterCursorsMeetRestoresEveryDeletedCharacter() {
     view.replaceAllText(with: "가가 나다")
     view.setSelectedRange(NSRange(location: 3, length: 0))
@@ -168,7 +168,7 @@ final class MultiCursorEditingTests: XCTestCase {
     XCTAssertEqual(view.string, "가가 나다")
   }
 
-  /// 조합 중에 지워(입력기가 빈 글을 줌) 맞닿은 자리가 만나도 ⌘Z로 고른 글이 돌아온다.
+  /// Even when deleting during composition (the IME sends empty text) makes touching spots meet, ⌘Z brings back the selected text.
   func testUndoAfterCompositionDeletedAtMeetingCursors() {
     view.replaceAllText(with: "가가 나")
     view.setSelectedRange(NSRange(location: 0, length: 1))
@@ -182,9 +182,9 @@ final class MultiCursorEditingTests: XCTestCase {
     XCTAssertEqual(view.string, "가가 나")
   }
 
-  // MARK: - 실행 취소
+  // MARK: - Undo
 
-  /// 조합 하나(한 글자)가 모든 자리에서 ⌘Z 한 단위(16장 U1). 되돌리면 그때의 커서들로(U2).
+  /// One composition (one character) is one ⌘Z unit across all spots (ch.16 U1). Undo returns to the carets of that time (U2).
   func testUndoTakesOneComposedCharacterAtEveryCursor() {
     selectThree()
     typeDoyunReplacing()
@@ -201,9 +201,9 @@ final class MultiCursorEditingTests: XCTestCase {
     XCTAssertEqual(view.string, "도 가 도 나 도")
   }
 
-  // MARK: - 다른 길과 부딪힘
+  // MARK: - Collisions with other paths
 
-  /// 본문을 통째로 바꾸는 길(회차 전환, 외부 변경, 스냅샷 복원)과 프로그램이 옮긴 선택은 여러 커서를 끝낸다(16장 D3).
+  /// Paths replacing the whole body (episode switch, external change, snapshot restore) and program-moved selections end multi-cursor (ch.16 D3).
   func testWholeTextChangesAndOutsideSelectionEndMultiCursor() {
     selectThree()
     view.reloadText(with: "짧은 글")
@@ -225,7 +225,7 @@ final class MultiCursorEditingTests: XCTestCase {
     XCTAssertFalse(view.hasMarkedText())
   }
 
-  /// 입력기가 맨 앞 커서 밖을 가리키면(재변환 등) 여러 커서를 끝내고 보통 입력으로(16장 I2).
+  /// If the IME points outside the leading caret (reconversion etc.), end multi-cursor and fall back to normal input (ch.16 I2).
   func testReplacementAwayFromFirstCursorFallsBackToOneCursor() {
     selectThree()
     key { view.insertText("가", replacementRange: none) }
@@ -236,7 +236,7 @@ final class MultiCursorEditingTests: XCTestCase {
     XCTAssertEqual(view.string, "가 가 X 나 가")
   }
 
-  /// 앱 몰래 본문이 짧아져 자리가 낡았으면 고치지 않고 끝낸다(16장 D1). 앱이 죽지 않는다.
+  /// If the body shrank behind the app's back and spots went stale, end without editing (ch.16 D1). The app doesn't crash.
   func testStaleRangesDoNotCrash() {
     selectThree()
     view.textStorage?.replaceCharacters(in: NSRange(location: 3, length: 9), with: "")
@@ -246,7 +246,7 @@ final class MultiCursorEditingTests: XCTestCase {
     XCTAssertNil(view.multiCursorRanges)
   }
 
-  /// 판을 열어 초점을 놓으면 모든 자리의 조합을 확정하고 여러 커서는 남는다(16장 D5, X1).
+  /// Opening the panel and releasing focus commits composition at every spot while multi-cursor remains (ch.16 D5, X1).
   func testYieldingFocusCommitsCompositionAtEveryCursor() {
     selectThree()
     key { view.setMarkedText("ㄷ", selectedRange: NSRange(location: 1, length: 0), replacementRange: none) }
@@ -258,7 +258,7 @@ final class MultiCursorEditingTests: XCTestCase {
     XCTAssertEqual(view.multiCursorRanges?.count, 3)
   }
 
-  /// 모든 고치기가 바뀜 알림을 거쳐 자동 저장·글자 수가 안다(16장 D2).
+  /// Every edit goes through change notifications so autosave and counting know (ch.16 D2).
   func testEditsAreAnnouncedForAutosave() {
     selectThree()
     var announced = 0
@@ -281,12 +281,12 @@ final class MultiCursorEditingTests: XCTestCase {
     XCTAssertEqual(view.selectedRange(), NSRange(location: 0, length: 2))
   }
 
-  // MARK: - 깜빡임
+  // MARK: - Blinking
 
-  // 시스템은 커서를 켤 때만 `drawInsertionPoint(turnedOn: true)`를 부르고, 끌 때는 그 칸을 다시 그리기만 한다.
-  // 아래 두 테스트는 그 두 순간을 재생한다.
+  // The system calls `drawInsertionPoint(turnedOn: true)` only when turning the caret on; to turn it off it just redraws that rect.
+  // The two tests below replay those two moments.
 
-  /// 세 자리에 한 글자씩 쳐서 모두 커서(길이 0)로 만든다. 그리려면 창 크기만 한 틀과 배치가 있어야 한다.
+  /// Type one character at each of three spots so all become carets (length 0). Drawing needs a window-sized frame and layout.
   private func threeCarets() {
     let scrollView = NSScrollView(frame: NSRect(x: 0, y: 0, width: 800, height: 300))
     scrollView.documentView = view
@@ -298,7 +298,7 @@ final class MultiCursorEditingTests: XCTestCase {
     view.layoutManager?.ensureLayout(for: view.textContainer!)
   }
 
-  /// 시스템이 주는 맨 앞 커서 칸(줄 높이, 폭 1pt).
+  /// The leading caret rect the system provides (line height, 1 pt wide).
   private func systemCaretRect() -> NSRect {
     let layoutManager = view.layoutManager!
     let index = view.selectedRange().location
@@ -310,7 +310,7 @@ final class MultiCursorEditingTests: XCTestCase {
     return line.offsetBy(dx: view.textContainerOrigin.x, dy: view.textContainerOrigin.y)
   }
 
-  /// 그린 그림에서 `point` 점의 색(뒤집힌 1배 비트맵).
+  /// Color at point `point` in the drawn image (flipped 1× bitmap).
   private func pixel(at point: NSPoint, _ draw: (NSBitmapImageRep) -> Void) -> NSColor? {
     let size = view.bounds.size
     let rep = NSBitmapImageRep(
@@ -321,13 +321,13 @@ final class MultiCursorEditingTests: XCTestCase {
     return rep.colorAt(x: Int(point.x), y: Int(point.y))
   }
 
-  /// 둘째 자리 커서 한가운데.
+  /// Center of the second spot's caret.
   private func secondCaretCenter() -> NSPoint {
     let caret = view.extraCaretRect(at: view.multiCursorRanges![1].location)!
     return NSPoint(x: caret.midX, y: caret.midY)
   }
 
-  /// 커서를 켜는 순간, 다른 자리 커서도 같은 그리기에서 그려진다(다음 화면 갱신으로 미루지 않는다).
+  /// When the caret turns on, other carets are drawn in the same draw (not deferred to the next refresh).
   func testExtraCaretsTurnOnInTheSameDrawAsFirstCaret() {
     threeCarets()
 
@@ -345,7 +345,7 @@ final class MultiCursorEditingTests: XCTestCase {
     XCTAssertGreaterThan(pixel?.alphaComponent ?? 0, 0.5, "맨 앞 커서와 함께 켜져야 한다")
   }
 
-  /// 켜진 뒤 맨 앞 커서 칸을 다시 그리면(시스템이 끄는 방법) 다른 자리 커서도 꺼진다.
+  /// Redrawing the leading caret rect after it's on (how the system turns it off) turns the other carets off too.
   func testExtraCaretsTurnOffWhenFirstCaretIsRedrawn() {
     threeCarets()
     let image = NSImage(size: view.bounds.size)
@@ -361,9 +361,9 @@ final class MultiCursorEditingTests: XCTestCase {
     XCTAssertEqual(pixel, background, "맨 앞 커서가 지워진 그림에는 다른 자리 커서도 없어야 한다")
   }
 
-  // MARK: - 복사와 붙여 넣기
+  // MARK: - Copy and paste
 
-  /// 사용자 클립보드를 건드리지 않게 테스트마다 따로 쓰는 붙여 넣기 판
+  /// A per-test pasteboard so the user's clipboard isn't touched
   private let board = NSPasteboard(name: NSPasteboard.Name("NovelEditorTests-\(UUID().uuidString)"))
 
   func testCopyJoinsSelectionsAndPasteSpreadsThemBack() {
@@ -419,7 +419,7 @@ final class MultiCursorEditingTests: XCTestCase {
     XCTAssertEqual(view.string, "가 가 가 나 가")
   }
 
-  // MARK: - 안전망 (16장 4번)
+  // MARK: - Safety net (ch.16 #4)
 
   func testTurnedOffCommandDDoesNothing() {
     view.multiCursorEnabled = false
@@ -460,7 +460,7 @@ final class MultiCursorEditingTests: XCTestCase {
     XCTAssertEqual(seen, ["민준 가 민준 나 민준", "서윤 가 서윤 나 서윤"])
   }
 
-  /// 실제 앱처럼 SwiftUI 다리를 거친다: 한도 알림이 다리 밖으로 나오고, 설정을 끄면 여러 커서가 끝난다.
+  /// Goes through the SwiftUI bridge like the real app: the limit notice comes out of the bridge, and turning the setting off ends multi-cursor.
   func testBridgeCarriesLimitNoticeAndSwitch() async throws {
     var notices: [String] = []
     var editor: ManuscriptTextView?

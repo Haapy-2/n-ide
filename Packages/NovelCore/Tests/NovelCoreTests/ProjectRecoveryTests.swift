@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import NovelCore
 
-/// `project.json` 보호와 복구. 어떤 경우에도 본문 파일은 지워지거나 바뀌면 안 된다.
+/// `project.json` protection and recovery. Body files must never be deleted or changed in any case.
 struct ProjectRecoveryTests {
   private func makeProject(in folder: TestFolder) throws -> (ProjectStore, ProjectFile) {
     let store = try ProjectStore.create(at: folder.url.appending(path: "달빛 아래 검.novel"), title: "달빛 아래 검")
@@ -28,7 +28,7 @@ struct ProjectRecoveryTests {
     try Data("{ \"schemaVersion\" : 1, \"title\" : \"반쯤".utf8).write(to: store.layout.projectFile)
   }
 
-  /// 회차·노트 ID는 파일 이름이 된다. `/`나 `..`가 든 ID는 작품 폴더 밖에 쓰게 되므로 깨진 파일로 보고 복구 길로 간다.
+  /// Episode/note IDs become file names. IDs containing `/` or `..` would write outside the project folder, so they're treated as a broken file and go through recovery.
   @Test(arguments: ["../../밖", "a/b", "..", "a\u{0}b"])
   func idThatEscapesFolderIsTreatedAsCorrupt(_ bad: String) throws {
     let folder = try TestFolder()
@@ -49,7 +49,7 @@ struct ProjectRecoveryTests {
     #expect(try folder.fileNames(in: store.layout.root).contains { $0.hasPrefix("project.json.broken-") })
   }
 
-  // MARK: - 백업
+  // MARK: - Backup
 
   @Test func saveKeepsPreviousGoodVersionAsBackup() throws {
     let folder = try TestFolder()
@@ -70,7 +70,7 @@ struct ProjectRecoveryTests {
     let folder = try TestFolder()
     defer { folder.remove() }
     let (store, project) = try makeProject(in: folder)
-    try store.saveProject(project)  // 이제 백업 = project
+    try store.saveProject(project)  // Now backup = project
     try breakProjectFile(store)
 
     var next = project
@@ -82,7 +82,7 @@ struct ProjectRecoveryTests {
     #expect(backup == project)
   }
 
-  // MARK: - 열기와 복구
+  // MARK: - Opening and recovery
 
   @Test func openNormalProjectNeedsNoRecovery() throws {
     let folder = try TestFolder()
@@ -99,7 +99,7 @@ struct ProjectRecoveryTests {
     let folder = try TestFolder()
     defer { folder.remove() }
     let (store, project) = try makeProject(in: folder)
-    try store.saveProject(project)  // 백업 = project
+    try store.saveProject(project)  // Backup = project
     let bodiesBefore = try episodeBytes(store)
     try breakProjectFile(store)
 
@@ -107,9 +107,9 @@ struct ProjectRecoveryTests {
 
     #expect(opened.recovery == .fromBackup)
     #expect(opened.project == project)
-    #expect(try store.loadProject() == project)  // 복구한 내용이 다시 저장됨
+    #expect(try store.loadProject() == project)  // Recovered content was saved again
     #expect(try episodeBytes(store) == bodiesBefore)
-    // 깨진 파일은 지우지 않고 옆에 남는다.
+    // The broken file isn't deleted; it's kept alongside.
     let names = try folder.fileNames(in: store.layout.root)
     #expect(names.contains { $0.hasPrefix("project.json.broken-") })
   }
@@ -125,7 +125,7 @@ struct ProjectRecoveryTests {
     let opened = try store.open()
 
     #expect(opened.recovery == .rebuiltFromFiles)
-    #expect(opened.project.title == "달빛 아래 검")  // 폴더 이름에서
+    #expect(opened.project.title == "달빛 아래 검")  // From the folder name
     #expect(Set(opened.project.episodes.map(\.id)) == Set(project.episodes.map(\.id)))
     #expect(opened.project.episodes.allSatisfy { $0.goal == 5_000 })
     #expect(try episodeBytes(store) == bodiesBefore)
@@ -134,7 +134,7 @@ struct ProjectRecoveryTests {
     }
   }
 
-  /// 목록에 없는 회차 파일: 빈 파일(회차를 만들다 꺼진 자국)과 목록에 있는 회차는 빼고, 본문은 건드리지 않는다.
+  /// Episode files not in the list: excludes empty files (traces of quitting mid-creation) and listed episodes; bodies untouched.
   @Test func findsNonEmptyEpisodeFilesMissingFromList() throws {
     let folder = try TestFolder()
     defer { folder.remove() }
@@ -169,7 +169,7 @@ struct ProjectRecoveryTests {
     let folder = try TestFolder()
     defer { folder.remove() }
     let store = try ProjectStore.create(at: folder.url.appending(path: "작품.novel"), title: "x")
-    // 이름 순서와 만든 순서를 일부러 반대로 한다.
+    // Name order and creation order are deliberately reversed.
     let ids = ["ccc", "bbb", "aaa"].map(EpisodeID.init(rawValue:))
     for (index, id) in ids.enumerated() {
       try store.writeEpisode("본문", id: id)
@@ -208,7 +208,7 @@ struct ProjectRecoveryTests {
     #expect(try folder.fileNames(in: folder.url).isEmpty)
   }
 
-  /// 같은 초에 두 번 복구해도(연달아 열기) 치워 둔 깨진 파일이 서로 덮이지 않고, 이름이 겹쳐 열기가 실패하지도 않는다.
+  /// Even recovering twice in the same second (opening in quick succession), set-aside broken files don't overwrite each other and opening doesn't fail on a name clash.
   @Test func repeatedRecoveryKeepsEveryBrokenFile() throws {
     let folder = try TestFolder()
     defer { folder.remove() }

@@ -2,9 +2,9 @@ import Foundation
 import NovelCore
 import XCTest
 
-/// 작품 전체 검색 (SPEC 8장 목표 0.5초): 더미 500회차를 디스크에서 읽어 모두 찾는다.
-/// 없는 문구로 찾아 끝까지 다 읽게 한다(가장 오래 걸리는 경우). 많이 나오는 문구는 1,000개에서 일찍 멈춘다.
-/// 처음 찾기(이 프로세스에서 처음)와 두 번째 이후를 따로 적는다(SPEC 8장 측정 방법).
+/// Project search (SPEC ch.8 target 0.5 s): read all 500 dummy episodes from disk and search them.
+/// Search for a missing phrase so everything is read to the end (the slowest case). Common phrases stop early at 1,000.
+/// The first search (first in this process) and later ones are recorded separately (SPEC ch.8 measurement method).
 final class SearchPerformanceTests: XCTestCase {
   func testSearch500Episodes() throws {
     guard let path = ProcessInfo.processInfo.environment["NOVEL_PERF_PROJECT"] else {
@@ -26,8 +26,8 @@ final class SearchPerformanceTests: XCTestCase {
     report("search_500_first_ms", [samples[0]])
     report("search_500_ms", Array(samples.dropFirst()))
 
-    // 더미는 앞 10화만 5,000자라 모두 합쳐 약 20만 자다. 500회차가 모두 5,000자(250만 자)인 작품의 찾기 시간을
-    // 따로 본다: 5,000자 회차 글을 500개 회차의 글로 넘겨 파일 읽기 없이 찾기만 잰다.
+    // Only the first 10 dummy episodes are 5,000 chars, ~200k chars total. Search time for a project with all 500 episodes at 5,000 chars (2.5M chars)
+    // is measured separately: a 5,000-char episode text is passed as 500 episodes' texts, timing only the search without file reads.
     let text = try store.readEpisode(ids[0])
     let texts = Dictionary(uniqueKeysWithValues: ids.map { ($0, text) })
     var full: [Double] = []

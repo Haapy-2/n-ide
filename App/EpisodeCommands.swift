@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// 회차 메뉴 (DESIGN.md 7장). 앞에 있는 작업 공간 창이 없으면 모두 흐리게 보인다.
-/// 단축키는 설정 → 단축키에서 바꾼 값을 읽는다(`ShortcutCommand`에 기본값).
+/// Episode menu (DESIGN.md ch.7). Everything dims when there's no front workspace window.
+/// Shortcuts read the values changed in Settings → Shortcuts (defaults in `ShortcutCommand`).
 struct EpisodeCommands: Commands {
   @FocusedValue(\.workspaceActions) private var actions
   @FocusedValue(\.episodeSidebarFocused) private var sidebarFocused
@@ -39,7 +39,7 @@ struct EpisodeCommands: Commands {
 
       Divider()
 
-      // 사이드바에서 ⌘클릭·⇧클릭으로 여러 회차를 고른 뒤 묶는다(PLAN 8장 B안).
+      // Group several episodes selected with ⌘-click / ⇧-click in the sidebar (PLAN ch.8 option B).
       Button(ShortcutCommand.groupEpisodes.title) { actions?.groupMarked?() }
         .keyboardShortcut(shortcuts.shortcut(.groupEpisodes))
         .disabled(actions?.groupMarked == nil)
@@ -49,8 +49,8 @@ struct EpisodeCommands: Commands {
     }
   }
 
-  /// 기본값일 때: 사이드바에 초점이 있으면 ⌘⌫, 편집기에 있으면 ⌥⌘⌫.
-  /// 편집기의 ⌘⌫는 "줄 앞까지 지우기"라서 그때는 메뉴가 가로채면 안 된다. 사용자가 바꿨으면 어디서나 그 조합.
+  /// With defaults: ⌘⌫ when the sidebar has focus, ⌥⌘⌫ when the editor does.
+  /// In the editor ⌘⌫ means "delete to line start", so the menu must not intercept it there. If the user changed it, that combo applies everywhere.
   private func trashShortcut(_ shortcuts: ShortcutSettings) -> KeyboardShortcut? {
     if !shortcuts.isCustomized(.trashEpisode), sidebarFocused == true {
       return KeyboardShortcut(.delete, modifiers: [.command])

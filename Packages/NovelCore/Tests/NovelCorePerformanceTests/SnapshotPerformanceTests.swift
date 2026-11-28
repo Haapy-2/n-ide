@@ -2,8 +2,8 @@ import Foundation
 import NovelCore
 import XCTest
 
-/// 스냅샷 한 번 찍는 시간. 앱은 메인 스레드 밖에서 부르지만, 회차 전환·앱 종료 때 기다리므로 짧아야 한다.
-/// 보관 개수 50개가 꽉 찬 회차에 "마지막 것과 비교 → 쓰기 → 정리(가장 오래된 것 지우기)"를 한 번에 잰다.
+/// Time to take one snapshot. The app calls it off the main thread, but episode switches and quit wait for it, so it must be short.
+/// On an episode with a full keep count of 50, measures "compare with latest → write → prune (delete oldest)" in one go.
 final class SnapshotPerformanceTests: XCTestCase {
   func testWriteAndPrune() throws {
     guard let path = ProcessInfo.processInfo.environment["NOVEL_PERF_PROJECT"] else {
@@ -11,7 +11,7 @@ final class SnapshotPerformanceTests: XCTestCase {
     }
     let dummy = ProjectStore(root: URL(filePath: path, directoryHint: .isDirectory))
     let text = try dummy.readEpisode(try dummy.loadProject().episodes[0].id)
-    // 더미 작품은 건드리지 않고 build/tmp에 따로 만든다.
+    // The dummy project is left alone; a separate one is made in build/tmp.
     let root = URL(filePath: path).deletingLastPathComponent().deletingLastPathComponent()
       .appending(path: "tmp/snapshot-perf-\(UUID().uuidString)/작품.novel")
     try FileManager.default.createDirectory(at: root.deletingLastPathComponent(), withIntermediateDirectories: true)

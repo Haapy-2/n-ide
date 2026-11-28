@@ -1,13 +1,13 @@
 import Foundation
 
-/// 테스트용 임시 폴더. 저장소 규칙대로 홈 폴더 임시 위치가 아니라 저장소의 build/ 아래에 만든다.
+/// Temp folder for tests. Per repo rules, created under the repo's build/ instead of a temp location in the home folder.
 struct TestFolder {
   static let repoRoot = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent()  // NovelCoreTests
     .deletingLastPathComponent()  // Tests
     .deletingLastPathComponent()  // NovelCore
     .deletingLastPathComponent()  // Packages
-    .deletingLastPathComponent()  // 저장소 루트
+    .deletingLastPathComponent()  // Repository root
 
   let url: URL
 
@@ -20,7 +20,7 @@ struct TestFolder {
     try? FileManager.default.removeItem(at: url)
   }
 
-  /// 숨김 파일도 포함한다.
+  /// Includes hidden files.
   func fileNames(in folder: URL) throws -> [String] {
     try FileManager.default.contentsOfDirectory(atPath: folder.path(percentEncoded: false)).sorted()
   }

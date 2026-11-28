@@ -3,7 +3,7 @@ import NovelCore
 import XCTest
 @testable import NovelEditor
 
-/// 스냅샷으로 되돌리기(PLAN 10장 6번). 지금 글을 잃지 않는지를 가장 먼저 본다.
+/// Restore from snapshot (PLAN ch.10 #6). First and foremost checks that the current text is never lost.
 @MainActor
 final class RestoreTests: XCTestCase {
   private var folder: URL!
@@ -105,12 +105,12 @@ final class RestoreTests: XCTestCase {
     XCTAssertNil(autosaver.restoreNotice)
   }
 
-  /// 복원 전 스냅샷으로 다시 되돌리면 또 복원 전이 남아 양쪽이 모두 기록된다.
+  /// Restoring again to the pre-restore snapshot leaves another pre-restore, so both directions are recorded.
   func testRestoringFromRestoreSnapshotRecordsBothWays() async throws {
     _ = try await restore(to: "옛 글")
     let before = try XCTUnwrap(try store.snapshots(of: episode).last)
     autosaver.textDidChange()
-    try await Task.sleep(for: .milliseconds(1_100))  // 같은 초면 -2가 붙을 뿐이지만 시간순을 분명히 하려고
+    try await Task.sleep(for: .milliseconds(1_100))  // Same second would only add -2, but make time order explicit
 
     _ = try await restore(to: try store.readSnapshot(before))
     XCTAssertEqual(textView.string, "지금 글")
@@ -120,7 +120,7 @@ final class RestoreTests: XCTestCase {
   }
 
   func testBlockedWhileConflictIsOpen() async throws {
-    // 앱에서 고친 채 저장하기 전에 바깥에서 파일이 바뀌면 충돌이 생긴다. 수정 시각이 같게 찍히지 않게 1초 뒤로 맞춘다.
+    // A file changed outside while app edits are unsaved creates a conflict. Shift the modification time by 1 s so it isn't stamped the same.
     textView.insertText(" 더", replacementRange: NSRange(location: textView.string.utf16.count, length: 0))
     autosaver.textDidChange()
     let url = store.layout.episodeFile(episode)

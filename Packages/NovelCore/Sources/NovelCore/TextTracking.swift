@@ -1,11 +1,11 @@
 import Foundation
 
-/// 옛 글의 자리가 새 글의 어디로 갔는지 따라간다(PLAN 14장 5번, 바꾼 자리만 되돌리기).
-/// 두 글을 비교해 "그대로 남은 글자 구간" 목록을 만들고, 옛 글의 범위가 한 구간 안에 고스란히 들어 있으면 그 자리를 알려 준다.
+/// Track where positions in an old text went in a new text (PLAN ch.14 #5, reverting only replaced spots).
+/// Compares the two texts into a list of "unchanged character spans"; if an old range lies wholly within one span, reports its new position.
 ///
-/// 비교는 UTF-16 단위로 한다(편집기·`NSString` 범위와 같은 단위). 앞뒤 같은 부분을 잘라 낸 뒤 가운데를 문단 단위로 맞추고,
-/// 짝이 안 맞은 문단 묶음만 글자 단위로 비교한다. 글자 비교는 묶음이 `characterLimit`보다 크면 하지 않는다:
-/// 비교 시간이 (길이 × 바뀐 양)으로 늘어서, 크게 고쳐 쓴 묶음은 그 안의 자리를 "고쳐서 못 따라감"으로 본다.
+/// Compared in UTF-16 units (same as editor/`NSString` ranges). After trimming identical head/tail, the middle is aligned by paragraph,
+/// and only unmatched paragraph groups are compared by character. Character comparison is skipped for groups larger than `characterLimit`:
+/// its time grows with (length × amount changed), so spots inside heavily rewritten groups count as "edited, can't track".
 public struct TextTracking: Sendable {
   struct Segment: Equatable, Sendable {
     let old: Int
@@ -13,14 +13,14 @@ public struct TextTracking: Sendable {
     let length: Int
   }
 
-  /// 같은 글자 구간, 옛 글 순서(새 글 순서도 같다)
+  /// Unchanged character spans, in old-text order (same as new-text order)
   let segments: [Segment]
   let oldLength: Int
 
-  /// 글자 단위로 비교할 묶음 크기 상한(두 쪽 UTF-16 길이 합)
+  /// Size cap for groups compared by character (sum of both sides' UTF-16 lengths)
   public static let characterLimit = 4_000
 
-  /// 메인 스레드 밖에서 부른다. 도중에 작업이 취소되면 `CancellationError`를 던진다.
+  /// Call off the main thread. Throws `CancellationError` if the task is cancelled midway.
   public init(old: String, new: String) throws {
     let a = Array(old.utf16)
     let b = Array(new.utf16)
@@ -30,8 +30,8 @@ public struct TextTracking: Sendable {
     while suffix < a.count - prefix, suffix < b.count - prefix, a[a.count - 1 - suffix] == b[b.count - 1 - suffix] {
       suffix += 1
     }
-    // 문단 중간에서 자르면 가운데의 문단 맞추기가 잘린 조각끼리 엉뚱하게 짝짓는다(빈 줄 조각과 빈 줄 등).
-    // 같은 앞부분은 마지막 줄 끝 바로 뒤까지, 같은 뒷부분은 첫 줄 끝 바로 뒤부터로 줄인다.
+    // Cutting mid-paragraph would make the middle's paragraph alignment pair up cut fragments wrongly (blank-line fragments with blank lines etc.).
+    // The identical head is shrunk to right after the end of its last line, the identical tail to right after the end of its first line.
     while prefix > 0, !(Self.isLineStart(prefix, in: a) && Self.isLineStart(prefix, in: b)) { prefix -= 1 }
     let shift = b.count - a.count
     var suffixStart = a.count - suffix
@@ -47,8 +47,8 @@ public struct TextTracking: Sendable {
     oldLength = a.count
   }
 
-  /// 옛 글의 범위가 새 글에서 있는 자리. 범위의 글자가 하나라도 바뀌었거나 구간 경계에 걸치면 nil.
-  /// 빈 범위(지운 자리)는 앞뒤 글자가 모두 그대로 이어져 있을 때만 따라간다: 둘레를 고쳤으면 그 자리에 되살릴 글의 맥락이 없다.
+  /// Position of an old range in the new text. nil if any of its characters changed or it straddles a span boundary.
+  /// An empty range (a deleted spot) is tracked only if the characters on both sides remain contiguous: if the surroundings were edited, there's no context to restore into.
   public func track(_ range: NSRange) -> NSRange? {
     let start = range.location
     let end = range.location + range.length
@@ -67,15 +67,15 @@ public struct TextTracking: Sendable {
     return NSRange(location: segment.new + (start - segment.old), length: range.length)
   }
 
-  // MARK: - 비교
+  // MARK: - Comparison
 
-  /// 맨 앞이거나 바로 앞 글자가 줄 끝. `\r\n` 사이는 줄 시작이 아니다.
+  /// At the start, or right after a line terminator. Between `\r\n` is not a line start.
   private static func isLineStart(_ index: Int, in units: [UInt16]) -> Bool {
     guard index > 0 else { return true }
     return ParagraphLines.endsLine(units[index - 1], next: index < units.count ? units[index] : nil)
   }
 
-  /// 맞닿은 구간을 하나로 합치며 모은다.
+  /// Collect while merging touching spans into one.
   struct SegmentBuilder {
     var segments: [Segment] = []
 
@@ -89,14 +89,14 @@ public struct TextTracking: Sendable {
     }
   }
 
-  /// 문단(줄 끝 문자까지 포함)끼리 맞추고, 사이에 남은 묶음은 글자 단위로 맞춘다.
+  /// Align paragraphs (including line terminators), then align the leftover groups in between by character.
   private static func matchParagraphs(
     _ a: [UInt16], _ aRange: Range<Int>, _ b: [UInt16], _ bRange: Range<Int>, into builder: inout SegmentBuilder
   ) throws {
     guard !aRange.isEmpty, !bRange.isEmpty else { return }
     let aLines = paragraphs(a, aRange)
     let bLines = paragraphs(b, bRange)
-    // 문단마다 번호를 붙여 번호끼리 비교한다(TextDiff와 같은 까닭).
+    // Number each paragraph and compare numbers (same reason as TextDiff).
     var numbers: [ArraySlice<UInt16>: Int] = [:]
     func number(_ line: Range<Int>, _ units: [UInt16]) -> Int {
       let key = units[line]
@@ -117,7 +117,7 @@ public struct TextTracking: Sendable {
       case .insert(let offset, _, _): inserted.insert(offset)
       }
     }
-    // 남은(같은) 문단은 순서대로 짝이 된다. 짝 사이에 낀 묶음은 글자 단위로.
+    // Remaining (identical) paragraphs pair up in order. Groups between pairs are compared by character.
     var i = 0
     var j = 0
     var aGapStart = aRange.lowerBound
@@ -141,7 +141,7 @@ public struct TextTracking: Sendable {
     _ a: [UInt16], _ aRange: Range<Int>, _ b: [UInt16], _ bRange: Range<Int>, into builder: inout SegmentBuilder
   ) throws {
     guard !aRange.isEmpty, !bRange.isEmpty else { return }
-    // 묶음 안의 같은 앞뒤는 비교 없이 남긴다. 아주 긴 문단 하나에서 한 곳만 고쳤을 때도 나머지를 따라가게.
+    // Identical head/tail inside a group is kept without comparing. So a single very long paragraph edited in one place still tracks the rest.
     var head = 0
     while head < aRange.count, head < bRange.count, a[aRange.lowerBound + head] == b[bRange.lowerBound + head] {
       head += 1
@@ -182,7 +182,7 @@ public struct TextTracking: Sendable {
     }
   }
 
-  /// 범위 안을 문단으로 나눈다. 줄 끝 문자(`\n`, `\r\n`, `\r`, U+2029)는 그 문단에 넣어 이어 붙이면 원래 범위가 된다.
+  /// Split a range into paragraphs. Line terminators (`\n`, `\r\n`, `\r`, U+2029) belong to their paragraph, so concatenating restores the range.
   private static func paragraphs(_ units: [UInt16], _ range: Range<Int>) -> [Range<Int>] {
     var lines: [Range<Int>] = []
     var start = range.lowerBound

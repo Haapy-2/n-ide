@@ -4,13 +4,13 @@ import SwiftUI
 import XCTest
 @testable import NovelEditor
 
-/// 작업 공간 사이드바(회차 목록·검색 패널)와 여러 회차 이름 변경 창. 실제 창에 띄워 화면에 보이는 것으로 본다.
+/// Workspace sidebar (episode list, search panel) and the batch rename sheet. Shown in a real window and checked by what's visible on screen.
 @MainActor
 final class WorkspaceSidebarTests: XCTestCase {
   private var folder: URL!
   private var store: ProjectStore!
   private var windows: [NSWindow] = []
-  /// 작업 공간 창에 띄운 작품. 폴더를 지우기 전에 닫기 저장을 끝내야 한다(tearDown).
+  /// Project shown in the workspace window. Close-time saves must finish before deleting the folder (tearDown).
   private var workspaces: [ProjectModel] = []
   private var savedCollapsed: Any?
   private var lastVisible = NSRange()
@@ -24,8 +24,8 @@ final class WorkspaceSidebarTests: XCTestCase {
   }
 
   override func tearDown() async throws {
-    // 작업 공간 창은 닫힐 때 남은 저장을 Task로 마친다. 폴더를 먼저 지우면 그 저장이 실패해 "회차 목록을
-    // 저장하지 못했어요" 모달이 다음 테스트 도중에 떠 메인 스레드를 막는다. 그래서 닫기 저장을 여기서 끝낸 뒤 지운다.
+    // The workspace window finishes pending saves in a Task when it closes. Deleting the folder first makes that save fail, and a "회차 목록을
+    // 저장하지 못했어요" modal appears mid-next-test and blocks the main thread. So close-time saves finish here before deleting.
     for window in windows {
       window.contentView = nil
       window.close()
@@ -47,7 +47,7 @@ final class WorkspaceSidebarTests: XCTestCase {
     return window
   }
 
-  /// 조건이 맞을 때까지 화면 갱신을 돌린다(최대 2초). 맞으면 true.
+  /// Spin screen updates until the condition holds (max 2 s). True if it holds.
   @discardableResult
   private func waitUntil(_ condition: () -> Bool) async throws -> Bool {
     for _ in 0..<200 {
@@ -73,7 +73,7 @@ final class WorkspaceSidebarTests: XCTestCase {
     return window.contentView.flatMap(find)
   }
 
-  /// 회차 목록 줄 번호: 0 "회차" 제목, 1 구역 머리, 2부터 보이는 줄(`EpisodeGrouping.rows`).
+  /// Episode list row indices: 0 "회차" header, 1 section header, visible rows from 2 (`EpisodeGrouping.rows`).
   private func isVisible(row: Int, in window: NSWindow) throws -> Bool {
     let table = try XCTUnwrap(first(NSTableView.self, in: window))
     let visible = table.rows(in: table.visibleRect)
@@ -81,7 +81,7 @@ final class WorkspaceSidebarTests: XCTestCase {
     return NSLocationInRange(row + 2, visible)
   }
 
-  // MARK: - 회차 목록
+  // MARK: - Episode list
 
   func testSidebarScrollsToSelectedEpisode() async throws {
     let episodes = metas(500)
@@ -110,12 +110,12 @@ final class WorkspaceSidebarTests: XCTestCase {
     try await waitUntil { UserDefaults.standard.string(forKey: AppSettingKey.collapsedEpisodeGroups) == "" }
 
     XCTAssertEqual(UserDefaults.standard.string(forKey: AppSettingKey.collapsedEpisodeGroups), "", "고른 회차가 든 묶음을 편다")
-    // 줄: 0 「1화」, 1 1부, 2 「2화」, 3 「3화」
+    // Rows: 0 「1화」, 1 1부, 2 「2화」, 3 「3화」
     try await waitUntil { (try? self.isVisible(row: 3, in: window)) == true }
     XCTAssertTrue(try isVisible(row: 3, in: window))
   }
 
-  /// 휴지통으로 보낸(또는 ⌘Z로 사라진) 회차가 여러 개 고른 목록에 남지 않는다.
+  /// Trashed episodes (or ones removed by ⌘Z) don't linger in the multi-selection.
   func testListChangeKeepsOnlyRemainingMarkedEpisodes() {
     let ids = (0..<3).map { _ in EpisodeID.make() }
     let after = WorkspaceView.afterListChange(
@@ -133,7 +133,7 @@ final class WorkspaceSidebarTests: XCTestCase {
     XCTAssertEqual(after.selection, id)
   }
 
-  /// 마지막 남은 회차를 휴지통으로 보냈다가 ⌘Z로 되살리면 빈 종이가 아니라 그 회차가 열린다.
+  /// Trashing the last remaining episode and restoring with ⌘Z opens that episode, not a blank page.
   func testUndoingTrashOfLastEpisodeOpensIt() async throws {
     let trash = folder.appending(path: "휴지통")
     let model = ProjectModel(
@@ -163,7 +163,7 @@ final class WorkspaceSidebarTests: XCTestCase {
     XCTAssertEqual(model.autosaver.episodeID, id, "되살린 회차가 편집기에 열린다")
   }
 
-  // MARK: - 검색 패널
+  // MARK: - Search panel
 
   private func makeSearch(_ box: SearchBox) -> (ProjectSearch, ProjectReplace) {
     let store = store!
@@ -173,7 +173,7 @@ final class WorkspaceSidebarTests: XCTestCase {
     return (search, replace)
   }
 
-  /// 검색 결과가 휴지통으로 간 회차를 가리키지 않고, ⌘Z로 되살리면 다시 찾는다.
+  /// Search results don't point at trashed episodes, and restoring with ⌘Z searches again.
   func testSearchResultsFollowEpisodeListChanges() async throws {
     let episodes = metas(2)
     for episode in episodes { try store.writeEpisode("달빛 아래", id: episode.id) }
@@ -193,9 +193,9 @@ final class WorkspaceSidebarTests: XCTestCase {
     XCTAssertEqual(search.result?.episodes.map(\.id), episodes.map(\.id), "되살린 회차는 다시 찾는다")
   }
 
-  // MARK: - 여러 회차 이름 변경 창
+  // MARK: - Batch rename sheet
 
-  /// 엔터를 빠르게 두 번 눌러도 규칙은 한 번만 적용된다.
+  /// Pressing Return twice quickly applies the rule only once.
   func testBatchRenameAppliesOnceOnDoubleReturn() async throws {
     let episodes = metas(2)
     var applied = 0
@@ -235,7 +235,7 @@ private final class SidebarBox {
   }
 }
 
-/// 작업 공간이 회차 목록을 띄우는 짜임. 선택을 밖에서 바꿀 수 있게 따로 꾸렸다(MemoryGrowthTests.SwitchHost와 같은 까닭).
+/// Structure for showing the workspace's episode list. Built separately so selection can be changed from outside (same reason as MemoryGrowthTests.SwitchHost).
 private struct SidebarHost: View {
   @Bindable var box: SidebarBox
   @State private var inset: CGFloat?

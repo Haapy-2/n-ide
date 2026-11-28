@@ -1,22 +1,22 @@
 import Foundation
 
-/// 설정에서 단축키를 바꿀 수 있는 메뉴 명령과 기본 단축키 (DESIGN.md 7장 표와 같게 둔다).
-/// 새 메뉴 명령을 만들면 여기에 한 줄 더하고 메뉴에서 `ShortcutSettings.shortcut(_:)`로 읽는다.
+/// Menu commands whose shortcuts can be changed in Settings, and their defaults (keep in sync with the DESIGN.md ch.7 table).
+/// When adding a menu command, add one line here and read it in the menu with `ShortcutSettings.shortcut(_:)`.
 enum ShortcutCommand: String, CaseIterable, Identifiable {
   case newProject, openOther, switchProject, saveNow
-  /// 저장하면서 스냅샷 찍기. 설정에서 켰을 때만 쓰이고, 그동안 지금 저장·스냅샷 찍기 칸은 잠긴다.
+  /// Snapshot on save. Used only when enabled in Settings; meanwhile the save-now / take-snapshot fields lock.
   case saveWithSnapshot
   case takeSnapshot, showSnapshots
   case searchProject
-  /// 같은 말 하나 더 고르기(⌘D, PLAN 16장). 편집기에 키보드 초점이 있을 때만 일한다.
+  /// Select next occurrence (⌘D, PLAN ch.16). Works only when the editor has keyboard focus.
   case selectNextOccurrence
   case newEpisode, previousEpisode, nextEpisode, renameEpisode, trashEpisode, episodeGoal
-  /// 회차 묶음. 기본 단축키 없음.
+  /// Episode groups. No default shortcut.
   case groupEpisodes, ungroupEpisodes
 
   var id: Self { self }
 
-  /// 메뉴 항목 이름. 메뉴도 이 이름을 쓴다.
+  /// Menu item name. The menu uses this name too.
   var title: String {
     switch self {
     case .newProject: "새 작품…"
@@ -54,9 +54,9 @@ enum ShortcutCommand: String, CaseIterable, Identifiable {
     case .openOther: KeyCombo("o", [.command])
     case .switchProject: KeyCombo("o", [.command, .shift])
     case .saveNow: KeyCombo("s", [.command])
-    // 지금 저장과 같은 ⌘S. 둘은 동시에 쓰이지 않아서 겹치지 않는다(ShortcutSettings.isActive).
+    // Same ⌘S as save now. The two are never active at once, so they don't clash (ShortcutSettings.isActive).
     case .saveWithSnapshot: KeyCombo("s", [.command])
-    // ⌥⌘S는 시스템 "사이드바 보기"와 겹쳐 ⌃⌘S로
+    // ⌥⌘S clashes with the system "Show Sidebar", so ⌃⌘S
     case .takeSnapshot: KeyCombo("s", [.command, .control])
     case .showSnapshots: KeyCombo("s", [.command, .shift])
     case .searchProject: KeyCombo("f", [.command, .shift])

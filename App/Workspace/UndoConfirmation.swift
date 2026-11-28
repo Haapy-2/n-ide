@@ -1,7 +1,7 @@
 import Foundation
 
-/// 사이드바에서 ⌘Z·⇧⌘Z로 회차 작업(새 회차, 이름 변경, 순서 변경, 휴지통, 목표 글자 수)을 되돌리기 전에 묻는 창.
-/// 창의 "다시 묻지 않기"를 고르면 설정의 기간 동안 묻지 않고 바로 되돌린다.
+/// Dialog asking before ⌘Z/⇧⌘Z in the sidebar reverts episode actions (new episode, rename, reorder, trash, goal).
+/// Choosing the dialog's "don't ask again" reverts immediately without asking for the configured period.
 enum UndoConfirmPause: String, CaseIterable {
   case day
   case threeDays
@@ -9,7 +9,7 @@ enum UndoConfirmPause: String, CaseIterable {
   case month
   case forever
 
-  /// 설정 창 "확인 창 다시 띄우기"에 보이는 이름
+  /// Name shown in Settings "show confirmation again"
   var title: String {
     switch self {
     case .day: "하루 뒤"
@@ -20,7 +20,7 @@ enum UndoConfirmPause: String, CaseIterable {
     }
   }
 
-  /// `now`부터 쉬는 끝 시각. 계속 쉬면 `.distantFuture`.
+  /// End of the rest starting at `now`. `.distantFuture` for indefinitely.
   func end(from now: Date, calendar: Calendar = .current) -> Date {
     switch self {
     case .day: calendar.date(byAdding: .day, value: 1, to: now) ?? now
@@ -32,20 +32,20 @@ enum UndoConfirmPause: String, CaseIterable {
   }
 }
 
-/// 확인 창이 쉬는지 판단하고 쉬게 하거나 다시 묻게 한다. 값은 UserDefaults(앱 전체 설정)에 둔다.
+/// Decides whether the confirmation is resting, and makes it rest or ask again. Stored in UserDefaults (app-wide setting).
 enum UndoConfirmation {
   static func isPaused(now: Date = .now, defaults: UserDefaults = .standard) -> Bool {
     let until = defaults.double(forKey: AppSettingKey.undoConfirmPausedUntil)
     return until > now.timeIntervalSince1970
   }
 
-  /// "다시 묻지 않기"를 고르고 되돌렸을 때. 기간은 설정 값(기본 일주일).
+  /// When reverting with "don't ask again" chosen. Duration is the setting value (default one week).
   static func pause(now: Date = .now, defaults: UserDefaults = .standard) {
     let pause = defaults.string(forKey: AppSettingKey.undoConfirmPause).flatMap(UndoConfirmPause.init) ?? .week
     defaults.set(pause.end(from: now).timeIntervalSince1970, forKey: AppSettingKey.undoConfirmPausedUntil)
   }
 
-  /// 설정 창의 "지금부터 다시 묻기"
+  /// Settings "ask again from now"
   static func resume(defaults: UserDefaults = .standard) {
     defaults.removeObject(forKey: AppSettingKey.undoConfirmPausedUntil)
   }

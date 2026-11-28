@@ -1,20 +1,20 @@
 import NovelCore
 import Observation
 
-/// 되돌리기 창 하나의 상태(PLAN 14장 5번): 체크한 회차, 비교를 보는 회차, 그 비교.
-/// 체크는 기본으로 모두. 비교는 누른 회차만 그때 만든다(본문을 미리 들고 있지 않게).
+/// State of one revert sheet (PLAN ch.14 #5): checked episodes, the episode whose diff is shown, and that diff.
+/// All checked by default. A diff is built only for the clicked episode, at that time (so bodies aren't held in advance).
 @MainActor
 @Observable
 final class RevertSession: Identifiable {
   let undoable: ProjectReplace.Undoable
   var checked: Set<EpisodeID>
-  /// 비교를 보는 회차(목록에서 고른 줄)
+  /// Episode whose diff is shown (selected row)
   var focused: EpisodeID? {
     didSet { if focused != oldValue { loadPreview() } }
   }
   private(set) var preview: TextDiff?
   private(set) var isLoadingPreview = false
-  /// ⇧클릭 범위의 시작. 마지막으로 체크를 바꾼 줄.
+  /// Start of a ⇧-click range. The row whose check last changed.
   @ObservationIgnored private var anchor: EpisodeID?
   @ObservationIgnored private let replace: ProjectReplace
   @ObservationIgnored private var previewTask: Task<Void, Never>?
@@ -35,7 +35,7 @@ final class RevertSession: Identifiable {
     anchor = id
   }
 
-  /// ⇧클릭: 시작 줄부터 이 줄까지를 시작 줄과 같은 상태로.
+  /// ⇧-click: set rows from the start row to this one to the start row's state.
   func extend(to id: EpisodeID) {
     let ids = candidates.map(\.id)
     guard let anchor, let from = ids.firstIndex(of: anchor), let to = ids.firstIndex(of: id) else {

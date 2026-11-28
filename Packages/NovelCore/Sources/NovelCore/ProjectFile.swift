@@ -1,18 +1,18 @@
 import Foundation
 
-/// `project.json`의 내용: 작품에 속한 정보와 작품별 설정. 회차 본문은 여기 없고 `episodes/`에 따로 있다.
+/// Contents of `project.json`: project information and per-project settings. Episode bodies aren't here; they're in `episodes/`.
 public struct ProjectFile: Codable, Equatable, Sendable {
   public var schemaVersion: Int
   public var title: String
-  /// 배열 순서가 곧 회차 순서다. 회차 번호(1화, 2화…)는 저장하지 않고 이 순서로 매긴다.
+  /// Array order is episode order. Episode numbers (1화, 2화…) aren't stored; they come from this order.
   public var episodes: [EpisodeMeta]
   public var notes: [NoteMeta]
   public var settings: ProjectSettings
-  /// 회차 묶음의 이름(형식 2). 어느 회차가 어느 묶음인지는 회차의 `group`에 있다.
-  /// 묶음은 늘 이어진 회차들이고, 회원이 없는 묶음은 남기지 않는다(`EpisodeGrouping.normalized`).
+  /// Episode group names (format 2). Which episode belongs to which group is in the episode's `group`.
+  /// Groups are always contiguous episodes, and groups without members aren't kept (`EpisodeGrouping.normalized`).
   public var groups: [EpisodeGroup]
-  /// 작가가 보는 그림 이름(결정 52). 원고 줄과 그림 파일에는 이름이 없다. 순서는 뜻이 없다(보이는 순서는 원고에서 센다).
-  /// 비면 파일에 적지 않아 그림을 쓰지 않는 작품의 `project.json`은 그대로다.
+  /// Image names the writer sees (decision 52). Manuscript lines and image files carry no names. Order is meaningless (visible order is counted from the manuscript).
+  /// Not written when empty, so `project.json` of projects without images stays unchanged.
   public var images: [ImageMeta]
 
   public init(
@@ -34,15 +34,15 @@ public struct ProjectFile: Codable, Equatable, Sendable {
 
   private enum CodingKeys: String, CodingKey { case schemaVersion, title, episodes, notes, settings, groups, images }
 
-  /// 형식 1에는 `groups`가 없다. 없으면 묶음 없음으로 읽는다(1 → 2 옮기기는 이것뿐).
+  /// Format 1 has no `groups`. Absent means no groups (that's the whole 1 → 2 migration).
   public init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
-    // 옛 형식도 읽은 뒤에는 지금 형식이다. 다음 저장 때 지금 버전 번호로 적힌다(더 새 버전은 읽기 전에 거부됨).
+    // Once read, an old format is the current format. The next save writes the current version (newer versions are rejected before reading).
     _ = try container.decode(Int.self, forKey: .schemaVersion)
     schemaVersion = ProjectFormat.currentSchemaVersion
     title = try container.decode(String.self, forKey: .title)
-    // 손으로 고치거나 동기화가 꼬여 같은 ID가 두 번 적혀 있으면 처음 것만 남긴다(ID로 찾는 곳들이 하나라고 믿는다).
-    // 버린 줄의 본문 파일은 건드리지 않는다. 다음 저장 때 정리된 목록이 적힌다.
+    // If the same ID appears twice (hand edits or sync glitches), keep only the first (lookups by ID assume uniqueness).
+    // Body files of dropped entries are untouched. The cleaned list is written on the next save.
     episodes = Self.firstOfEach(try container.decode([EpisodeMeta].self, forKey: .episodes))
     notes = try container.decode([NoteMeta].self, forKey: .notes)
     settings = try container.decode(ProjectSettings.self, forKey: .settings)
@@ -67,7 +67,7 @@ public struct ProjectFile: Codable, Equatable, Sendable {
   }
 }
 
-/// 회차 묶음 하나(예: "1부 귀환"). 회차 파일은 그대로 두고 보이는 것만 묶는다(PLAN 8장 B안).
+/// One episode group (e.g. "1부 귀환"). Episode files stay put; grouping is visual only (PLAN ch.8 option B).
 public struct EpisodeGroup: Codable, Equatable, Sendable, Identifiable {
   public let id: GroupID
   public var title: String
@@ -78,7 +78,7 @@ public struct EpisodeGroup: Codable, Equatable, Sendable, Identifiable {
   }
 }
 
-/// 그림 하나의 이름. 이름을 바꿔도 원고 줄과 그림 파일은 그대로다(결정 52).
+/// One image's name. Renaming leaves manuscript lines and image files unchanged (decision 52).
 public struct ImageMeta: Codable, Equatable, Sendable, Identifiable {
   public let id: ImageID
   public var name: String
@@ -88,24 +88,24 @@ public struct ImageMeta: Codable, Equatable, Sendable, Identifiable {
     self.name = name
   }
 
-  /// 넣은 원본 파일 이름에서 처음 이름(확장자 뺌). 비면 "그림".
+  /// Initial name from the inserted original file name (extension removed). "그림" if empty.
   public static func name(fromOriginalFileName fileName: String) -> String {
     let name = (fileName as NSString).deletingPathExtension.trimmingCharacters(in: .whitespacesAndNewlines)
     return name.isEmpty ? "그림" : name
   }
 }
 
-/// 회차 하나의 정보 (본문 제외).
+/// One episode's info (excluding the body).
 public struct EpisodeMeta: Codable, Equatable, Sendable, Identifiable {
   public let id: EpisodeID
-  /// 비어 있으면 화면에 "제목 없음"으로 보인다.
+  /// Shown as "제목 없음" when empty.
   public var title: String
-  /// 목표 글자 수. 어떤 기준(공백 포함/제외)으로 셀지는 앱 설정을 따른다.
+  /// Goal character count. Which basis (with/without spaces) follows the app setting.
   public var goal: Int
-  /// 마지막으로 센 본문 글자 수. 사이드바가 본문을 읽지 않고 보여주려고 둔다(본문에서 다시 셀 수 있는 값).
-  /// 이 값이 생기기 전에 만든 작품이나 아직 센 적 없는 회차는 nil.
+  /// Last counted body length. Kept so the sidebar can show it without reading the body (recomputable from the body).
+  /// nil for projects created before this field existed or episodes never counted.
   public var characterCount: CharacterCount?
-  /// 속한 묶음. 없으면 nil(파일에도 적지 않는다).
+  /// Group it belongs to. nil if none (not written to the file either).
   public var group: GroupID?
 
   public init(
@@ -119,7 +119,7 @@ public struct EpisodeMeta: Codable, Equatable, Sendable, Identifiable {
   }
 }
 
-/// 설정 노트 하나의 정보 (본문 제외).
+/// One setting note's info (excluding the body).
 public struct NoteMeta: Codable, Equatable, Sendable, Identifiable {
   public let id: NoteID
   public var title: String
@@ -130,7 +130,7 @@ public struct NoteMeta: Codable, Equatable, Sendable, Identifiable {
   }
 }
 
-/// 작품별 설정. 글꼴 같은 앱 전체 설정은 여기 두지 않는다 (PLAN.md 결정 사항 6).
+/// Per-project settings. App-wide settings like fonts don't live here (PLAN.md decision 6).
 public struct ProjectSettings: Codable, Equatable, Sendable {
   public var defaultEpisodeGoal: Int
 

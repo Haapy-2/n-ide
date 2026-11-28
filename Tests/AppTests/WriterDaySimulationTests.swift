@@ -4,20 +4,20 @@ import SwiftUI
 import XCTest
 @testable import NovelEditor
 
-/// 작가의 하루: 연재 중인 작가가 작업 공간(`WorkspaceView`)을 하루 동안 쓰는 흐름을 대본(`Step` 표)대로 돌린다.
-/// 단계마다 작가가 보는 것(편집기 글·커서·화면 위치·키보드 초점·저장 상태·스냅샷)을 확인하고, 단계가 끝날 때마다
-/// 모든 회차의 디스크 본문을 작가가 쓴 글과 비교한다. 단계는 앞 단계의 상태를 이어받는다.
+/// A writer's day: runs a serializing writer using the workspace (`WorkspaceView`) for a day, following a script (`Step` table).
+/// Each step checks what the writer sees (editor text, caret, scroll position, keyboard focus, save state, snapshots), and after every step
+/// every episode's disk body is compared against what the writer wrote. Steps carry over the previous step's state.
 ///
-/// 테스트 창은 키 창이 되지 못해(앱이 앞으로 오지 않음) 클릭·메뉴·툴바·확인 창은 닿지 않는다. 그래서 회차 고르기는
-/// 사이드바 ↑↓, ⌘N·이름 바꾸기·사이드바 작업은 그 명령이 부르는 `ProjectModel` 함수로 대신한다.
+/// The test window can't become key (the app doesn't come to the front), so clicks, menus, toolbar and dialogs don't reach it. So episode selection
+/// uses sidebar ↑↓, and ⌘N, renaming and sidebar actions call the `ProjectModel` functions those commands invoke.
 @MainActor
 final class WriterDaySimulationTests: XCTestCase {
   private var day: WriterDay!
 
-  /// 동기 테스트로 돈다: AppKit 조작은 실제 이벤트처럼 작업(Task) 밖 메인 스레드에서 하고, 앱의 비동기 함수는
-  /// 따로 Task로 띄워 런루프를 돌리며 기다린다(`WriterDay.run`). 그 Task 안에서 Objective-C 예외가 나면 Task를 건너
-  /// 풀려 나가 메인 스레드가 Task를 돌리는 중으로 남고, 테스트 끝에 Swift 동시성 할당 오류로 테스트 앱이 죽는다.
-  /// 그래서 되돌리기 기록이 생기는 사이드바 작업은 꼭 `sidebar {}`(묶음을 연다)로 부른다.
+  /// Runs as a synchronous test: AppKit manipulation happens on the main thread outside any Task, like real events, and the app's async functions
+  /// are launched in separate Tasks while spinning the run loop (`WriterDay.run`). An Objective-C exception inside such a Task unwinds past the Task,
+  /// leaving the main thread marked as running it, and at test end the test app dies with a Swift concurrency allocator error.
+  /// So sidebar actions that create undo records must be called via `sidebar {}` (which opens a group).
   func testWriterDay() throws {
     day = try WriterDay.start()
     defer {
@@ -32,11 +32,11 @@ final class WriterDaySimulationTests: XCTestCase {
         break
       }
     }
-    // 알려진 끊김은 실패로 세지 않으므로 로그에 남긴다.
+    // Known hitches don't count as failures, so they're logged.
     for line in day.knownBreaks { print("알려진 끊김 \(line)") }
   }
 
-  // MARK: - 대본
+  // MARK: - Script
 
   private var script: [Step] {
     [
@@ -132,7 +132,7 @@ final class WriterDaySimulationTests: XCTestCase {
         day.see(day.editor.string, edited, "세 곳이 함께 바뀐다")
         try day.saveNow()
         day.see(try day.disk(day.ep3), edited, "디스크에도 세 곳")
-        // ⌘Z는 이벤트가 연 묶음을 먼저 닫는다. `key`가 연 묶음 안에서 부르면 groupsByEvent가 꺼진 관리자는 예외를 던진다.
+        // ⌘Z closes the group opened by the event first. Called inside a group opened by `key`, a manager with groupsByEvent off throws.
         day.editor.undo(nil)
         day.see(day.editor.string, original, "⌘Z 한 번에 세 곳이 돌아온다")
         day.key { day.editor.doCommand(by: #selector(NSResponder.cancelOperation(_:))) }
@@ -185,7 +185,7 @@ final class WriterDaySimulationTests: XCTestCase {
         day.ok(!day.fileExists(day.newEpisode), "휴지통으로 간 회차 파일은 회차 폴더에 없다")
         try day.run { await day.model.finishProjectSaves() }
         try day.verifyListOnDisk()
-        // 사이드바 ⌘Z는 확인 창을 거쳐 한 번씩 누른다. 앞 되돌리기의 파일 옮기기가 끝난 뒤 다음을 누른다.
+        // Sidebar ⌘Z goes through the confirmation one press at a time. The next is pressed after the previous undo's file move finishes.
         for _ in 0..<3 {
           undo.undo()
           try day.run { await day.model.finishFileUndos() }
@@ -268,10 +268,10 @@ final class WriterDaySimulationTests: XCTestCase {
   }
 }
 
-// MARK: - 대본 한 줄
+// MARK: - One script line
 
-/// 대본 한 줄: 작가가 하는 일(`act`)과 그 뒤 화면·디스크에서 볼 것(`check`).
-/// 단계가 끝나면 `WriterDay.perform`이 모든 회차의 디스크 본문·목록·저장 상태·메인 스레드 시간을 함께 본다.
+/// One script line: what the writer does (`act`) and what to check on screen and disk afterwards (`check`).
+/// After each step, `WriterDay.perform` also checks every episode's disk body, the list, save state and main-thread time.
 @MainActor
 private struct Step {
   let name: String
@@ -285,15 +285,15 @@ private struct Step {
   }
 }
 
-// MARK: - 작가의 하루 상태
+// MARK: - Writer's day state
 
-/// 하루 내내 이어지는 상태: 작품, 열린 창, 작가가 쓴 글(`expected`, 디스크와 비교할 정답).
+/// State lasting all day: the project, open window, and what the writer wrote (`expected`, the answer compared against disk).
 @MainActor
 private final class WriterDay {
   enum Input {
-    /// 표시된 글자(밑줄) 방식: `setMarkedText`로 조합하고 `insertText`로 확정
+    /// Displayed-text (underlined) mode: compose with `setMarkedText`, commit with `insertText`
     case marked
-    /// 표시된 글자 없이 "앞 글자를 이 글로"(`replacementRange`)로 조합을 이어 가는 두벌식(macOS 27)
+    /// 2-set (macOS 27) continuing composition without displayed text via "replace the previous character with this" (`replacementRange`)
     case replacing
   }
 
@@ -303,7 +303,7 @@ private final class WriterDay {
     case saveStart = "저장 시작"
   }
 
-  /// 메인 스레드에서 한 번에 이보다 오래 걸리면 실패(Debug 빌드라 넉넉히).
+  /// Fails if a single main-thread chunk takes longer than this (generous since it's a Debug build).
   static let mainThreadLimit: Duration = .milliseconds(50)
 
   let folder: URL
@@ -314,24 +314,24 @@ private final class WriterDay {
   let ep3: EpisodeID
   var newEpisode: EpisodeID!
   var expected: [EpisodeID: String] = [:]
-  /// 첫 단계에서 "지난번"에 남긴 2화 자리
+  /// Episode 2 position left "last time" for the first step
   let seededPlace: EpisodeViewState
-  /// 사이드바로 회차를 떠날 때 본 자리(돌아오면 이 자리여야 한다)
+  /// Position seen when leaving an episode via the sidebar (must be restored on return)
   var places: [EpisodeID: EpisodeViewState] = [:]
-  /// 단계 안에서 앞뒤를 비교할 스냅샷 목록
+  /// Snapshot list for before/after comparison within a step
   var marks: [[String]] = []
   private(set) var model: ProjectModel!
   private(set) var window: NSWindow?
   private(set) var editor: ManuscriptTextView!
-  /// 사이드바 작업의 되돌리기 기록(작업 공간은 창의 기록을 넘긴다)
+  /// Undo history for sidebar actions (the workspace receives the window's history)
   let sidebarUndo: UndoManager
   private(set) var stepName = ""
-  /// 이번 하루에 만난 알려진 끊김(보고용)
+  /// Known hitches met during this day (for reporting)
   private(set) var knownBreaks: [String] = []
   private var samples: [(Work, Duration)] = []
   private var savedSettings: [String: Any] = [:]
   private let clock = ContinuousClock()
-  /// 사용자 설정과 상관없이 같은 화면이 되게 고정한다(테스트 앱은 실제 앱 설정을 읽는다).
+  /// Fixed so the screen is the same regardless of user settings (the test app reads the real app settings).
   private static let pinnedSettings: [String: Any] = [
     AppSettingKey.multiCursorEnabled: true, AppSettingKey.collapsedEpisodeGroups: "",
   ]
@@ -348,7 +348,7 @@ private final class WriterDay {
     sidebarUndo.groupsByEvent = false
   }
 
-  /// 연재 중인 작품(1화·2화·3화, 회차마다 60문단)과 "지난번에 2화를 보다 닫았다"는 자리 기억.
+  /// A serialized project (episodes 1–3, 60 paragraphs each) and the remembered position "closed while viewing episode 2 last time".
   static func start() throws -> WriterDay {
     let repo = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
     let folder = repo.appending(path: "build/tmp/\(UUID().uuidString)")
@@ -388,7 +388,7 @@ private final class WriterDay {
     return day
   }
 
-  /// 권한을 먼저 되돌려야 남은 저장이 끝나고 폴더를 지울 수 있다.
+  /// Permissions must be restored first so pending saves can finish and the folder can be deleted.
   func end() {
     try? blockEpisodeFolder(false)
     if let model { try? run { await model.autosaver.finish() } }
@@ -399,7 +399,7 @@ private final class WriterDay {
     try? FileManager.default.removeItem(at: folder)
   }
 
-  // MARK: 단계 돌리기
+  // MARK: Running steps
 
   func perform(_ step: Step) throws {
     stepName = step.name
@@ -412,8 +412,8 @@ private final class WriterDay {
     }
   }
 
-  /// 어느 단계 뒤에도: ⌘S 뒤 모든 회차 디스크 본문이 작가가 쓴 글과 같고(사라지거나 섞이지 않음),
-  /// 회차 폴더의 파일과 `project.json` 목록이 화면 목록과 맞고, 저장 상태가 평소다.
+  /// After any step: after ⌘S every episode's disk body equals what the writer wrote (nothing lost or mixed),
+  /// the episode folder's files and the `project.json` list match the on-screen list, and save state is normal.
   private func verifyManuscripts() throws {
     try saveNow()
     try run { await self.model.finishProjectSaves() }
@@ -436,7 +436,7 @@ private final class WriterDay {
     see(saved.groups, model.project.groups, "project.json 묶음")
   }
 
-  // MARK: 창
+  // MARK: Window
 
   func openWorkspace() throws {
     model = ProjectModel(
@@ -458,17 +458,17 @@ private final class WriterDay {
       self.find(ManuscriptTextView.self) != nil && self.model.autosaver.episodeID != nil
     }
     editor = find(ManuscriptTextView.self)
-    // 테스트에는 이벤트가 없어 실행 취소 묶음이 저절로 닫히지 않는다. 키 하나를 묶음 하나로 직접 닫는다(`key`).
+    // Tests have no events, so undo groups don't close by themselves. Each key is closed as one group directly (`key`).
     editor.episodeUndoManager.groupsByEvent = false
   }
 
-  /// 앱을 끄듯 창을 닫는다. 편집기는 `willTerminate`를 받아 지금 자리를 기억한다.
+  /// Close the window as if quitting. The editor receives `willTerminate` and remembers the current position.
   func closeWorkspace() throws {
     guard let window else { return }
     let open = openEpisode
     let place = editor?.viewState()
-    // 앱을 끌 때처럼 알린다. 테스트 안에서는 자동 해제 풀이 테스트가 끝나야 비워져, 닫기만 해서는 편집기가 그때서야
-    // 해체되고 자리도 그때서야 기억된다.
+    // Notify as at quit. In tests the autorelease pool drains only when the test ends, so merely closing would tear down the editor
+    // and remember the position only then.
     NotificationCenter.default.post(name: NSApplication.willTerminateNotification, object: NSApp)
     window.contentView = nil
     window.close()
@@ -487,8 +487,8 @@ private final class WriterDay {
     return now.caret == place.caret && now.top == place.top
   }
 
-  /// 사이드바에서 회차를 고른다: 사이드바에 초점을 주고(클릭하면 사이드바가 초점을 갖는다) ↑↓로 옮긴다.
-  /// 클릭은 키 창이 아닌 테스트 창에 닿지 않아 키보드 길을 쓴다. 키마다 회차가 바뀔 때까지 메인 스레드 시간을 잰다.
+  /// Select an episode in the sidebar: give the sidebar focus (clicking gives it focus) and move with ↑↓.
+  /// Clicks don't reach the non-key test window, so the keyboard path is used. Main-thread time is measured per key until the episode changes.
   func pick(_ id: EpisodeID) throws {
     guard let window, let sidebar = find(NSTableView.self) else { return XCTFail("[\(stepName)] 사이드바가 없다") }
     if let open = openEpisode { places[open] = editor.viewState() }
@@ -500,7 +500,7 @@ private final class WriterDay {
     while index != target {
       let step = target > index ? 1 : -1
       let next = ids[index + step]
-      // 회차 전환은 키를 받은 뒤 SwiftUI 갱신 차례에 일어난다. 키부터 새 본문이 올라갈 때까지 런루프를 쉬지 않고 돌려 잰다.
+      // Episode switching happens on the SwiftUI update turn after the key. The run loop is spun continuously from the key until the new body loads, and timed.
       let started = clock.now
       press(arrow: step > 0 ? NSDownArrowFunctionKey : NSUpArrowFunctionKey, keyCode: step > 0 ? 125 : 126)
       while openEpisode != next, clock.now - started < .seconds(2) {
@@ -514,12 +514,12 @@ private final class WriterDay {
     knownBreak("findings 1: 사이드바에서 회차를 고르면 키보드 초점이 사이드바에 남아 바로 쓰지 못한다", fixedWhen: editorHasFocus)
   }
 
-  /// 본문을 눌러 쓰기 시작한다. 커서는 옮기지 않는다(기억한 자리를 보려고. 실제 클릭은 누른 자리로 옮긴다, findings 1).
+  /// Click the body to start writing. The caret isn't moved (to check the remembered position; a real click moves it to the clicked spot, findings 1).
   func clickEditor() {
     window?.makeFirstResponder(editor)
   }
 
-  /// 다른 앱에 갔다가 돌아온다. 테스트 창은 키 창이 되지 못해, 작업 공간이 받는 창 키 상태 알림을 직접 보낸다.
+  /// Go to another app and come back. The test window can't become key, so the window key-state notifications the workspace receives are posted directly.
   func returnToApp() {
     guard let window else { return }
     NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: window)
@@ -545,17 +545,17 @@ private final class WriterDay {
     return window?.contentView.flatMap(search)
   }
 
-  // MARK: 쓰기
+  // MARK: Writing
 
-  /// 한글을 입력기가 보내는 순서 그대로 친다(`HangulKeys`). 커서가 하나면 친 글이 커서 자리에 들어갔는지 본다.
+  /// Type Hangul in exactly the order the IME sends (`HangulKeys`). With one caret, check the typed text went in at the caret.
   func type(_ text: String, _ input: Input) throws {
     guard let open = openEpisode else { return XCTFail("[\(stepName)] 열린 회차가 없다") }
-    // 편집기 글은 텍스트 저장소의 바뀌는 문자열을 그대로 가리키므로 치기 전에 복사해 둔다.
+    // The editor text points at text storage's mutable string, so copy it before typing.
     let before = NSString(string: editor.string)
     let selection = editor.selectedRange()
     let single = editor.multiCursorRanges == nil
-    // `.replacing`에서 글자를 고치는 키(update·commit)는 되돌리기 기록이 없다. 실제 앱은 기록이 생길 때만 묶음을 열지만
-    // 손으로 묶으면 빈 묶음이 남아 ⌘Z가 그것만 꺼내므로, 이 방식은 한 글자(첫 키~마지막 키)를 묶음 하나로 친다.
+    // In `.replacing`, keys that edit a character (update, commit) leave no undo record. The real app opens a group only when a record is made,
+    // but grouping by hand leaves empty groups that ⌘Z pops alone, so this mode types one character (first key through last) as one group.
     let undo = editor.episodeUndoManager
     var letterOpen = false
     for event in HangulKeys.events(for: text) {
@@ -602,7 +602,7 @@ private final class WriterDay {
     }
   }
 
-  /// 키 하나: 실행 취소 묶음 하나로 닫고, 메인 스레드 시간을 잰다.
+  /// One key: closed as one undo group, with main-thread time measured.
   func key(_ body: () -> Void) {
     let undo = editor.episodeUndoManager
     let elapsed = clock.measure {
@@ -613,20 +613,20 @@ private final class WriterDay {
     samples.append((.key, elapsed))
   }
 
-  /// ⌘S(작업 공간의 지금 저장): 저장 시작은 메인 스레드에서 바로, 끝나기는 기다린다.
+  /// ⌘S (the workspace's save now): starting the save happens on the main thread immediately; completion is awaited.
   func saveNow() throws {
     samples.append((.saveStart, clock.measure { model.autosaver.startSave() }))
     try run { await self.model.autosaver.flush() }
   }
 
-  /// 사이드바 작업 하나를 되돌리기 묶음 하나로.
+  /// One sidebar action as one undo group.
   func sidebar(_ work: @escaping @MainActor () async throws -> Void) throws {
     sidebarUndo.beginUndoGrouping()
     defer { sidebarUndo.endUndoGrouping() }
     try run(work)
   }
 
-  /// 앱의 비동기 함수를 따로 Task로 띄우고 끝날 때까지 메인 런루프를 돌린다(10초 안에 안 끝나면 실패).
+  /// Launch the app's async function in a separate Task and spin the main run loop until it finishes (fails if not done within 10 s).
   func run<T>(_ work: @escaping @MainActor () async throws -> T) throws -> T {
     let box = ResultBox<T>()
     Task { @MainActor in
@@ -647,7 +647,7 @@ private final class WriterDay {
       recordCount: { model.recordCount($0, for: $1) })
   }
 
-  // MARK: 디스크
+  // MARK: Disk
 
   func disk(_ id: EpisodeID) throws -> String { try store.readEpisode(id) }
 
@@ -663,7 +663,7 @@ private final class WriterDay {
     FileManager.default.fileExists(atPath: store.layout.episodeFile(id).path(percentEncoded: false))
   }
 
-  /// 다른 편집기가 파일을 고친다. 수정 시각이 같게 찍히지 않게 1초 뒤로 맞춘다.
+  /// Another editor edits the file. Shift the modification time by 1 s so it isn't stamped the same.
   func writeOutside(_ text: String, to id: EpisodeID) throws {
     let url = store.layout.episodeFile(id)
     let before = FileStamp(of: url)?.modified ?? Date()
@@ -683,9 +683,9 @@ private final class WriterDay {
     try store.snapshots(of: id).filter { !ids.contains($0.id) }
   }
 
-  // MARK: 확인
+  // MARK: Checks
 
-  /// 긴 본문이 다르면 처음 다른 곳 앞뒤만 보여 준다.
+  /// When long bodies differ, show only around the first difference.
   func see<T: Equatable>(_ actual: T, _ expected: T, _ what: String, file: StaticString = #filePath, line: UInt = #line) {
     guard actual != expected else { return }
     guard let actual = actual as? String, let expected = expected as? String else {
@@ -704,8 +704,8 @@ private final class WriterDay {
     XCTAssertTrue(condition, "[\(stepName)] \(what)", file: file, line: line)
   }
 
-  /// 알려진 흐름 끊김. 지금은 기대가 어긋나 있어야 하고(조용히 기록만), 고쳐져 기대대로 되면 실패로 알려 준다.
-  /// `XCTExpectFailure`를 쓰지 않는다: 이 테스트에서 부르면 테스트 앱이 테스트 끝에 죽었다.
+  /// A known flow hitch. Currently the expectation must fail (recorded quietly); once fixed and passing, it's reported as a failure.
+  /// `XCTExpectFailure` isn't used: calling it in this test killed the test app at test end.
   func knownBreak(_ finding: String, fixedWhen fixed: Bool, file: StaticString = #filePath, line: UInt = #line) {
     if fixed {
       XCTFail("[\(stepName)] 알려진 끊김이 고쳐졌다. 이 줄을 보통 확인으로 바꾼다: \(finding)", file: file, line: line)
@@ -714,7 +714,7 @@ private final class WriterDay {
     }
   }
 
-  /// 조건이 맞을 때까지 기다린다(고정 시간 대신). 2초 안에 안 맞으면 실패.
+  /// Wait until the condition holds (instead of a fixed time). Fails if not within 2 s.
   func waitFor(_ what: String, file: StaticString = #filePath, line: UInt = #line, _ condition: () -> Bool) throws {
     let deadline = clock.now + .seconds(2)
     while !condition() {
@@ -724,7 +724,7 @@ private final class WriterDay {
   }
 }
 
-/// 런루프를 돌리며 기다리는 Task의 결과
+/// Result of a Task awaited while spinning the run loop
 @MainActor
 private final class ResultBox<T> {
   var result: Result<T, any Error>?
@@ -735,21 +735,21 @@ private struct TimedOut: Error, CustomStringConvertible {
   var description: String { "[\(step)] 10초 안에 끝나지 않았다" }
 }
 
-// MARK: - 두벌식 입력기 흉내
+// MARK: - 2-set IME simulation
 
-/// 글을 두벌식 입력기가 편집기에 보내는 조합 단계로 푼다. 글자마다 자모 키를 치고, 받침이 다음 글자 첫소리로
-/// 넘어가는 것(동 + ㅠ → 도 + 유)과 겹모음·겹받침도 입력기처럼 다룬다.
+/// Break text into the composition steps the 2-set IME sends the editor. Types jamo keys per character, and handles a final consonant moving
+/// to the next character's initial (동 + ㅠ → 도 + 유), plus compound vowels and compound finals, like the IME.
 private enum HangulKeys {
   enum Event: Equatable {
-    /// 새 글자 조합 시작
+    /// Start composing a new character
     case start(String)
-    /// 조합 중인 글자를 바꿈
+    /// Change the composing character
     case update(String)
-    /// 앞 글자를 확정하고 새 글자 조합 시작(한 키)
+    /// Commit the previous character and start composing a new one (one key)
     case next(commit: String, start: String)
-    /// 한글이 아닌 키 앞이나 끝에서 조합을 확정
+    /// Commit composition before a non-Hangul key or at the end
     case commit(String)
-    /// 한글이 아닌 글자
+    /// A non-Hangul character
     case literal(String)
   }
 
@@ -831,7 +831,7 @@ private enum HangulKeys {
     pairs.first { $0.value == [first, second] }?.key
   }
 
-  /// 완성형 한 글자를 치는 자모 키(겹모음·겹받침은 두 키). 한글 글자가 아니면 nil.
+  /// Jamo keys typing one precomposed character (compound vowels/finals take two keys). nil if not a Hangul character.
   private static func keys(of character: Character) -> [Character]? {
     guard character.unicodeScalars.count == 1, let scalar = character.unicodeScalars.first,
       (0xAC00...0xD7A3).contains(scalar.value)

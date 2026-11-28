@@ -1,8 +1,8 @@
 import AppKit
 
-/// 빈 줄(줄바꿈만 있는 문단)에는 문단 간격을 붙이지 않는다(DESIGN.md 3장).
-/// 웹소설은 빈 줄로 문단을 나누는데, 빈 줄에도 붙이면 문단 사이가 "글 줄 뒤 간격 + 빈 줄 + 빈 줄 뒤 간격"으로 너무 벌어진다.
-/// 저장소의 문단 속성은 그대로 두고 배치할 때 줄 칸만 줄여서, 한글 조합 중에도 저장소를 건드리지 않는다.
+/// Blank lines (paragraphs with only a newline) get no paragraph spacing (DESIGN.md ch.3).
+/// Web novels separate paragraphs with blank lines; spacing on those too makes the gap "line spacing + blank line + blank spacing", far too wide.
+/// The storage's paragraph attributes stay as-is; only the line fragment shrinks at layout, so storage isn't touched even during Hangul composition.
 final class BlankLineSpacing: NSObject, NSLayoutManagerDelegate {
   func layoutManager(
     _ layoutManager: NSLayoutManager,
@@ -14,7 +14,7 @@ final class BlankLineSpacing: NSObject, NSLayoutManagerDelegate {
   ) -> Bool {
     guard let storage = layoutManager.textStorage else { return false }
     let range = layoutManager.characterRange(forGlyphRange: glyphRange, actualGlyphRange: nil)
-    // 빈 줄 = 줄바꿈("\n", Windows 파일은 "\r\n")만 있는 줄이고, 바로 앞도 줄바꿈이거나 본문 맨 앞.
+    // Blank line = a line with only a newline ("\n", or "\r\n" in Windows files), preceded by a newline or the start of the text.
     guard range.length == 1 || range.length == 2 else { return false }
     let text = storage.string as NSString
     let isBreak = ManuscriptTextView.isLineBreak
@@ -22,7 +22,7 @@ final class BlankLineSpacing: NSObject, NSLayoutManagerDelegate {
       range.length == 1 || text.character(at: range.location) == 0x0D,
       range.location == 0 || isBreak(text.character(at: range.location - 1))
     else { return false }
-    // 쓴 칸(줄 높이)보다 긴 부분이 문단 간격이다.
+    // The part taller than the used rect (line height) is the paragraph spacing.
     guard lineFragmentRect.pointee.height > lineFragmentUsedRect.pointee.height else { return false }
     lineFragmentRect.pointee.size.height = lineFragmentUsedRect.pointee.height
     return true

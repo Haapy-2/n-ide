@@ -1,12 +1,12 @@
 import SwiftUI
 
-/// 설정 창 "커서": 편집기 커서의 두께·높이·색. 색은 라이트/다크를 따로 고른다.
-/// 편집기 화면에 넣으면 스크롤이 생겨서 왼쪽 목록에 따로 두었다.
+/// Settings "Caret": editor caret width, height and color. Colors are chosen separately for light and dark.
+/// Putting it in the editor pane would require scrolling, so it has its own entry in the left list.
 struct CaretSettingsPane: View {
   private var caret = CaretStyleSettings()
   private var editor = EditorStyleSettings()
   @Environment(\.colorScheme) private var appScheme
-  /// 색을 고르는 모드. 처음에는 지금 앱 모양을 따른다.
+  /// Appearance whose color is being chosen. Initially follows the current app appearance.
   @State private var pickedDark: Bool?
 
   private var editsDark: Bool { pickedDark ?? (appScheme == .dark) }
@@ -45,7 +45,7 @@ struct CaretSettingsPane: View {
     .formStyle(.grouped)
   }
 
-  /// 고르고 있는 모드의 색.
+  /// Color for the appearance being chosen.
   private var colorBinding: Binding<CaretColor> {
     Binding(
       get: { editsDark ? caret.style.darkColor : caret.style.lightColor },
@@ -55,8 +55,8 @@ struct CaretSettingsPane: View {
   }
 }
 
-/// 한 줄짜리 종이 위에 지금 글꼴·크기로 짧은 문장과 커서를 그린다. 고르는 모드(라이트/다크)의 모양으로.
-/// 산만하지 않게 깜빡이지 않는다.
+/// Draws a short sentence and the caret on a one-line paper in the current font and size, in the chosen appearance (light/dark).
+/// Doesn't blink, to avoid distraction.
 private struct CaretPreview: View {
   let editor: EditorStyle
   let caret: CaretStyle
@@ -65,7 +65,7 @@ private struct CaretPreview: View {
   var body: some View {
     HStack(spacing: 0) {
       Text("비가 그친 골목")
-      // 폭 0 칸 가운데에 그려서 글자 사이를 벌리지 않는다(실제 커서처럼 글자 위에 겹친다).
+      // Drawn centered in a zero-width box so it doesn't widen the character gap (overlaps glyphs like a real caret).
       Rectangle()
         .fill((dark ? caret.darkColor : caret.lightColor).color)
         .frame(width: caret.width, height: (editor.fontSize * caret.heightRatio).rounded())
@@ -86,7 +86,7 @@ private struct CaretPreview: View {
   }
 }
 
-/// 두께 입력 칸. 입력을 마치면(엔터·다른 곳 클릭) 1~4pt, 0.5 단위로 맞춘다.
+/// Width input field. On commit (Return, click elsewhere) snapped to 1–4 pt in 0.5 steps.
 private struct CaretWidthField: View {
   @Binding var value: Double
   @State private var text = ""
@@ -108,7 +108,7 @@ private struct CaretWidthField: View {
     }
     .onAppear { text = Self.format(setting.clamped(value)) }
     .onChange(of: focused) { if !focused { commit() } }
-    // "기본값으로"처럼 밖에서 바뀌면 칸 글자도 따라간다. 입력 중에는 값이 바뀌지 않아 치던 글자를 덮지 않는다.
+    // When changed from outside (like "restore defaults") the field text follows. The value doesn't change while typing, so typed text isn't overwritten.
     .onChange(of: value) { text = Self.format(setting.clamped(value)) }
   }
 
@@ -124,7 +124,7 @@ private struct CaretWidthField: View {
   }
 }
 
-/// 팔레트 동그라미 다섯 개 + 컬러 피커. 고른 동그라미에는 회색 테두리.
+/// Five palette circles + color picker. The chosen circle gets a gray ring.
 private struct CaretColorRow: View {
   @Binding var selection: CaretColor
 
