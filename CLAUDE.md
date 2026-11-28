@@ -1,106 +1,105 @@
 # CLAUDE.md
 
-macOS용 한국어 웹소설 집필 에디터(앱 이름 임시: `NovelEditor`). 사용자는 Swift 초보인 대학생이고, 대화·문서·보고는 모두 한국어로 한다.
-세부 사양은 여기에 복사하지 말고 `docs/`를 본다.
+Korean web-novel writing editor for macOS (working app name `NovelEditor`). The user is a university student new to Swift. **Talk, write docs, logs, commit messages, and code comments in Korean.** (This file and `.claude/skills/` are in English only to save tokens.)
+Don't copy specs here; read `docs/`.
 
-## 세션 시작할 때
+## Session start
 
-1. 이 파일과 `docs/PROGRESS.md`를 먼저 읽는다. 저장소 전체를 훑지 않는다. 지난 작업의 이유가 궁금할 때만 `docs/log/`의 해당 날짜를 찾아 읽는다.
-2. 그 작업에 필요한 파일만, 필요한 부분만 읽는다.
-3. 시작할 때와 중간중간 `docs/PROGRESS.md`의 "지금 하는 일", "다음 할 일"을 새 세션이 이어갈 수 있을 만큼 구체적으로 갱신한다.
+1. Read this file and `docs/PROGRESS.md` only. Don't scan the repo. Read `docs/log/<date>` only when you need the reason behind past work.
+2. Read only the files, and parts, the task needs. For big docs use `Scripts/doc.sh PLAN` (chapter list) and `Scripts/doc.sh PLAN 19` (one chapter) instead of reading the whole file.
+3. At start and along the way, update PROGRESS "지금 하는 일" / "다음 할 일" concretely enough for a new session to continue.
 
-## 우선순위 (충돌하면 위를 택하고 사용자에게 알린다)
+## Priorities (on conflict pick the higher one and tell the user)
 
-1. 사용자가 보기 편하고 관리하기 편할 것
-2. 최적화: 빠르고 가볍고, 한글 입력이 절대 깨지지 않을 것
-3. 깔끔한 디자인 ("잘 만든 종이 원고", `docs/DESIGN.md`)
-4. 탄탄한 기능 (개수보다 확실한 동작)
+1. Easy for the user to see and manage
+2. Performance: fast, light, Hangul input never breaks
+3. Clean design ("a well-made paper manuscript", `docs/DESIGN.md`)
+4. Solid features (sure behavior over feature count)
 
-## 폴더 지도
+## Folder map
 
 ```
-README.md, CLAUDE.md   루트에는 이 둘과 아래 항목만. 새 루트 항목은 허락 받고 추가
-NovelEditor.xcodeproj  Xcode 프로젝트
-App/                   앱 소스 (Picker/ 작품 선택 창, Workspace/ 작업 공간, Settings/ 설정 창, Editor/ 원고 편집기(AppKit), Project/ 작품 열기·만들기·최근 목록·비상 백업 되살리기, Snapshots/ 스냅샷 판·두 칸 비교, Search/ 작품 전체 검색 패널·전체 바꾸기·되돌리기 창, Shortcuts/ 단축키 표·바꾼 단축키, Theme/ 색 토큰·줄 강조 칸, Perf/ 측정용 갈고리). Resources/ = Fonts/, Colors.xcassets
-Packages/NovelCore/    Foundation만 쓰는 공통 로직 패키지 + 단위 테스트 + 성능 테스트 + make-dummy-novel(더미 작품 생성기)
-Tests/AppTests/        앱 테스트, 디자인 스냅샷, 앱 성능 측정(EditorPerformanceTests·MemoryGrowthTests, perf.sh가 돌림)
-Scripts/               build.sh, run.sh, test.sh, snapshots.sh, perf.sh, check-comments.sh(이력형 주석 검사), lib.sh(공통)
-.claude/skills/        verify-noveleditor/ (실제 앱을 띄워 사용자처럼 조작·증명하는 검증 스킬, verify.sh + keys.swift(한글 조합용 실제 키) + features/ 기능 지도)
-docs/                  SPEC, PLAN, DESIGN, PERFORMANCE, PROGRESS, 체크리스트, design-snapshots/, ui/(실제 앱 화면 스크린샷, 영역별 폴더, 목록 README.md), log/(날짜별 작업 기록)
-build/                 빌드 산출물·임시 파일·더미 작품·로그 (git 제외, 통째로 지워도 됨)
+README.md, CLAUDE.md   only these and the items below at root. Ask before adding a root item
+NovelEditor.xcodeproj  Xcode project
+App/                   app source (Picker/ project picker, Workspace/ workspace, Settings/ settings window, Editor/ manuscript editor (AppKit), Project/ open·create·recents·emergency-backup restore, Snapshots/ snapshot panel·two-pane diff, Search/ project search panel·replace all·undo window, Shortcuts/ shortcut table·user overrides, Theme/ color tokens·row highlight, Perf/ measurement hooks). Resources/ = Fonts/, Colors.xcassets
+Packages/NovelCore/    Foundation-only shared logic + unit tests + perf tests + make-dummy-novel (dummy project generator)
+Tests/AppTests/        app tests, design snapshots, app perf (EditorPerformanceTests·MemoryGrowthTests, run by perf.sh)
+Scripts/               build.sh, run.sh, test.sh, snapshots.sh, perf.sh, check-comments.sh (history-comment check), doc.sh (print one doc chapter), fill-log-hashes.sh (fill work-log commit hashes), lib.sh (shared)
+.claude/               settings.json (project plugin switches), skills/: verify-noveleditor/ (launch the real app and prove behavior; verify.sh, keys.swift real Hangul keys, features/ map), wrap-up/ (end-of-step routine)
+docs/                  SPEC, PLAN, DESIGN, PERFORMANCE, PROGRESS (now only), HISTORY (past summary·finished stages), perf-history, checklists (hangul, real-app, manual), design-snapshots/, ui/ (real app screenshots by area, list in README.md), log/ (daily work log)
+build/                 build output·temp·dummy projects·logs (git-ignored, safe to delete)
 ```
 
-구조가 바뀌면 같은 커밋에서 `README.md`와 이 파일의 폴더 지도를 고친다.
+When structure changes, update `README.md` and this folder map in the same commit.
 
-## 명령
+## Commands
 
-- `Scripts/build.sh` 빌드 / `Scripts/run.sh` 빌드 후 실행 / `Scripts/test.sh` 테스트 / `Scripts/snapshots.sh` 디자인 스냅샷 / `Scripts/perf.sh` 성능 표
-- NovelCore 테스트는 `swift test --scratch-path build/spm`, 앱 테스트는 `xcodebuild`(스킴 NovelEditor). test.sh가 둘 다 돌린다
-- 스크립트는 성공하면 한 줄 요약, 실패하면 오류 부분만 출력한다. 전체 로그는 `build/logs/`.
-- 직접 `xcodebuild`를 쓸 때는 항상 `-derivedDataPath build/DerivedData`와 `-resultBundlePath build/logs/…`.
-- Xcode 프로젝트는 폴더 동기화 그룹이라 `App/`, `Tests/AppTests/`에 파일을 넣으면 자동 포함된다. 프로젝트 파일을 고칠 일은 빌드 설정뿐
-- 메모리 8GB 기기다. 빌드나 테스트를 동시에 여러 개 돌리지 않는다. 하위 에이전트·병렬 작업은 꼭 필요할 때만.
+- `Scripts/build.sh` build / `Scripts/run.sh` build+run / `Scripts/test.sh` tests / `Scripts/snapshots.sh` design snapshots / `Scripts/perf.sh` perf table
+- NovelCore tests: `swift test --scratch-path build/spm`; app tests: `xcodebuild` (scheme NovelEditor). test.sh runs both
+- Scripts print one line on success, only the error part on failure. Full logs in `build/logs/`.
+- Direct `xcodebuild` always with `-derivedDataPath build/DerivedData` and `-resultBundlePath build/logs/…`.
+- The Xcode project uses folder-synced groups: files in `App/`, `Tests/AppTests/` are included automatically. Only build settings ever need project edits
+- 8GB machine. Never run several builds/tests at once. Subagents/parallel work only when truly needed.
 
-## 기술 결정 (확정, 바꾸려면 근거와 함께 먼저 제안)
+## Technical decisions (final; propose with reasons before changing)
 
-- Swift, SwiftUI(창·사이드바·설정), 편집기는 `NSTextView`(TextKit 1 명시) + `NSViewRepresentable`
-- 저장은 일반 파일: 회차마다 `.md`, 작품 정보는 `project.json`. DB 없음, 외부 라이브러리 없음(Pretendard 글꼴만 예외)
-- `NovelCore`는 Foundation만 import. AppKit/SwiftUI 금지, macOS 전용 API 금지, 경로는 밖에서 받는다 (나중에 iOS에서 재사용)
-- AppKit 코드는 편집기 관련 파일 안에만 둔다. 예외: `App/Project/SystemDialogs.swift`(저장·열기 창, Finder, 경고 창), `App/AppDelegate.swift`(종료 전 저장 대기, 앱 전체 테마, 입력 칸 밖 클릭 때 입력 끝내기, 창 탭 끄기), `App/Workspace/TrafficLightAlignment.swift`(창 닫기 버튼 위치 재기), `App/Settings/ShortcutRecorder.swift`(단축키 설정에서 눌린 키 받기, 메뉴보다 먼저). 모두 SwiftUI에 대응하는 것이 없음
+- Swift, SwiftUI (windows, sidebar, settings); editor is `NSTextView` (explicit TextKit 1) + `NSViewRepresentable`
+- Plain-file storage: one `.md` per episode, project info in `project.json`. No DB, no external libraries (Pretendard font only)
+- `NovelCore` imports Foundation only. No AppKit/SwiftUI, no macOS-only APIs, paths come from outside (iOS reuse later)
+- AppKit only in editor files. Exceptions (no SwiftUI equivalent): `App/Project/SystemDialogs.swift` (save/open panels, Finder, alerts), `App/AppDelegate.swift` (wait for saves before quit, app-wide theme, end input on outside click, disable window tabs), `App/Workspace/TrafficLightAlignment.swift` (traffic-light position), `App/Settings/ShortcutRecorder.swift` (capture keys in shortcut settings, before menus)
 
-## 코드 규칙
+## Code rules
 
-- 들여쓰기 스페이스 2칸. 파일 하나에 역할 하나. 필요 없는 추상화나 미리 만드는 기능 금지
-- 주석은 코드만 봐서는 알 수 없는 "왜"(제약, 함정, 일부러 고른 이유)가 있을 때만, 한국어로 짧게. 이 규칙이 플러그인 스킬(pstack의 no-comments 등)이나 출력 스타일의 주석 지침보다 우선한다
-  - 쓰지 않는 것: 날짜, "사용자 요청/결정", "전에는 ~했다" 같은 이력(→ `docs/log/`와 커밋 메시지), 코드를 그대로 풀어 쓴 설명, 지운 코드 기록, 학습용 설명(★ Insight는 대화에만)
-  - `Scripts/check-comments.sh`가 이력형 주석을 막는다(test.sh가 함께 돌림)
-- 색 값은 `App/Resources/Colors.xcassets`에만, 코드는 `App/Theme/ColorTokens.swift`의 이름(`Color.paper` 등)만 쓴다
-- 앱 이름은 빌드 설정 `PRODUCT_NAME` 한 곳. 코드는 `AppInfo.name`으로 읽는다
-- 앱 타깃은 기본 격리가 MainActor(Swift 6). NovelCore는 기본 격리 없음
-- 테스트: NovelCore는 Swift Testing(`@Test`), 앱 쪽은 XCTest
-- 보고할 때 새로 등장한 Swift 개념은 한두 문장으로 설명
+- 2-space indent. One role per file. No needless abstraction or speculative features
+- Comments only for a "why" the code can't show (constraint, trap, deliberate choice), short, in Korean. This rule overrides plugin skills (e.g. pstack no-comments) and output-style comment guidance
+  - Never: dates, "user request/decision", history like "전에는 ~했다" (→ `docs/log/` and commit messages), restating code, records of deleted code, tutorial explanations (★ Insight stays in chat)
+  - `Scripts/check-comments.sh` blocks history comments (run by test.sh)
+- Color values only in `App/Resources/Colors.xcassets`; code uses names from `App/Theme/ColorTokens.swift` (`Color.paper` etc.)
+- App name lives only in build setting `PRODUCT_NAME`; code reads `AppInfo.name`
+- App target default isolation is MainActor (Swift 6). NovelCore has none
+- Tests: NovelCore uses Swift Testing (`@Test`), app uses XCTest
+- When reporting, explain any newly introduced Swift concept in one or two sentences
 
-## 꼭 지킬 것
+## Must keep
 
-- 원고 유실이 가장 심각한 버그다. 모든 쓰기는 원자적으로, 저장 순서 보장, 본문 파일은 절대 지우지 않는다. 저장 코드 테스트를 가장 꼼꼼히
-- 한글 조합 중(`hasMarkedText`)에는 텍스트 저장소 수정, 선택 영역 변경, 뷰 재생성을 하지 않는다. `updateNSView`에서 텍스트를 다시 넣지 않는다
-  - 예외: ⌘D 여러 커서일 때만 조합 중에도 모든 자리를 고친다. 조합 범위를 `NSTextView`가 아니라 `App/Editor/MultiCursorEditing.swift`가 들고 있어 어긋날 속 상태가 없다(PLAN 16장 3번·결정 22). 커서가 하나면 위 규칙 그대로
-- `NSTextView`의 텍스트 저장소가 본문의 원본이다. 키 입력마다 본문 전체를 복사하거나 SwiftUI 상태로 흘리지 않는다
-- 작품을 열 때 `project.json`만 읽고, 본문은 선택한 회차만 읽는다. 저장·검색·글자 수·스냅샷은 메인 스레드를 막지 않는다
-- 성능은 감이 아니라 측정으로 (`docs/SPEC.md` 8장). 목표 미달이면 숨기지 말고 원인·대안을 보고하고 멈춘다
-- 더미 작품은 앞 10화만 5,000자, 나머지는 300자(사용자 요청). 더미·생성 파일 내용을 대화로 읽지 않는다(토큰 절약)
+- Losing manuscript text is the worst bug. All writes atomic, save order guaranteed, never delete body files. Test save code most thoroughly
+- During Hangul composition (`hasMarkedText`) don't modify text storage, change selection, or recreate views. Never re-set text in `updateNSView`
+  - Exception: only with ⌘D multi-cursor, all sites are edited during composition. The composition range is held by `App/Editor/MultiCursorEditing.swift`, not `NSTextView`, so no inner state can drift (PLAN ch.16 #3, decision 22). With one cursor the rule above applies
+- `NSTextView`'s text storage is the source of truth. Don't copy the whole body or push it into SwiftUI state per keystroke
+- Opening a project reads only `project.json`; body text only for the selected episode. Save, search, char count, snapshots never block the main thread
+- Performance by measurement, not feel (`docs/SPEC.md` ch.8). On a miss, don't hide it: report cause and options, then stop
+- Dummy project: first 10 episodes 5,000 chars, the rest 300 (user request). Never read dummy/generated file contents into the conversation (tokens)
 
-## 하면 안 되는 것
+## Never
 
-- 이 폴더 밖에 파일 만들기 (Xcode 자체 캐시만 예외). 실제 원고(`.novel`)를 저장소에 넣기
-- 새 도구(Homebrew 등) 허락 없이 설치하기. 추가 요금 드는 방식으로 넘어가기
-- 원격 저장소를 묻지 않고 만들거나 연결하기. 강제 푸시, 히스토리 다시 쓰기. 브랜치는 `main` 하나
-- 비밀번호·토큰·개인 정보 커밋
-- 테스트를 지우거나 목표 수치를 낮춰서 통과시키기
-- 빈 폴더, 백업 사본, 실험 잔여 코드 남기기
-- 같은 방법을 두 번 넘게 반복하기 (두 번 실패하면 접근을 바꾸거나 묻는다)
-- 사용자 허락 없이 파일을 만들거나 고치기. 먼저 무엇을 왜 바꿀지 보고하고 허락을 받는다(조사·측정은 괜찮음)
+- Create files outside this folder (Xcode's own caches excepted). Commit real manuscripts (`.novel`)
+- Install new tools (Homebrew etc.) without permission. Switch to anything that costs extra money
+- Create or connect a remote without asking. Force push, rewrite history. Only branch `main`
+- Commit passwords, tokens, personal info
+- Pass by deleting tests or lowering targets
+- Leave empty folders, backup copies, leftover experiment code
+- Repeat the same approach more than twice (after two failures change approach or ask)
+- Create or modify files without the user's permission. Report what and why first and get approval (investigation and measurement are fine)
 
-## 작업 흐름
+## Workflow
 
-- 단계마다: 빌드 → 테스트 → 성능 측정 → 정리 → `docs/PROGRESS.md` 갱신 → 커밋 → 멈추고 보고. 승인 후 푸시
-- 커밋은 작게 자주, 메시지는 한국어 한 줄(무엇을 왜)
-- 한도 경고가 보이면 새 작업을 시작하지 말고 마무리·커밋·PROGRESS 갱신 후 멈춘다
-- 정해지지 않은 결정은 임의로 정하지 말고 `docs/PLAN.md`의 "미결정 사항"에 적고 묻는다
+- Each step ends with `/wrap-up` (`.claude/skills/wrap-up/`): build → test → perf → clean up → work log → PROGRESS → one commit → stop and report. Push only after approval
+- Small, frequent commits; message is one Korean line (what and why)
+- On a usage-limit warning, start nothing new: wrap up, commit, update PROGRESS, stop
+- Undecided matters: don't decide alone; add to PLAN "미결정 사항" and ask
 
-## 작업 기록 (docs/log/)
+## Work log (docs/log/)
 
-- 작업한 날마다 `docs/log/log<YY-MM-DD>.md` 하나(예: `docs/log/log26-11-12.md`). 그날 처음 작업할 때 만들고, 커밋할 때마다 같은 커밋에서 이어 쓴다.
-- 항목마다 다섯 가지: **이유**(왜 했나), **근거**(무엇을 보고 정했나: 사용자 요청, SPEC 장, 측정값), **결과**, **에러**(빌드·테스트 실패, 사용자가 찾은 문제, 효과 없던 시도까지), **수정**(어떻게 고쳤나). 해당 없으면 줄을 뺀다.
-- 커밋 해시를 붙인다. 실패한 시도도 지우지 않고 남긴다(같은 실수를 반복하지 않으려고).
-- `docs/PROGRESS.md`는 "지금 상태", `docs/log/`는 "어떻게 여기까지 왔나". 같은 내용을 두 곳에 길게 쓰지 않는다.
+- One file per working day, `docs/log/log<YY-MM-DD>.md`, continued in each commit. Each entry: **이유 / 근거 / 결과 / 에러 / 수정** (drop lines that don't apply). Keep failed attempts.
+- Headings end with `(대기)`; `Scripts/fill-log-hashes.sh` later replaces it with the commit hash (format and steps in `/wrap-up`).
+- PROGRESS is "where we are now", log is "how we got here". Don't write the same thing at length in both.
 
-## 문서 위치
+## Docs
 
-- 요구사항 원문: `docs/SPEC.md`
-- 단계 계획, 세부 기준, 미결정 사항: `docs/PLAN.md`
-- 색·글꼴·레이아웃 값: `docs/DESIGN.md`
-- 성능과 UX 규칙(키 입력 경로, 회차 수, 측정 방법, 보이는 변화 보고 절차): `docs/PERFORMANCE.md`
-- 진행 상황, 성능 측정 표: `docs/PROGRESS.md`
-- 날짜별 작업 기록(이유·근거·결과·에러·수정): `docs/log/`
-- 한글 입력 손 확인 체크리스트: `docs/checklist-hangul.md` (편집기 단계에서 생성)
+- Requirements (original): `docs/SPEC.md`
+- Step plan, criteria, undecided items: `docs/PLAN.md`
+- Colors, fonts, layout values: `docs/DESIGN.md`
+- Performance & UX rules (keystroke path, episode counts, how to measure, reporting visible changes): `docs/PERFORMANCE.md`
+- Current status: `docs/PROGRESS.md` · past summary: `docs/HISTORY.md` · perf results: `docs/perf-history.md`
+- Daily work log: `docs/log/`
+- Checklists: Hangul input `docs/checklist-hangul.md`, real app `docs/checklist-real-app.md`, user hand-checks `docs/checklist-manual.md`

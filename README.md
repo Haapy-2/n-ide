@@ -3,7 +3,7 @@
 한국어 웹소설을 쓰기 위한 macOS 네이티브 집필 에디터. 회차마다 `.md` 파일 하나로 저장하고,
 빠른 입력과 깨지지 않는 한글 조합, 잃어버리지 않는 원고를 가장 중요하게 여긴다.
 
-> 현재 상태: **13-2단계(⌘D 여러 커서)까지 만듦**(실제 앱 확인 끝, 묶음 끌어 놓기 한 곳 남음), 다음은 안정성 마무리 → 삽화(14-1) → 자료·플롯(15). 진행 상황과 알려진 문제는 [docs/PROGRESS.md](docs/PROGRESS.md), 전체 단계는 [docs/PLAN.md](docs/PLAN.md).
+> 현재 상태: **13-2단계(⌘D 여러 커서)까지 만듦**(실제 앱 확인 끝), 다음은 안정성 마무리 → 삽화(14-1) → 자료·플롯(15). 진행 상황과 알려진 문제는 [docs/PROGRESS.md](docs/PROGRESS.md), 전체 단계는 [docs/PLAN.md](docs/PLAN.md).
 
 ## 화면
 
@@ -68,8 +68,10 @@ App/                 앱 소스: 화면(SwiftUI)과 편집기(AppKit)
   Resources/         글꼴(Fonts/), 색 값(Colors.xcassets)
 Packages/NovelCore/  공통 로직 패키지(모델, 저장, 검색, 글자 수, 스냅샷), 테스트, 더미 작품 생성기
 Tests/AppTests/      앱 쪽 테스트, 디자인 스냅샷
-Scripts/             build.sh, run.sh, test.sh, snapshots.sh, perf.sh, check-comments.sh(이력형 주석 검사), lib.sh(공통)
-.claude/skills/      verify-noveleditor/ = 에이전트가 실제 앱을 띄워 조작·증명하는 검증 스킬
+Scripts/             build.sh, run.sh, test.sh, snapshots.sh, perf.sh, check-comments.sh(이력형 주석 검사),
+                     doc.sh(문서 한 장만 보기), fill-log-hashes.sh(작업 기록 커밋 해시 채우기), lib.sh(공통)
+.claude/             settings.json(이 프로젝트에서 끌 플러그인), skills/: verify-noveleditor/(실제 앱을 띄워
+                     조작·증명하는 검증 스킬), wrap-up/(단계 마무리: 테스트·기록·커밋)
 docs/                모든 문서 (log/ = 날짜별 작업 기록, ui/ = 실제 앱 화면 스크린샷)
 build/               빌드 산출물과 임시 파일 (git 제외, 지워도 됨)
 ```
@@ -80,7 +82,10 @@ build/               빌드 산출물과 임시 파일 (git 제외, 지워도 �
 - [docs/PLAN.md](docs/PLAN.md): 단계별 계획, 세부 기준, 미결정 사항
 - [docs/DESIGN.md](docs/DESIGN.md): 디자인 값과 결정
 - [docs/PERFORMANCE.md](docs/PERFORMANCE.md): 성능과 UX 규칙
-- [docs/PROGRESS.md](docs/PROGRESS.md): 진행 상황과 성능 측정
+- [docs/PROGRESS.md](docs/PROGRESS.md): 지금 상태, 다음 할 일, 알려진 문제
+- [docs/HISTORY.md](docs/HISTORY.md): 지난 작업 한 줄 요약과 끝난 단계
+- [docs/perf-history.md](docs/perf-history.md): 성능 측정 기록
+- [docs/checklist-manual.md](docs/checklist-manual.md): 사용자 손 확인 목록
 - docs/design-snapshots/: 단계별 화면 스냅샷
 - [docs/ui/](docs/ui/README.md): 실제 앱 화면 스크린샷(영역별 폴더, 목록과 찍으며 본 UI·UX 문제)
 - [docs/log/](docs/log/): 날짜별 작업 기록

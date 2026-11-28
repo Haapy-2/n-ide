@@ -1,6 +1,6 @@
 # 성능과 UX 규칙
 
-앞으로의 단계에서 코드를 쓸 때 지킬 규칙. 목표 수치는 [SPEC.md](SPEC.md) 8장, 측정 결과는 [PROGRESS.md](PROGRESS.md).
+앞으로의 단계에서 코드를 쓸 때 지킬 규칙. 목표 수치는 [SPEC.md](SPEC.md) 8장, 측정 결과는 [perf-history.md](perf-history.md).
 근거가 된 점검: 2026-11-11 중간 성능 점검(8단계 시점, [log26-11-11.md](log/log26-11-11.md)).
 
 ## 1. UX를 지키는 규칙 (가장 먼저)
