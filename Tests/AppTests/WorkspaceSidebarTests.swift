@@ -10,6 +10,8 @@ final class WorkspaceSidebarTests: XCTestCase {
   private var folder: URL!
   private var store: ProjectStore!
   private var windows: [NSWindow] = []
+  /// 작업 공간 창에 띄운 작품. 폴더를 지우기 전에 닫기 저장을 끝내야 한다(tearDown).
+  private var workspaces: [ProjectModel] = []
   private var savedCollapsed: Any?
   private var lastVisible = NSRange()
 
@@ -22,8 +24,15 @@ final class WorkspaceSidebarTests: XCTestCase {
   }
 
   override func tearDown() async throws {
-    for window in windows { window.close() }
+    // 작업 공간 창은 닫힐 때 남은 저장을 Task로 마친다. 폴더를 먼저 지우면 그 저장이 실패해 "회차 목록을
+    // 저장하지 못했어요" 모달이 다음 테스트 도중에 떠 메인 스레드를 막는다. 그래서 닫기 저장을 여기서 끝낸 뒤 지운다.
+    for window in windows {
+      window.contentView = nil
+      window.close()
+    }
     windows = []
+    for model in workspaces { await WorkspaceView.finishClosing(model) { false } }
+    workspaces = []
     UserDefaults.standard.set(savedCollapsed, forKey: AppSettingKey.collapsedEpisodeGroups)
     try? FileManager.default.removeItem(at: folder)
   }
@@ -135,6 +144,7 @@ final class WorkspaceSidebarTests: XCTestCase {
         return destination
       })
     let id = try await model.addEpisode()
+    workspaces.append(model)
     _ = show(WorkspaceView(model: model))
     try await waitUntil { model.autosaver.episodeID == id }
     XCTAssertEqual(model.autosaver.episodeID, id)

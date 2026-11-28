@@ -70,8 +70,9 @@ struct EpisodeList: View {
         ForEach(rows) { row in
           switch row {
           case .group(let group, let count, let collapsed):
+            // moveDisabled를 붙이면 macOS 목록이 이 줄 바로 위에 놓을 자리를 만들지 않아 묶음 맨 앞 회차를
+            // 묶음 밖으로 뺄 수 없다. 제목 줄을 끌어도 EpisodeGrouping.drop이 회차가 아니라서 무시한다.
             groupHeader(group, count: count, collapsed: collapsed)
-              .moveDisabled(true)
           case .episode(let episode, let number, _, let inGroup):
             episodeRow(episode, number: number, inGroup: inGroup)
           }
