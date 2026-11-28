@@ -226,12 +226,65 @@ final class ImageLineEditingTests: XCTestCase {
     undoably(textView) { XCTAssertTrue(textView.shouldChangeText(in: wide, replacementString: "")) }
   }
 
-  func testWordDeleteInsideThePathDoesNothing() {
+  /// ⌥⌫/⌥⌦ never cut into the path; beside an image line they follow the ⌫/⌦ rules instead of doing nothing.
+  func testWordDeleteBesideAnImageLineActsLikeDelete() {
     let (_, textView) = makeEditor()
     let wide = entries(textView)[0].range
     textView.setSelectedRange(NSRange(location: NSMaxRange(wide), length: 0))
+    undoably(textView) { textView.deleteWordBackward(nil) }
+    XCTAssertFalse(textView.string.contains("wide.png"), "right after: the whole line goes")
+    XCTAssertEqual(entries(textView).count, 1, "the other image line stays whole")
+
+    textView.replaceAllText(with: body)
+    textView.setSelectedRange(NSRange(location: wide.location, length: 0))
+    undoably(textView) { textView.deleteWordForward(nil) }
+    XCTAssertFalse(textView.string.contains("wide.png"), "right before: the whole line goes")
+
+    textView.replaceAllText(with: body)
+    textView.setSelectedRange(NSRange(location: NSMaxRange(wide) + 1, length: 0))
     textView.deleteWordBackward(nil)
-    XCTAssertTrue(textView.string.contains("![](../images/wide.png)"))
+    XCTAssertEqual(textView.string, body, "start of the line below: nothing joins")
+    XCTAssertEqual(textView.selectedRange().location, NSMaxRange(wide))
+
+    textView.replaceAllText(with: body)
+    textView.setSelectedRange(NSRange(location: wide.location - 1, length: 0))
+    textView.deleteWordForward(nil)
+    XCTAssertEqual(textView.string, body, "end of the line above: nothing joins")
+  }
+
+  func testDeleteAtTheStartOfTheLineBelowDoesNotJoinIt() {
+    let (_, textView) = makeEditor()
+    let wide = entries(textView)[0].range
+    textView.setSelectedRange(NSRange(location: NSMaxRange(wide) + 1, length: 0))
+    textView.deleteBackward(nil)
+    XCTAssertEqual(textView.string, body)
+    XCTAssertEqual(textView.selectedRange().location, NSMaxRange(wide))
+    XCTAssertEqual(entries(textView).count, 2)
+    // A blank line below an image line is still removed.
+    textView.replaceAllText(with: "앞\n![](../images/wide.png)\n\n뒤")
+    textView.setSelectedRange(NSRange(location: NSMaxRange(entries(textView)[0].range) + 1, length: 0))
+    undoably(textView) { textView.deleteBackward(nil) }
+    XCTAssertEqual(textView.string, "앞\n![](../images/wide.png)\n뒤")
+  }
+
+  func testTabBesideAnImageLineGoesOnItsOwnLine() {
+    let (_, textView) = makeEditor()
+    let wide = entries(textView)[0].range
+    textView.setSelectedRange(NSRange(location: NSMaxRange(wide), length: 0))
+    undoably(textView) { textView.insertTab(nil) }
+    XCTAssertTrue(textView.string.contains("![](../images/wide.png)\n\t"))
+    textView.replaceAllText(with: body)
+    textView.setSelectedRange(NSRange(location: wide.location, length: 0))
+    undoably(textView) { textView.insertTab(nil) }
+    XCTAssertTrue(textView.string.contains("\t\n![](../images/wide.png)"))
+    XCTAssertEqual(entries(textView).count, 2)
+  }
+
+  func testEnterBeforeTheMarkdownShowsThePicture() {
+    let (_, textView) = makeEditor("글![](../images/wide.png)")
+    textView.setSelectedRange(NSRange(location: 1, length: 0))
+    undoably(textView) { textView.insertNewline(nil) }
+    XCTAssertEqual(entries(textView).map(\.range), [NSRange(location: 2, length: 23)])
   }
 
   // MARK: - Typing and deleting beside an image line

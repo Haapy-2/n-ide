@@ -397,6 +397,27 @@ final class ManuscriptTextView: NSTextView {
     super.deleteForward(sender)
   }
 
+  override func deleteWordBackward(_ sender: Any?) {
+    if wordDeleteMeetsImageLine(backward: true) { return deleteBackward(sender) }
+    super.deleteWordBackward(sender)
+  }
+
+  override func deleteWordForward(_ sender: Any?) {
+    if wordDeleteMeetsImageLine(backward: false) { return deleteForward(sender) }
+    super.deleteWordForward(sender)
+  }
+
+  // Tab doesn't reach `insertText`, and `keyDown` skips control characters, so a tab beside an image line would hide inside it.
+  override func insertTab(_ sender: Any?) {
+    openLineBesideImageLine(for: "\t")
+    super.insertTab(sender)
+  }
+
+  override func insertTabIgnoringFieldEditor(_ sender: Any?) {
+    openLineBesideImageLine(for: "\t")
+    super.insertTabIgnoringFieldEditor(sender)
+  }
+
   override func insertText(_ string: Any, replacementRange: NSRange) {
     let text = (string as? NSAttributedString)?.string ?? (string as? String) ?? ""
     if multiCursor != nil, multiCursorInsertText(text, replacementRange: replacementRange) { return }

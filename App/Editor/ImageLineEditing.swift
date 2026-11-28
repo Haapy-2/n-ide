@@ -79,6 +79,7 @@ extension ManuscriptTextView {
 
   /// True if handled. Right after an image line: select it so the delete removes it whole.
   /// Right before one: only move to the end of the previous line, so the image line doesn't join it.
+  /// At the start of a text line below one: only move to the image line's end, so the text doesn't join it (mirror of ⌦).
   func deleteBackwardAroundImageLine() -> Bool {
     let selection = selectedRange()
     guard let index = imageLines, multiCursor == nil, !hasMarkedText(), selection.length == 0, selection.location > 0 else {
@@ -88,8 +89,14 @@ extension ManuscriptTextView {
       setSelectedRange(entry.range)
       return false
     }
-    guard index.entry(startingAt: selection.location) != nil else { return false }
     let text = string as NSString
+    if let above = imageLineAbove(selection.location, in: index), selection.location < text.length,
+      !ManuscriptTextView.isLineBreak(text.character(at: selection.location))
+    {
+      setSelectedRange(NSRange(location: NSMaxRange(above.range), length: 0))
+      return true
+    }
+    guard index.entry(startingAt: selection.location) != nil else { return false }
     let previous = text.paragraphRange(for: NSRange(location: selection.location - 1, length: 0))
     guard previous.length > 1 else { return false }
     setSelectedRange(NSRange(location: selection.location - 1, length: 0))
@@ -120,5 +127,26 @@ extension ManuscriptTextView {
     else { return false }
     setSelectedRange(NSRange(location: next, length: 0))
     return true
+  }
+
+  /// ⌥⌫/⌥⌦ beside an image line would cut into it and be refused, so the key would seem dead; ⌫/⌦ rules apply instead.
+  func wordDeleteMeetsImageLine(backward: Bool) -> Bool {
+    let selection = selectedRange()
+    guard let index = imageLines, multiCursor == nil, !hasMarkedText(), selection.length == 0 else { return false }
+    let location = selection.location
+    if backward {
+      return index.entry(endingAt: location) != nil || imageLineAbove(location, in: index) != nil
+    }
+    if index.entry(startingAt: location) != nil { return true }
+    let text = string as NSString
+    guard location < text.length, ManuscriptTextView.isLineBreak(text.character(at: location)) else { return false }
+    return index.entry(startingAt: NSMaxRange(text.paragraphRange(for: NSRange(location: location, length: 0)))) != nil
+  }
+
+  /// Image line directly above a caret at the start of a line.
+  private func imageLineAbove(_ location: Int, in index: ImageLineIndex) -> ImageLineIndex.Entry? {
+    let text = string as NSString
+    guard location > 0, ManuscriptTextView.isLineBreak(text.character(at: location - 1)) else { return nil }
+    return index.entry(startingAt: text.paragraphRange(for: NSRange(location: location - 1, length: 0)).location)
   }
 }

@@ -23,7 +23,9 @@ public struct ImageLineIndex: Sendable {
   @discardableResult
   public mutating func update(_ text: NSString, edited: NSRange, delta: Int) -> NSRange? {
     let location = min(edited.location, text.length)
-    let paragraphs = text.paragraphRange(for: NSRange(location: location, length: min(edited.length, text.length - location)))
+    // One character past the edit: an edit ending in a line break (Enter, pasted lines) changes the next line's start
+    // without touching it in new coordinates, so that line must be re-read too.
+    let paragraphs = text.paragraphRange(for: NSRange(location: location, length: min(edited.length + 1, text.length - location)))
     let oldEnd = NSMaxRange(paragraphs) - delta
     let fresh = Self.scan(text, in: paragraphs)
     var removed: [Entry] = []
