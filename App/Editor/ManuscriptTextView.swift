@@ -567,6 +567,21 @@ final class ManuscriptTextView: NSTextView {
     super.acceptableDragTypes + ImageImporter.pictureTypes
   }
 
+  // A plain-text view refuses picture data outright (it never asks `dragOperation(for:type:)` about types it can't read),
+  // so the drag would be refused before it reaches the drop.
+  override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
+    acceptingImages(sender, super.draggingEntered(sender))
+  }
+
+  override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
+    acceptingImages(sender, super.draggingUpdated(sender))
+  }
+
+  private func acceptingImages(_ sender: any NSDraggingInfo, _ operation: NSDragOperation) -> NSDragOperation {
+    guard operation.isEmpty, project != nil, ImageImporter.sources(on: sender.draggingPasteboard) != nil else { return operation }
+    return .copy
+  }
+
   override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
     dropImages(sender) || super.performDragOperation(sender)
   }

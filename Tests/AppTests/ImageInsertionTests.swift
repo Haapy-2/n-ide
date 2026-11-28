@@ -162,8 +162,17 @@ final class ImageInsertionTests: XCTestCase {
     XCTAssertEqual(textView.string, "첫 줄\n")
   }
 
+  private func inWindow(_ scrollView: NSScrollView) -> NSWindow {
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 700), styleMask: [.titled], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    window.contentView = scrollView
+    return window
+  }
+
   func testLineWaitsForCompositionToEnd() async throws {
-    let (_, textView) = makeEditor("문장")
+    let (scrollView, textView) = makeEditor("문장")
+    let window = inWindow(scrollView)
+    defer { window.close() }
     textView.setSelectedRange(NSRange(location: 2, length: 0))
     textView.insertImages([.data(picture(.png))])
     // The test editor turns off per-event undo groups, and composition records undo; outside a group that throws.
@@ -177,6 +186,27 @@ final class ImageInsertionTests: XCTestCase {
     textView.episodeUndoManager.endUndoGrouping()
     await waitUntil { textView.string.contains("![](") }
     XCTAssertEqual(textView.string, "문장ㅎ\n![](../images/\(imageFiles()[0]))")
+  }
+
+  func testClosingTheWindowMidCompositionReleasesTheEditor() async throws {
+    weak var released: ManuscriptTextView?
+    var window: NSWindow?
+    do {
+      let (scrollView, textView) = makeEditor("문장")
+      window = inWindow(scrollView)
+      released = textView
+      textView.insertImages([.data(picture(.png))])
+      textView.episodeUndoManager.beginUndoGrouping()
+      textView.setMarkedText("ㅎ", selectedRange: NSRange(location: 1, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
+      textView.episodeUndoManager.endUndoGrouping()
+    }
+    await waitUntil { !self.added.isEmpty }
+    window?.contentView = nil
+    window?.close()
+    window = nil
+    await waitUntil { released == nil }
+    XCTAssertNil(released, "the wait stops once the editor has no window")
+    XCTAssertEqual(imageFiles().count, 1, "the file stays")
   }
 
   func testEpisodeSwitchMeanwhileKeepsTheFileButAddsNoLine() async throws {
@@ -239,4 +269,90 @@ final class ImageInsertionTests: XCTestCase {
     let entry = textView.manuscriptLayout!.imageLines.entries[0]
     XCTAssertEqual(textView.brokenImageMenuItems(at: center(of: entry, in: textView)).map(\.title), ["다른 그림으로 바꾸기…"])
   }
+
+  // MARK: - Right-click and drop
+
+  private func rightClick(at point: NSPoint, in textView: ManuscriptTextView) -> NSEvent {
+    NSEvent.mouseEvent(
+      with: .rightMouseDown, location: textView.convert(point, to: nil), modifierFlags: [], timestamp: 0,
+      windowNumber: textView.window?.windowNumber ?? 0, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+  }
+
+  func testRepeatedRightClicksDoNotPileUpItems() throws {
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 700), styleMask: [.titled], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    defer { window.close() }
+    let (scrollView, textView) = makeEditor("![](../images/없음.png)\n문장")
+    window.contentView = scrollView
+    textView.layoutManager!.ensureLayout(for: textView.textContainer!)
+    let box = center(of: textView.manuscriptLayout!.imageLines.entries[0], in: textView)
+    for _ in 0..<3 { _ = textView.menu(for: rightClick(at: box, in: textView)) }
+    let menu = textView.menu(for: rightClick(at: box, in: textView))!
+    XCTAssertEqual(menu.items.filter { $0.title == "다른 그림으로 바꾸기…" }.count, 1)
+    let text = textView.menu(for: rightClick(at: NSPoint(x: textView.textContainerOrigin.x + 10, y: textView.bounds.maxY - 5), in: textView))!
+    XCTAssertFalse(text.items.contains { $0.title == "다른 그림으로 바꾸기…" }, "plain text gets the plain menu")
+  }
+
+  func testDroppedPictureIsAcceptedAndGoesInAtTheDropPoint() async throws {
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1100, height: 700), styleMask: [.titled], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    defer { window.close() }
+    let (scrollView, textView) = makeEditor("첫 줄\n둘째 줄")
+    window.contentView = scrollView
+    textView.layoutManager!.ensureLayout(for: textView.textContainer!)
+    let pasteboard = NSPasteboard(name: .init("NovelEditorTests-\(UUID().uuidString)"))
+    defer { pasteboard.releaseGlobally() }
+
+    for content in ["file", "data"] {
+      pasteboard.clearContents()
+      if content == "file" {
+        pasteboard.writeObjects([try writeFile("끌기.gif", picture(.gif)) as NSURL])
+      } else {
+        pasteboard.setData(picture(.tiff), forType: .tiff)
+      }
+      let lineEnd = textView.layoutManager!.lineFragmentRect(forGlyphAt: 0, effectiveRange: nil)
+      let point = textView.convert(NSPoint(x: textView.bounds.maxX - 40, y: lineEnd.midY + textView.textContainerOrigin.y), to: nil)
+      let info = FakeDrag(pasteboard: pasteboard, location: point, window: window)
+      XCTAssertNotEqual(textView.draggingEntered(info), [], content)
+      XCTAssertNotEqual(textView.draggingUpdated(info), [], content)
+      XCTAssertTrue(textView.performDragOperation(info), content)
+      textView.concludeDragOperation(info)
+      let before = textView.manuscriptLayout!.imageLines.entries.count
+      await waitUntil { textView.manuscriptLayout!.imageLines.entries.count > before }
+    }
+    let lines = textView.string.components(separatedBy: "\n")
+    XCTAssertEqual(lines.first, "첫 줄", "dropped at the end of the first line, so the line stays whole")
+    XCTAssertEqual(lines.last, "둘째 줄")
+    XCTAssertEqual(textView.manuscriptLayout!.imageLines.entries.count, 2)
+    XCTAssertTrue(imageFiles().allSatisfy { $0.hasSuffix(".png") }, "GIF and TIFF are stored as PNG")
+  }
+}
+
+/// Minimal drag for driving the text view's drop methods without a real drag session.
+@MainActor
+private final class FakeDrag: NSObject, @preconcurrency NSDraggingInfo {
+  let draggingPasteboard: NSPasteboard
+  let draggingLocation: NSPoint
+  let draggingDestinationWindow: NSWindow?
+  init(pasteboard: NSPasteboard, location: NSPoint, window: NSWindow) {
+    draggingPasteboard = pasteboard
+    draggingLocation = location
+    draggingDestinationWindow = window
+  }
+  var draggingSourceOperationMask: NSDragOperation { [.copy, .generic, .link] }
+  var draggedImageLocation: NSPoint { draggingLocation }
+  var draggedImage: NSImage? { nil }
+  var draggingSource: Any? { nil }
+  var draggingSequenceNumber: Int { 1 }
+  var draggingFormation: NSDraggingFormation = .default
+  var animatesToDestination = false
+  var numberOfValidItemsForDrop = 1
+  var springLoadingHighlight: NSSpringLoadingHighlight { .none }
+  func slideDraggedImage(to screenPoint: NSPoint) {}
+  func enumerateDraggingItems(
+    options enumOpts: NSDraggingItemEnumerationOptions = [], for view: NSView?, classes classArray: [AnyClass],
+    searchOptions: [NSPasteboard.ReadingOptionKey: Any] = [:],
+    using block: (NSDraggingItem, Int, UnsafeMutablePointer<ObjCBool>) -> Void
+  ) {}
+  func resetSpringLoading() {}
 }

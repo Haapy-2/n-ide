@@ -122,7 +122,11 @@ extension ManuscriptTextView {
       if let notice = Self.failureNotice(results) { onNotice(notice) }
       guard !imported.isEmpty else { return }
       onImagesAdded(imported.map(\.meta))
-      while hasMarkedText() { try? await Task.sleep(for: .milliseconds(50)) }
+      // Nothing ends composition when the window closes; stop waiting then instead of holding the editor forever.
+      while hasMarkedText() {
+        guard window != nil else { return }
+        try? await Task.sleep(for: .milliseconds(50))
+      }
       guard textGeneration == generation, project?.root == layout.root else { return }
       place(self, imported)
     }
