@@ -1,14 +1,5 @@
 {
   "enabledPlugins": {
-    "bio-research@knowledge-work-plugins": false,
-    "common-room@knowledge-work-plugins": false,
-    "cowork-plugin-management@knowledge-work-plugins": false,
-    "customer-support@knowledge-work-plugins": false,
-    "design@knowledge-work-plugins": false,
-    "desktop-commander@knowledge-work-plugins": false,
-    "engineering@knowledge-work-plugins": false,
-    "pdf-viewer@knowledge-work-plugins": false,
-    "zoom-plugin@knowledge-work-plugins": false,
     "clangd-lsp@claude-plugins-official": false,
     "math-olympiad@claude-plugins-official": false,
     "mcp-server-dev@claude-plugins-official": false,
