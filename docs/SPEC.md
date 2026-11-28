@@ -189,7 +189,7 @@ NovelEditor/                 저장소 루트 (Claude Code 프로젝트 폴더)
   notes/
     <고유ID>.md        설정 노트 (인물, 장소 등)
   snapshots/
-    <회차ID>/<시각>.md  회차별 버전 스냅샷
+    <회차ID>/<시각>-<종류>.md  회차별 버전 스냅샷. 시각은 세계 표준시(UTC) `yyyyMMdd-HHmmssZ`라 기기 시간대가 바뀌어도 순서가 그대로(옛 이름은 Z 없이 그 기기 시각)
 ```
 
 - 그림을 넣으면 PNG·JPEG·HEIC는 그대로 복사하고, 그 밖의 형식(PSD·WebP·TIFF·GIF 첫 장 등)은 PNG로 바꿔 저장한다. 그림 파일을 다 쓴 **뒤에** 원고 줄을 넣고, 보이는 이름은 `project.json` `images`에 남긴다. 원고 줄을 지우거나 ⌘Z 해도 그림 파일은 지우지 않는다.

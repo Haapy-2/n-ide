@@ -40,6 +40,8 @@ public enum SnapshotKind: String, Sendable, CaseIterable {
 }
 
 /// One snapshot. Built directly from the file name, no index file (the body is read separately with `readSnapshot`).
+/// Name time is UTC marked `Z` (`20261128-095512Z-auto.md`), so the order never flips when the device time zone changes.
+/// Names without `Z` are still accepted: local time of the device that wrote them, read here as this device's zone.
 public struct Snapshot: Hashable, Sendable, Identifiable {
   public let episodeID: EpisodeID
   public let kind: SnapshotKind
@@ -48,7 +50,7 @@ public struct Snapshot: Hashable, Sendable, Identifiable {
   public let url: URL
   /// Number appended when taken again at the same second and kind (the first is 1)
   let sequence: Int
-  /// `yyyyMMdd-HHmmss` for sorting
+  /// Time part of the name (`yyyyMMdd-HHmmssZ`, or `yyyyMMdd-HHmmss` without `Z`), for numbering same-second snapshots
   let stamp: String
 
   public var id: String { url.lastPathComponent }
@@ -57,15 +59,18 @@ public struct Snapshot: Hashable, Sendable, Identifiable {
   var titleURL: URL { url.deletingPathExtension().appendingPathExtension("title") }
   var keepURL: URL { url.deletingPathExtension().appendingPathExtension("keep") }
 
-  /// Parses `20261111-094512-auto.md`, `20261111-094512-auto-2.md`. nil for unknown shapes (excluded from the list and pruning).
-  /// Time is built by slicing digits into a calendar instead of `DateFormatter` (`DateFormatter` costs 12.6 ms for a 50-item list).
-  init?(url: URL, episodeID: EpisodeID, calendar: Calendar = Snapshot.calendar) {
+  /// Parses `20261111-004512Z-auto.md`, `20261111-004512Z-auto-2.md` and `20261111-094512-auto.md` (local time). nil for unknown shapes
+  /// (excluded from the list and pruning). Time is built by slicing digits into a calendar instead of `DateFormatter`
+  /// (`DateFormatter` costs 12.6 ms for a 50-item list).
+  init?(url: URL, episodeID: EpisodeID, localCalendar: Calendar = Snapshot.localCalendar) {
     let name = url.lastPathComponent
     guard !name.hasPrefix("."), url.pathExtension == "md" else { return nil }
     let parts = url.deletingPathExtension().lastPathComponent.split(separator: "-", omittingEmptySubsequences: false)
-    guard parts.count == 3 || parts.count == 4,
-      parts[0].count == 8, parts[1].count == 6,
-      parts[0].allSatisfy(\.isASCIIDigit), parts[1].allSatisfy(\.isASCIIDigit),
+    guard parts.count == 3 || parts.count == 4 else { return nil }
+    let isUTC = parts[1].count == 7 && parts[1].last == "Z"
+    let clock = isUTC ? parts[1].dropLast() : parts[1]
+    guard parts[0].count == 8, clock.count == 6,
+      parts[0].allSatisfy(\.isASCIIDigit), clock.allSatisfy(\.isASCIIDigit),
       let kind = SnapshotKind(rawValue: String(parts[2]))
     else { return nil }
     var sequence = 1
@@ -74,7 +79,8 @@ public struct Snapshot: Hashable, Sendable, Identifiable {
       sequence = number
     }
     let stamp = "\(parts[0])-\(parts[1])"
-    let digits = Array(parts[0].utf8) + Array(parts[1].utf8)
+    let digits = Array(parts[0].utf8) + Array(clock.utf8)
+    let calendar = isUTC ? Self.utcCalendar : localCalendar
     func number(_ range: Range<Int>) -> Int { digits[range].reduce(0) { $0 * 10 + Int($1 - 48) } }
     let fields = DateComponents(
       year: number(0..<4), month: number(4..<6), day: number(6..<8),
@@ -89,21 +95,27 @@ public struct Snapshot: Hashable, Sendable, Identifiable {
     self.stamp = stamp
   }
 
-  /// File name times are in this device's time zone, Gregorian calendar.
-  static var calendar: Calendar {
+  /// For names without `Z`, written in local time.
+  static var localCalendar: Calendar {
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = .current
     return calendar
   }
 
-  /// File name time `yyyyMMdd-HHmmss`. Fixed width so name order is time order.
+  static let utcCalendar: Calendar = {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone(identifier: "UTC")!
+    return calendar
+  }()
+
+  /// File name time `yyyyMMdd-HHmmssZ` in UTC, fixed width.
   static func stamp(for date: Date) -> String {
-    let c = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
+    let c = utcCalendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
     func pad(_ value: Int?, _ width: Int) -> String {
       let text = String(value ?? 0)
       return String(repeating: "0", count: max(0, width - text.count)) + text
     }
-    return "\(pad(c.year, 4))\(pad(c.month, 2))\(pad(c.day, 2))-\(pad(c.hour, 2))\(pad(c.minute, 2))\(pad(c.second, 2))"
+    return "\(pad(c.year, 4))\(pad(c.month, 2))\(pad(c.day, 2))-\(pad(c.hour, 2))\(pad(c.minute, 2))\(pad(c.second, 2))Z"
   }
 }
 
@@ -181,15 +193,21 @@ extension ProjectStore {
 
   /// One episode's snapshot list, oldest first. Only file names are read. Empty list if the folder is missing.
   public func snapshots(of id: EpisodeID) throws -> [Snapshot] {
+    try snapshots(of: id, localCalendar: Snapshot.localCalendar)
+  }
+
+  /// `localCalendar` reads older names without `Z` (tests pin it; the app uses this device's zone).
+  func snapshots(of id: EpisodeID, localCalendar: Calendar) throws -> [Snapshot] {
     let folder = layout.snapshotFolder(id)
     guard FileManager.default.fileExists(atPath: folder.path(percentEncoded: false)) else { return [] }
     let urls = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
-    let calendar = Snapshot.calendar
+    let calendar = localCalendar
     // Folders or aliases merely named like snapshots aren't listed (they can't be read, and pruning must not delete them).
+    // Sorted by the time itself, not the name: local-time names and UTC names can share one folder.
     return urls.compactMap { url in
-      Snapshot(url: url, episodeID: id, calendar: calendar).flatMap { Self.isRegularFile(url) ? $0 : nil }
+      Snapshot(url: url, episodeID: id, localCalendar: calendar).flatMap { Self.isRegularFile(url) ? $0 : nil }
     }.sorted {
-      ($0.stamp, $0.sequence, $0.kind.rawValue) < ($1.stamp, $1.sequence, $1.kind.rawValue)
+      ($0.date, $0.sequence, $0.kind.rawValue) < ($1.date, $1.sequence, $1.kind.rawValue)
     }
   }
 
@@ -230,7 +248,11 @@ extension ProjectStore {
   /// Other kinds and unknown files are neither counted nor deleted. Protected ones (`isKept`) are neither counted nor deleted either.
   @discardableResult
   public func pruneSnapshots(of id: EpisodeID, keeping limit: Int) throws -> [Snapshot] {
-    let prunable = try snapshots(of: id).filter { $0.kind.isPrunable && !isKept($0) }
+    try pruneSnapshots(of: id, keeping: limit, localCalendar: Snapshot.localCalendar)
+  }
+
+  func pruneSnapshots(of id: EpisodeID, keeping limit: Int, localCalendar: Calendar) throws -> [Snapshot] {
+    let prunable = try snapshots(of: id, localCalendar: localCalendar).filter { $0.kind.isPrunable && !isKept($0) }
     // Keep at least one so a value ≤ 0 never deletes everything.
     let excess = prunable.count - max(limit, 1)
     guard excess > 0 else { return [] }

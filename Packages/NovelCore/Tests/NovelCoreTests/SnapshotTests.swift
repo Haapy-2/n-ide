@@ -11,10 +11,11 @@ struct SnapshotTests {
     return (store, id)
   }
 
+  /// A fixed UTC moment plus seconds. Names are UTC, so expectations don't depend on this Mac's time zone.
   private func time(_ seconds: Int) -> Date {
     var parts = DateComponents()
     (parts.year, parts.month, parts.day, parts.hour) = (2026, 11, 11, 9)
-    return Calendar(identifier: .gregorian).date(from: parts)!.addingTimeInterval(TimeInterval(seconds))
+    return Snapshot.utcCalendar.date(from: parts)!.addingTimeInterval(TimeInterval(seconds))
   }
 
   private func names(_ store: ProjectStore, _ id: EpisodeID) throws -> [String] {
@@ -30,7 +31,7 @@ struct SnapshotTests {
 
     let snapshot = try #require(try store.writeSnapshot("한글 본문 😀", episode: id, kind: .manual, at: time(65)))
 
-    #expect(snapshot.id == "20261111-090105-manual.md")
+    #expect(snapshot.id == "20261111-090105Z-manual.md")
     #expect(snapshot.kind == .manual)
     #expect(snapshot.date == time(65))
     #expect(try store.readSnapshot(snapshot) == "한글 본문 😀")
@@ -56,11 +57,11 @@ struct SnapshotTests {
     try store.writeSnapshot("b3", episode: id, kind: .auto, at: time(10))
 
     #expect(try names(store, id) == [
-      "20261111-090005-leave.md",
-      "20261111-090010-auto.md",
-      "20261111-090010-auto-2.md",
-      "20261111-090010-auto-3.md",
-      "20261111-090020-auto.md",
+      "20261111-090005Z-leave.md",
+      "20261111-090010Z-auto.md",
+      "20261111-090010Z-auto-2.md",
+      "20261111-090010Z-auto-3.md",
+      "20261111-090020Z-auto.md",
     ])
     let texts = try store.snapshots(of: id).map { try store.readSnapshot($0) }
     #expect(texts == ["a", "b1", "b2", "b3", "c"], "같은 초에 또 찍어도 앞 것을 덮지 않는다")
@@ -80,7 +81,7 @@ struct SnapshotTests {
       try Data("?".utf8).write(to: snapshotFolder.appending(path: name))
     }
 
-    #expect(try names(store, id) == ["20261111-090000-auto.md"])
+    #expect(try names(store, id) == ["20261111-090000Z-auto.md"])
   }
 
   @Test func skipsWhenSameAsLatest() throws {
@@ -111,8 +112,8 @@ struct SnapshotTests {
     #expect(store.readMemo(snapshot) == "고백 장면 전", "앞뒤 공백은 다듬는다")
     #expect(try store.readSnapshot(snapshot) == "본문 그대로", "메모가 본문에 섞이지 않는다")
     #expect(try folder.fileNames(in: store.layout.snapshotFolder(id))
-      == ["20261111-090000-manual.md", "20261111-090000-manual.memo"])
-    #expect(try names(store, id) == ["20261111-090000-manual.md"], "메모 파일은 목록에 따로 잡히지 않는다")
+      == ["20261111-090000Z-manual.md", "20261111-090000Z-manual.memo"])
+    #expect(try names(store, id) == ["20261111-090000Z-manual.md"], "메모 파일은 목록에 따로 잡히지 않는다")
   }
 
   @Test func memoEditAndClear() throws {
@@ -148,7 +149,7 @@ struct SnapshotTests {
 
     let removed = try store.pruneSnapshots(of: id, keeping: 10)
 
-    #expect(removed.map(\.id) == ["20261111-090000-auto.md", "20261111-090010-leave.md"], "오래된 것부터")
+    #expect(removed.map(\.id) == ["20261111-090000Z-auto.md", "20261111-090010Z-leave.md"], "오래된 것부터")
     let left = try store.snapshots(of: id)
     #expect(left.filter(\.kind.isPrunable).count == 10)
     #expect(Set(left.filter { !$0.kind.isPrunable }.map(\.kind)) == Set(keepKinds), "다른 종류는 하나도 안 지운다")
@@ -180,7 +181,7 @@ struct SnapshotTests {
     for index in 0..<3 { try store.writeSnapshot("\(index)", episode: id, kind: .leave, at: time(index)) }
 
     try store.pruneSnapshots(of: id, keeping: 0)
-    #expect(try names(store, id) == ["20261111-090002-leave.md"])
+    #expect(try names(store, id) == ["20261111-090002Z-leave.md"])
   }
 
   @Test func pruneKeepsSnapshotsWithMemo() throws {
@@ -196,10 +197,10 @@ struct SnapshotTests {
 
     let removed = try store.pruneSnapshots(of: id, keeping: 1)
 
-    #expect(removed.map(\.id) == ["20261111-090001-leave.md"], "메모 단 것은 세지도 지우지도 않는다")
+    #expect(removed.map(\.id) == ["20261111-090001Z-leave.md"], "메모 단 것은 세지도 지우지도 않는다")
     #expect(try folder.fileNames(in: store.layout.snapshotFolder(id)) == [
-      "20261111-090000-auto.md", "20261111-090000-auto.memo",
-      "20261111-090002-auto.md", "20261111-090002-auto.memo", "20261111-090003-auto.md",
+      "20261111-090000Z-auto.md", "20261111-090000Z-auto.memo",
+      "20261111-090002Z-auto.md", "20261111-090002Z-auto.memo", "20261111-090003Z-auto.md",
     ])
     #expect(store.readMemo(kept) == "남길 것")
   }
@@ -221,9 +222,9 @@ struct SnapshotTests {
 
     #expect(removed.map(\.id) == [oldest.id], "메모가 있어도 이름 변경은 보관 개수에 세고 지운다")
     #expect(try folder.fileNames(in: store.layout.snapshotFolder(id)) == [
-      "20261111-090001-rename.keep", "20261111-090001-rename.md", "20261111-090001-rename.memo",
-      "20261111-090001-rename.title", "20261111-090002-auto.md",
-      "20261111-090003-rename.md", "20261111-090003-rename.memo", "20261111-090003-rename.title",
+      "20261111-090001Z-rename.keep", "20261111-090001Z-rename.md", "20261111-090001Z-rename.memo",
+      "20261111-090001Z-rename.title", "20261111-090002Z-auto.md",
+      "20261111-090003Z-rename.md", "20261111-090003Z-rename.memo", "20261111-090003Z-rename.title",
     ], "지운 것은 메모·제목 파일까지 함께, 지킨 것은 그대로")
     #expect(try store.snapshots(of: id).last.map { store.readTitle($0) } == "", "빈 제목도 남긴다")
     #expect(store.isKept(kept))
@@ -240,14 +241,14 @@ struct SnapshotTests {
     try store.writeSnapshot("가나다라", episode: id, kind: .multiCursor, at: time(3))
 
     #expect(try names(store, id) == [
-      "20261111-090000-multicursor.md", "20261111-090001-auto.md", "20261111-090002-manual.md",
-      "20261111-090003-multicursor.md", "20261111-090003-multicursor-2.md",
+      "20261111-090000Z-multicursor.md", "20261111-090001Z-auto.md", "20261111-090002Z-manual.md",
+      "20261111-090003Z-multicursor.md", "20261111-090003Z-multicursor-2.md",
     ], "파일 이름을 다시 읽어 시간순으로 놓는다")
     #expect(try store.snapshots(of: id).map(\.kind) == [.multiCursor, .auto, .manual, .multiCursor, .multiCursor])
 
     let removed = try store.pruneSnapshots(of: id, keeping: 2)
 
-    #expect(removed.map(\.id) == ["20261111-090000-multicursor.md", "20261111-090001-auto.md"],
+    #expect(removed.map(\.id) == ["20261111-090000Z-multicursor.md", "20261111-090001Z-auto.md"],
       "자동과 함께 세어 오래된 것부터 지운다")
     #expect(try store.snapshots(of: id).map { try store.readSnapshot($0) } == ["가나", "가나다", "가나다라"],
       "직접 찍은 것은 남는다")
@@ -261,7 +262,7 @@ struct SnapshotTests {
     let (store, id) = try makeStore(folder)
     for index in 0..<3 { try store.writeSnapshot("\(index)", episode: id, kind: .rename, at: time(0)) }
     try store.pruneSnapshots(of: id, keeping: 1)
-    #expect(try names(store, id) == ["20261111-090000-rename-3.md"])
+    #expect(try names(store, id) == ["20261111-090000Z-rename-3.md"])
 
     try store.writeSnapshot("새", episode: id, kind: .rename, at: time(0))
     try store.pruneSnapshots(of: id, keeping: 1)
@@ -308,11 +309,51 @@ struct SnapshotTests {
     #expect(try store.snapshots(of: other).count == 3)
   }
 
-  @Test func nameKeepsFixedWidthAndLocalTime() throws {
+  @Test func nameIsFixedWidthUTC() throws {
     var parts = DateComponents()
     (parts.year, parts.month, parts.day, parts.hour, parts.minute, parts.second) = (2027, 1, 2, 3, 4, 5)
-    let date = Calendar(identifier: .gregorian).date(from: parts)!
-    #expect(Snapshot.stamp(for: date) == "20270102-030405", "한 자리 수도 0을 채워 이름순이 시간순이 되게")
+    let date = Snapshot.utcCalendar.date(from: parts)!
+    #expect(Snapshot.stamp(for: date) == "20270102-030405Z", "한 자리 수도 0을 채우고, 기기 시간대와 상관없이 UTC")
+  }
+
+  /// A time-zone change (travel, changed system clock) must not make a new snapshot look oldest and get pruned first.
+  @Test func orderAndPruningFollowRealTimeAcrossTimeZones() throws {
+    let folder = try TestFolder()
+    defer { folder.remove() }
+    let (store, id) = try makeStore(folder)
+    let snapshotFolder = store.layout.snapshotFolder(id)
+    try FileManager.default.createDirectory(at: snapshotFolder, withIntermediateDirectories: true)
+    // Taken in Seoul (UTC+9) at 18:00-18:02 local = 09:00-09:02 UTC, with local-time names (no Z).
+    var seoul = Calendar(identifier: .gregorian)
+    seoul.timeZone = TimeZone(identifier: "Asia/Seoul")!
+    for (index, name) in ["20261111-180000-auto.md", "20261111-180001-auto.md", "20261111-180002-auto.md"].enumerated() {
+      try Data("옛 \(index)".utf8).write(to: snapshotFolder.appending(path: name))
+    }
+    // An hour later, written as UTC 10:00. In Los Angeles that is 02:00 local, which a local-time name would sort first.
+    try store.writeSnapshot("가장 새 원고", episode: id, kind: .auto, at: time(3600))
+    let listed = try store.snapshots(of: id, localCalendar: seoul)
+    #expect(try listed.map { try store.readSnapshot($0) } == ["옛 0", "옛 1", "옛 2", "가장 새 원고"])
+
+    let removed = try store.pruneSnapshots(of: id, keeping: 3, localCalendar: seoul)
+    #expect(removed.map(\.id) == ["20261111-180000-auto.md"], "가장 오래된 것부터 지운다")
+    #expect(try store.snapshots(of: id, localCalendar: seoul).last.map { try store.readSnapshot($0) } == "가장 새 원고")
+  }
+
+  @Test func olderLocalNamesStillReadAndOrderByTime() throws {
+    let folder = try TestFolder()
+    defer { folder.remove() }
+    let (store, id) = try makeStore(folder)
+    let snapshotFolder = store.layout.snapshotFolder(id)
+    try FileManager.default.createDirectory(at: snapshotFolder, withIntermediateDirectories: true)
+    var seoul = Calendar(identifier: .gregorian)
+    seoul.timeZone = TimeZone(identifier: "Asia/Seoul")!
+    // 17:59:59 Seoul = 08:59:59 UTC, one second before time(0); 18:00:30 Seoul = 09:00:30 UTC, after it.
+    try Data("옛 이름 앞".utf8).write(to: snapshotFolder.appending(path: "20261111-175959-leave.md"))
+    try Data("옛 이름 뒤".utf8).write(to: snapshotFolder.appending(path: "20261111-180030-auto-2.md"))
+    try store.writeSnapshot("새 이름", episode: id, kind: .manual, at: time(0))
+    let listed = try store.snapshots(of: id, localCalendar: seoul)
+    #expect(try listed.map { try store.readSnapshot($0) } == ["옛 이름 앞", "새 이름", "옛 이름 뒤"])
+    #expect(listed.map(\.date) == [time(-1), time(0), time(30)])
   }
 
   // MARK: - No overwriting, things that must not be deleted
@@ -324,14 +365,14 @@ struct SnapshotTests {
     let snapshotFolder = store.layout.snapshotFolder(id)
     try FileManager.default.createDirectory(at: snapshotFolder, withIntermediateDirectories: true)
     // When another writer already took the same name (and the next number)
-    try Data("먼저 1".utf8).write(to: snapshotFolder.appending(path: "20261111-090000-auto.md"))
-    try Data("먼저 2".utf8).write(to: snapshotFolder.appending(path: "20261111-090000-auto-2.md"))
+    try Data("먼저 1".utf8).write(to: snapshotFolder.appending(path: "20261111-090000Z-auto.md"))
+    try Data("먼저 2".utf8).write(to: snapshotFolder.appending(path: "20261111-090000Z-auto-2.md"))
 
     let snapshot = try #require(try store.writeSnapshot("새것", episode: id, kind: .auto, at: time(0)))
 
-    #expect(snapshot.id == "20261111-090000-auto-3.md")
-    #expect(try String(contentsOf: snapshotFolder.appending(path: "20261111-090000-auto.md"), encoding: .utf8) == "먼저 1")
-    #expect(try String(contentsOf: snapshotFolder.appending(path: "20261111-090000-auto-2.md"), encoding: .utf8) == "먼저 2")
+    #expect(snapshot.id == "20261111-090000Z-auto-3.md")
+    #expect(try String(contentsOf: snapshotFolder.appending(path: "20261111-090000Z-auto.md"), encoding: .utf8) == "먼저 1")
+    #expect(try String(contentsOf: snapshotFolder.appending(path: "20261111-090000Z-auto-2.md"), encoding: .utf8) == "먼저 2")
     #expect(try !folder.fileNames(in: snapshotFolder).contains { $0.hasSuffix(".tmp") }, "임시 파일이 남지 않는다")
   }
 
@@ -353,11 +394,11 @@ struct SnapshotTests {
     let snapshotFolder = store.layout.snapshotFolder(id)
     try FileManager.default.createDirectory(at: snapshotFolder, withIntermediateDirectories: true)
     // A folder merely named like a snapshot (with files inside), and an alias pointing at a body file
-    let fakeFolder = snapshotFolder.appending(path: "20261111-085900-auto.md")
+    let fakeFolder = snapshotFolder.appending(path: "20261111-085900Z-auto.md")
     try FileManager.default.createDirectory(at: fakeFolder, withIntermediateDirectories: true)
     try Data("안의 파일".utf8).write(to: fakeFolder.appending(path: "중요.txt"))
     try FileManager.default.createSymbolicLink(
-      at: snapshotFolder.appending(path: "20261111-085901-auto.md"), withDestinationURL: store.layout.episodeFile(id))
+      at: snapshotFolder.appending(path: "20261111-085901Z-auto.md"), withDestinationURL: store.layout.episodeFile(id))
     for index in 0..<3 { try store.writeSnapshot("\(index)", episode: id, kind: .auto, at: time(index)) }
 
     #expect(try store.snapshots(of: id).count == 3, "폴더와 바로가기는 목록에 없다")
@@ -365,6 +406,6 @@ struct SnapshotTests {
 
     #expect(FileManager.default.fileExists(atPath: fakeFolder.appending(path: "중요.txt").path(percentEncoded: false)))
     #expect(try store.readEpisode(id) == "본문", "바로가기가 가리키는 본문은 그대로")
-    #expect(try store.snapshots(of: id).map(\.id) == ["20261111-090002-auto.md"])
+    #expect(try store.snapshots(of: id).map(\.id) == ["20261111-090002Z-auto.md"])
   }
 }
