@@ -76,6 +76,8 @@ final class ManuscriptTextView: NSTextView {
   var onImagesAdded: ([ImageMeta]) -> Void = { _ in }
   /// Bumped when the whole body is swapped (episode switch), so a picture finishing afterwards doesn't land in another episode.
   private(set) var textGeneration = 0
+  /// Pictures whose files are being written or whose lines wait for composition to end. Quit waits for them.
+  var imageInsertsInFlight = 0
 
   /// Per-episode undo history. Cleared on episode switch (PLAN.md detailed criteria).
   let episodeUndoManager = UndoManager()

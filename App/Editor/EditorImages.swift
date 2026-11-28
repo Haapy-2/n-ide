@@ -21,6 +21,11 @@ final class EditorImages {
   }
   /// After a thumbnail finished decoding. Argument: the file name.
   var onLoaded: (String) -> Void = { _ in }
+  /// A picture's status changed by itself (an iCloud download finished), so its line height must be laid out again.
+  var onStatusChanged: (String) -> Void = { _ in }
+  /// Pictures within a screen of the visible area. When a thumbnail arrives, the others are dropped (PLAN ch.19 #4):
+  /// a long episode keeps a few decoded pictures, not all of them. Nothing runs per keystroke.
+  var nearbyNames: () -> Set<String> = { [] }
 
   private struct FileStamp: Equatable {
     let modified: Date?
@@ -30,6 +35,7 @@ final class EditorImages {
   private var statuses: [String: (status: Status, stamp: FileStamp?)] = [:]
   private var thumbnails: [String: (maxPixel: Int, image: NSImage)] = [:]
   private var decoding: Set<String> = []
+  private var downloading: Set<String> = []
   /// Bumped on clear so a decode started for an earlier episode doesn't fill the cache.
   private var generation = 0
 
@@ -41,6 +47,12 @@ final class EditorImages {
     let status: Status
     if stamp == nil {
       status = .missing
+    } else if Self.awaitsDownload(url) {
+      // Opening a file that is only in iCloud makes the read wait for the download on the main thread (G17).
+      // No stamp, so returning to the window reads it again too.
+      statuses[name] = (.unreadable, nil)
+      startDownload(name, url)
+      return .unreadable
     } else if let size = Self.pixelSize(of: url) {
       status = .ready(pixelSize: size)
     } else {
@@ -64,6 +76,8 @@ final class EditorImages {
         self.decoding.remove(fileName)
         guard let image else { return }
         self.thumbnails[fileName] = (maxPixel, NSImage(cgImage: image, size: .zero))
+        let keep = self.nearbyNames().union([fileName])
+        self.thumbnails = self.thumbnails.filter { keep.contains($0.key) }
         self.onLoaded(fileName)
       }
     }
@@ -89,7 +103,39 @@ final class EditorImages {
     statuses.removeAll()
     thumbnails.removeAll()
     decoding.removeAll()
+    downloading.removeAll()
     generation += 1
+  }
+
+  /// Number of decoded thumbnails held (for tests).
+  var thumbnailCount: Int { thumbnails.count }
+
+  /// Ask iCloud for the file and look again once it's here (checked every second for up to two minutes, off the main thread).
+  private func startDownload(_ name: String, _ url: URL) {
+    guard downloading.insert(name).inserted else { return }
+    let generation = generation
+    Task.detached(priority: .utility) {
+      try? FileManager.default.startDownloadingUbiquitousItem(at: url)
+      var waited = 0
+      while waited < 120, Self.awaitsDownload(url) {
+        try? await Task.sleep(for: .seconds(1))
+        waited += 1
+      }
+      await MainActor.run { [weak self] in
+        guard let self, self.generation == generation else { return }
+        self.downloading.remove(name)
+        self.statuses[name] = nil
+        self.onStatusChanged(name)
+      }
+    }
+  }
+
+  /// An iCloud file whose contents aren't on this Mac yet. Reads only metadata, so it doesn't trigger the download itself.
+  nonisolated private static func awaitsDownload(_ url: URL) -> Bool {
+    guard let values = try? url.resourceValues(forKeys: [.isUbiquitousItemKey, .ubiquitousItemDownloadingStatusKey]),
+      values.isUbiquitousItem == true, let status = values.ubiquitousItemDownloadingStatus
+    else { return false }
+    return status == .notDownloaded
   }
 
   private static func stamp(of url: URL) -> FileStamp? {

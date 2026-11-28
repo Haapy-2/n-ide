@@ -77,6 +77,17 @@ struct DiffView: View {
 }
 
 /// One diff row: past column on the left, present on the right.
+extension DiffView {
+  /// "그림: 파일 이름" for an image line, nil for text.
+  static func imageLabel(_ line: String) -> String? {
+    switch ImageLine.parse(line)?.source {
+    case .project(let fileName): "그림: \(fileName)"
+    case .outside(let path): "그림(작품 밖): \(path)"
+    case nil: nil
+    }
+  }
+}
+
 private struct DiffRow: View {
   let row: TextDiff.Row
   let diff: TextDiff
@@ -155,6 +166,8 @@ private struct DiffRow: View {
     let string = side == .old ? diff.oldLines[line] : diff.newLines[line]
     // Empty paragraphs still take one line's height (so two-column alignment and line numbers show).
     if string.isEmpty { return Text(" ") }
+    // An image line shows what it is, not its path characters (G14). The comparison itself still runs on the real text.
+    if let label = DiffView.imageLabel(string) { return Text(label).foregroundColor(.inkMuted) }
     guard case .changed(_, _, .ranges(let old, let new)) = row else { return Text(string) }
     let ranges = side == .old ? old : new
     guard !ranges.isEmpty else { return Text(string) }

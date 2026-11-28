@@ -113,7 +113,9 @@ extension ManuscriptTextView {
     guard let layout = project, !sources.isEmpty else { return }
     let store = ProjectStore(root: layout.root)
     let generation = textGeneration
+    imageInsertsInFlight += 1
     Task { [weak self] in
+      defer { self?.imageInsertsInFlight -= 1 }
       let results = await Task.detached(priority: .userInitiated) {
         sources.map { source in Result { () throws(ImageImporter.Failure) in try ImageImporter.write(source, to: store) } }
       }.value

@@ -22,6 +22,8 @@ final class ManuscriptLayoutManager: NSLayoutManager, NSLayoutManagerDelegate {
       manager.delegate = manager
       manager.images = EditorImages()
       manager.images.onLoaded = { [weak manager] name in manager?.redraw(fileName: name) }
+      manager.images.onStatusChanged = { [weak manager] name in manager?.relayout(fileNames: [name]) }
+      manager.images.nearbyNames = { [weak manager] in manager?.namesNearVisibleArea() ?? [] }
     }
   }
 
@@ -43,14 +45,32 @@ final class ManuscriptLayoutManager: NSLayoutManager, NSLayoutManagerDelegate {
 
   /// Image files changed outside (focus regained, reload): re-read the ones that changed and lay out their lines again.
   func revalidateImages() {
-    let dropped = Set(images.revalidate())
-    guard !dropped.isEmpty else { return }
+    relayout(fileNames: Set(images.revalidate()))
+  }
+
+  private func relayout(fileNames: Set<String>) {
+    guard !fileNames.isEmpty else { return }
     for entry in imageLines.entries {
-      if case .project(let name) = entry.line.source, dropped.contains(name) {
+      if case .project(let name) = entry.line.source, fileNames.contains(name) {
         invalidateLayout(forCharacterRange: entry.range, actualCharacterRange: nil)
         invalidateDisplay(forCharacterRange: entry.range)
       }
     }
+  }
+
+  /// Image files of lines within one screen above and below the visible area.
+  private func namesNearVisibleArea() -> Set<String> {
+    guard let view = firstTextView, let container = textContainers.first, !imageLines.entries.isEmpty else { return [] }
+    // The scroll view's visible part, not `visibleRect`: outside a window that one is unbounded.
+    let visible = view.enclosingScrollView?.documentVisibleRect ?? view.visibleRect
+    let band = visible.insetBy(dx: 0, dy: -visible.height)
+      .offsetBy(dx: -view.textContainerOrigin.x, dy: -view.textContainerOrigin.y)
+    let characters = characterRange(forGlyphRange: glyphRange(forBoundingRect: band, in: container), actualGlyphRange: nil)
+    var names: Set<String> = []
+    for entry in imageLines.entries(intersecting: characters) {
+      if case .project(let name) = entry.line.source { names.insert(name) }
+    }
+    return names
   }
 
   private func redraw(fileName: String) {

@@ -106,6 +106,7 @@ final class EpisodeAutosaver {
   /// Whether there's work to finish before quitting: unsaved changes, pending leave snapshots, snapshots being written.
   var hasWorkBeforeQuit: Bool {
     hasUnsavedChanges || snapshots.hasPendingWork || hasProjectWork() || bulkRewrites > 0
+      || (textView?.imageInsertsInFlight ?? 0) > 0
   }
 
   /// Multi-episode rewrites in progress (replace all / revert / redo replace). Between episodes no save is in flight,
@@ -266,6 +267,13 @@ final class EpisodeAutosaver {
   /// On window close or quit: take the leave snapshot and wait until saving and snapshot writes all finish.
   func finish() async {
     while bulkRewrites > 0 { try? await Task.sleep(for: .milliseconds(20)) }
+    // A picture just inserted: its line goes in only after composition ends, so end it and let the line land before the last save.
+    // Capped so a stuck file write can't hold quit forever (the file and its name stay either way).
+    let deadline = ContinuousClock.now + .seconds(10)
+    while let textView, textView.imageInsertsInFlight > 0, ContinuousClock.now < deadline {
+      textView.finishComposition()
+      try? await Task.sleep(for: .milliseconds(20))
+    }
     snapshotLeaving()
     await flush()
     await backupTail?.value

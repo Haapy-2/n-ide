@@ -59,4 +59,17 @@ struct CharacterCountTests {
     let json = try String(contentsOf: store.layout.projectFile, encoding: .utf8)
     #expect(!json.contains("\"characterCount\" : null"))
   }
+
+  /// Image lines are told apart by the editor's paragraph breaks, so the count matches what the editor shows (decision 32).
+  @Test func imageLinesSplitLikeTheEditor() {
+    for separator in ["\n", "\r", "\r\n", "\u{2029}"] {
+      #expect(CharacterCount(counting: "![](../images/a.png)\(separator)본문").withSpaces == 2, "\(separator.unicodeScalars.map(\.value))")
+    }
+    // The editor shows these as one text line, so every visible character counts (the separator itself doesn't).
+    for separator in ["\u{2028}", "\u{0B}", "\u{0C}", "\u{85}"] {
+      let text = "![](../images/a.png)\(separator)본문"
+      #expect(ImageLine.occurrences(in: text).isEmpty)
+      #expect(CharacterCount(counting: text).withSpaces == 22, "\(separator.unicodeScalars.map(\.value))")
+    }
+  }
 }

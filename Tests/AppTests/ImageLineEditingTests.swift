@@ -287,6 +287,28 @@ final class ImageLineEditingTests: XCTestCase {
     XCTAssertEqual(entries(textView).map(\.range), [NSRange(location: 2, length: 23)])
   }
 
+  /// Scrolling through many pictures keeps only those near the screen decoded (PLAN ch.19 #4 memory).
+  func testOnlyPicturesNearTheScreenStayDecoded() async throws {
+    for index in 0..<12 { try writePNG("p\(index).png", width: 1600, height: 900) }
+    let text = (0..<12).map { "문단 \($0)\n![](../images/p\($0).png)" }.joined(separator: "\n")
+    let (scrollView, textView) = makeEditor(text)
+    defer { withExtendedLifetime(scrollView) {} }
+    let layout = textView.manuscriptLayout!
+    for entry in entries(textView) {
+      textView.scrollRangeToVisible(entry.range)
+      guard case .project(let name) = entry.line.source else { continue }
+      let rect = layout.imageRect(for: entry)
+      let maxPixel = Int((max(rect.width, rect.height) * 2).rounded(.up))
+      _ = layout.images.thumbnail(fileName: name, maxPixel: maxPixel)
+      let end = ContinuousClock.now + .seconds(3)
+      while layout.images.thumbnail(fileName: name, maxPixel: maxPixel) == nil, ContinuousClock.now < end {
+        try await Task.sleep(for: .milliseconds(10))
+      }
+    }
+    XCTAssertLessThanOrEqual(layout.images.thumbnailCount, 6, "보이는 곳 ± 한 화면만")
+    XCTAssertNotNil(layout.images.thumbnail(fileName: "p11.png", maxPixel: 1), "보고 있는 그림은 남는다")
+  }
+
   // MARK: - Typing and deleting beside an image line
 
   /// The input method composes on the new line `keyDown` opened (a real keyboard can't be driven here; the real app check covers it).

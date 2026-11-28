@@ -36,6 +36,14 @@ final class SnapshotPanelTests: XCTestCase {
     }
   }
 
+  /// Image lines show as "그림: …" in the comparison, not as path characters (G14).
+  func testImageLinesShowAsPictureLabels() {
+    XCTAssertEqual(DiffView.imageLabel("![](../images/abc.png)"), "그림: abc.png")
+    XCTAssertEqual(DiffView.imageLabel("![](/Users/me/a.png)"), "그림(작품 밖): /Users/me/a.png")
+    XCTAssertNil(DiffView.imageLabel("![설명](../images/abc.png)"), "alt가 있으면 글")
+    XCTAssertNil(DiffView.imageLabel("그냥 문장"))
+  }
+
   func testFoldsLongSameRunsKeepingThreeLinesAroundChanges() throws {
     let (old, new) = lines(30, changeAt: [10, 20])
     let diff = try TextDiff(old: old, new: new)

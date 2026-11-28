@@ -24,7 +24,9 @@ public struct CharacterCount: Codable, Equatable, Hashable, Sendable {
     var withoutSpaces = 0
     // Image lines are skipped entirely (decision 32). Bodies without images are scanned in one pass without splitting lines.
     if ImageLine.mayContainImageLine(text) {
-      for line in text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+      // Lines split exactly where the editor's paragraphs do (`\n`, `\r`, `\r\n`, U+2029). Splitting at every newline character
+      // (U+2028, vertical tab…) would drop a line the editor shows as text.
+      for line in text.split(omittingEmptySubsequences: false, whereSeparator: Self.isParagraphBreak)
       where ImageLine.parse(line) == nil {
         Self.add(line, withSpaces: &withSpaces, withoutSpaces: &withoutSpaces)
       }
@@ -32,6 +34,10 @@ public struct CharacterCount: Codable, Equatable, Hashable, Sendable {
       Self.add(text[...], withSpaces: &withSpaces, withoutSpaces: &withoutSpaces)
     }
     self.init(withSpaces: withSpaces, withoutSpaces: withoutSpaces)
+  }
+
+  private static func isParagraphBreak(_ character: Character) -> Bool {
+    character == "\n" || character == "\r" || character == "\r\n" || character == "\u{2029}"
   }
 
   private static func add(_ text: Substring, withSpaces: inout Int, withoutSpaces: inout Int) {

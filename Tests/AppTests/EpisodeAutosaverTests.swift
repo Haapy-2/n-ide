@@ -38,6 +38,33 @@ final class EpisodeAutosaverTests: XCTestCase {
     autosaver.textDidChange()
   }
 
+  /// Quit right after inserting a picture mid-composition: quit ends composition, waits for the line, and saves it.
+  func testQuitWaitsForAPictureAndSavesItsLine() async throws {
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 800, height: 600), styleMask: [.titled], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    defer { window.close() }
+    window.contentView = textView
+    textView.project = store.layout
+    let observer = NotificationCenter.default.addObserver(forName: NSText.didChangeNotification, object: textView, queue: nil) {
+      [autosaver] _ in MainActor.assumeIsolated { autosaver?.textDidChange() }
+    }
+    defer { NotificationCenter.default.removeObserver(observer) }
+    let rep = NSBitmapImageRep(
+      bitmapDataPlanes: nil, pixelsWide: 40, pixelsHigh: 30, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
+      isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+    textView.setSelectedRange(NSRange(location: textView.string.utf16.count, length: 0))
+    textView.insertImages([.data(rep.representation(using: .png, properties: [:])!)])
+    textView.setMarkedText("ㅎ", selectedRange: NSRange(location: 1, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
+    XCTAssertTrue(autosaver.hasWorkBeforeQuit)
+
+    await autosaver.finish()
+
+    let saved = try store.readEpisode(episode)
+    XCTAssertTrue(saved.hasPrefix("첫 문장ㅎ"), saved)
+    XCTAssertTrue(saved.contains("\n![](../images/"), saved)
+    XCTAssertFalse(autosaver.hasWorkBeforeQuit)
+  }
+
   func testSavesAfterTypingPauses() async throws {
     type(" 둘째 문장")
     XCTAssertEqual(try store.readEpisode(episode), "첫 문장", "입력 직후에는 아직 저장하지 않는다")
