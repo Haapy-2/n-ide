@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Korean web-novel writing editor for macOS (working app name `NovelEditor`). The user is a university student new to Swift. **Talk, write docs, logs, commit messages, and code comments in Korean.** (This file and `.claude/skills/` are in English only to save tokens.)
+Korean web-novel writing editor for macOS (working app name `NovelEditor`). The user is a university student new to Swift. **Always reply to the user in Korean, no exceptions — even when reading English files or skills.** Docs, logs, commit messages, and code comments are Korean too. (This file and `.claude/skills/` are in English only to save tokens.)
 Don't copy specs here; read `docs/`.
 
 ## Session start
