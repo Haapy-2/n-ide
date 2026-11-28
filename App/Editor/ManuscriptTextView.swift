@@ -72,6 +72,10 @@ final class ManuscriptTextView: NSTextView {
   var onEnterMultiCursor: () -> Void = {}
   /// A short message for the writer (toast).
   var onNotice: (String) -> Void = { _ in }
+  /// Names of picture files just written into the project (`project.json` `images`).
+  var onImagesAdded: ([ImageMeta]) -> Void = { _ in }
+  /// Bumped when the whole body is swapped (episode switch), so a picture finishing afterwards doesn't land in another episode.
+  private(set) var textGeneration = 0
 
   /// Per-episode undo history. Cleared on episode switch (PLAN.md detailed criteria).
   let episodeUndoManager = UndoManager()
@@ -244,6 +248,7 @@ final class ManuscriptTextView: NSTextView {
     forgetInputInProgress()
     dropMultiCursor()
     manuscriptLayout?.images.clear()
+    textGeneration += 1
     textStorage?.setAttributedString(NSAttributedString(string: text, attributes: style.textAttributes))
     updatePlaceholderIfNeeded()
     setSelectedRange(NSRange(location: 0, length: 0))
@@ -324,7 +329,7 @@ final class ManuscriptTextView: NSTextView {
   /// Before the app edits the body directly: make the IME let go of a character it was continuing "without displayed text".
   /// In that mode `hasMarkedText` is false even while composing, so after the edit the IME may rewrite the old spot via `replacementRange`,
   /// or the single-character record (`currentInput`) may grow to a misaligned range and ⌘Z may delete the wrong characters.
-  private func forgetInputInProgress() {
+  func forgetInputInProgress() {
     guard currentInput != nil else { return }
     currentInput = nil
     inputContext?.discardMarkedText()
@@ -519,6 +524,7 @@ final class ManuscriptTextView: NSTextView {
 
   override func paste(_ sender: Any?) {
     guard multiCursor == nil else { return multiCursorPaste(from: .general) }
+    if project != nil, let sources = ImageImporter.sources(on: .general) { return insertImages(sources) }
     openLineBesideImageLine(for: NSPasteboard.general.string(forType: .string) ?? "")
     super.paste(sender)
   }
@@ -553,6 +559,25 @@ final class ManuscriptTextView: NSTextView {
     if !isApplyingMultiCursor { dropMultiCursor() }
     guard editKeepsImageLinesWhole([affectedCharRange]) else { return false }
     return super.shouldChangeText(in: affectedCharRange, replacementString: replacementString)
+  }
+
+  // MARK: - Pictures (`ImageInsertion.swift`)
+
+  override var acceptableDragTypes: [NSPasteboard.PasteboardType] {
+    super.acceptableDragTypes + ImageImporter.pictureTypes
+  }
+
+  override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+    dropImages(sender) || super.performDragOperation(sender)
+  }
+
+  override func menu(for event: NSEvent) -> NSMenu? {
+    let menu = super.menu(for: event) ?? NSMenu()
+    let items = brokenImageMenuItems(at: convert(event.locationInWindow, from: nil))
+    guard !items.isEmpty else { return menu }
+    menu.insertItem(.separator(), at: 0)
+    for item in items.reversed() { menu.insertItem(item, at: 0) }
+    return menu
   }
 
   /// Before opening the floating panel (⇧⌘S): end composition and release keyboard focus. Caret and selection stay.
@@ -621,6 +646,10 @@ final class ManuscriptTextView: NSTextView {
     case #selector(redo(_:)):
       (item as? NSMenuItem)?.title = episodeUndoManager.redoMenuItemTitle
       return episodeUndoManager.canRedo
+    case #selector(paste(_:)) where project != nil && ImageImporter.sources(on: .general) != nil:
+      return true
+    case #selector(insertImageFromPanel(_:)):
+      return project != nil
     default:
       return super.validateUserInterfaceItem(item)
     }

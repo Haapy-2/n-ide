@@ -33,6 +33,18 @@ enum SystemDialogs {
     return panel.url
   }
 
+  /// Picture files to put into the manuscript. Empty if cancelled.
+  static func askImages(multiple: Bool) -> [URL] {
+    let panel = NSOpenPanel()
+    panel.title = multiple ? "그림 넣기" : "다른 그림으로 바꾸기"
+    panel.prompt = multiple ? "넣기" : "바꾸기"
+    panel.allowedContentTypes = [.image]
+    panel.allowsMultipleSelection = multiple
+    panel.canChooseDirectories = false
+    guard panel.runModal() == .OK else { return [] }
+    return panel.urls
+  }
+
   static func revealInFinder(_ url: URL) {
     NSWorkspace.shared.activateFileViewerSelecting([url])
   }

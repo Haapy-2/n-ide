@@ -308,6 +308,15 @@ final class ProjectModel {
     return startProjectSave()
   }
 
+  /// Names of picture files just added to `images/` (decision 52). Not part of undo: the file stays after ⌘Z (G2), and so does its name.
+  func addImageNames(_ images: [ImageMeta]) {
+    let known = Set(project.images.map(\.id))
+    let added = images.filter { !known.contains($0.id) }
+    guard !added.isEmpty else { return }
+    project.images += added
+    _ = startProjectSave()
+  }
+
   /// Move an episode to the trash. If it can't be trashed, change nothing and throw (no permanent delete as a substitute).
   /// With `undoManager`, ⌘Z takes it out of the trash back to its original position.
   func trashEpisode(_ id: EpisodeID, undoManager: UndoManager? = nil) async throws {

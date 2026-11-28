@@ -17,6 +17,7 @@ struct NovelEditorApp: App {
       EpisodeCommands()
       SearchCommands()
       ViewCommands()
+      ImageCommands()
     }
 
     // One workspace window per project. The window's value is the project folder URL.

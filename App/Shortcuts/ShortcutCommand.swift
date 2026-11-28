@@ -10,6 +10,8 @@ enum ShortcutCommand: String, CaseIterable, Identifiable {
   case searchProject
   /// Select next occurrence (⌘D, PLAN ch.16). Works only when the editor has keyboard focus.
   case selectNextOccurrence
+  /// Put pictures into the manuscript (PLAN ch.19). No default shortcut.
+  case insertImage
   case newEpisode, previousEpisode, nextEpisode, renameEpisode, trashEpisode, episodeGoal
   /// Episode groups. No default shortcut.
   case groupEpisodes, ungroupEpisodes
@@ -28,6 +30,7 @@ enum ShortcutCommand: String, CaseIterable, Identifiable {
     case .showSnapshots: "스냅샷 보기…"
     case .searchProject: "작품 전체 검색"
     case .selectNextOccurrence: "같은 말 하나 더 고르기"
+    case .insertImage: "그림 넣기…"
     case .newEpisode: "새 회차"
     case .previousEpisode: "이전 회차"
     case .nextEpisode: "다음 회차"
@@ -43,7 +46,7 @@ enum ShortcutCommand: String, CaseIterable, Identifiable {
     switch self {
     case .newProject, .openOther, .switchProject, .saveNow, .saveWithSnapshot: .file
     case .takeSnapshot, .showSnapshots: .snapshot
-    case .searchProject, .selectNextOccurrence: .edit
+    case .searchProject, .selectNextOccurrence, .insertImage: .edit
     case .newEpisode, .previousEpisode, .nextEpisode, .renameEpisode, .trashEpisode, .episodeGoal, .groupEpisodes, .ungroupEpisodes: .episode
     }
   }
@@ -66,7 +69,7 @@ enum ShortcutCommand: String, CaseIterable, Identifiable {
     case .nextEpisode: KeyCombo(.downArrow, [.command, .option])
     case .renameEpisode: KeyCombo("r", [.command, .shift])
     case .trashEpisode: KeyCombo(.delete, [.command, .option])
-    case .episodeGoal, .groupEpisodes, .ungroupEpisodes: nil
+    case .episodeGoal, .groupEpisodes, .ungroupEpisodes, .insertImage: nil
     }
   }
 

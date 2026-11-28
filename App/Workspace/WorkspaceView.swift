@@ -352,7 +352,8 @@ struct WorkspaceView: View {
         knownCount: { model.countBox(for: selection).value },
         reveal: reveal,
         onShown: { episodeShown($0) },
-        onNotice: { toasts.show($0, systemImage: "exclamationmark.circle") })
+        onNotice: { toasts.show($0, systemImage: "exclamationmark.circle") },
+        onImagesAdded: { model.addImageNames($0) })
     } else {
       Color.clear
     }

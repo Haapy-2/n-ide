@@ -16,6 +16,8 @@ struct EpisodeEditorPane: View {
   var onShown: (EpisodeID) -> Void = { _ in }
   /// Message the editor shows the writer (toast).
   var onNotice: (String) -> Void = { _ in }
+  /// Picture files the editor just wrote into the project, for their names in `project.json`.
+  var onImagesAdded: ([ImageMeta]) -> Void = { _ in }
   @State private var content: ManuscriptEditor.Content?
   @State private var errorMessage: String?
   @State private var fade = StatusBarFade()
@@ -56,6 +58,7 @@ struct EpisodeEditorPane: View {
             onFocusGained: { Task { await autosaver.checkExternalChange() } },
             onReady: {
               $0.project = autosaver.store.layout
+              $0.onImagesAdded = onImagesAdded
               autosaver.attach($0)
               counter.attach($0)
             },
