@@ -176,6 +176,74 @@ final class EditorPerformanceTests: XCTestCase {
     report("switch_ms", samples)
   }
 
+  /// Episode with pictures (PLAN ch.19 #6, decision 41): 5,000 chars + 10 image lines, measured against the same body without them in the same run.
+  /// Keystrokes like `testKeystroke` with pictures on screen; switching in from another episode with the image cache empty
+  /// (picture headers read, contents decode afterwards off the main thread, so not included).
+  func testImageEpisode() throws {
+    let folder = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+      .appending(path: "build/tmp/perf-images-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let layout = ProjectLayout(root: folder.appending(path: "작품.novel"))
+    try FileManager.default.createDirectory(at: layout.imagesFolder, withIntermediateDirectories: true)
+    for index in 0..<10 {
+      try writePerfImage(layout.imageFile(named: "\(index).png"), width: index.isMultiple(of: 2) ? 1600 : 3000, height: index.isMultiple(of: 2) ? 900 : 2000)
+    }
+    let plain = try store.readEpisode(project.episodes[0].id)
+    let other = try store.readEpisode(project.episodes[1].id)
+    var paragraphs = plain.components(separatedBy: "\n")
+    let step = max(1, paragraphs.count / 10)
+    for index in (0..<10).reversed() { paragraphs.insert(ImageLine.markdown(fileName: "\(index).png"), at: min(paragraphs.count, (index + 1) * step)) }
+    let withImages = paragraphs.joined(separator: "\n")
+
+    let (window, textView) = makeEditorWindow()
+    defer { window.close() }
+    textView.project = layout
+    let clock = ContinuousClock()
+    for (suffix, body) in [("", withImages), ("_plain", plain)] {
+      textView.replaceAllText(with: body)
+      let middle = (body as NSString).length / 2
+      textView.setSelectedRange(NSRange(location: middle, length: 0))
+      textView.scrollRangeToVisible(textView.selectedRange())
+      settle()
+      var samples: [Double] = []
+      for index in 0..<1_000 {
+        samples.append(milliseconds(clock.measure {
+          switch index % 3 {
+          case 0: textView.setMarkedText("ㄱ", selectedRange: NSRange(location: 1, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
+          case 1: textView.setMarkedText("가", selectedRange: NSRange(location: 1, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
+          default: textView.insertText("가", replacementRange: NSRange(location: NSNotFound, length: 0))
+          }
+          textView.layoutManager?.ensureLayout(for: textView.textContainer!)
+          textView.displayIfNeeded()
+        }))
+      }
+      report("image_keystroke\(suffix)_ms", samples)
+
+      var switches: [Double] = []
+      for _ in 0..<7 {
+        textView.replaceAllText(with: other)
+        textView.displayIfNeeded()
+        switches.append(milliseconds(clock.measure {
+          textView.replaceAllText(with: body)
+          textView.layoutManager?.ensureLayout(for: textView.textContainer!)
+          textView.displayIfNeeded()
+        }))
+      }
+      report("image_switch\(suffix)_ms", switches)
+    }
+  }
+
+  private func writePerfImage(_ url: URL, width: Int, height: Int) throws {
+    let rep = NSBitmapImageRep(
+      bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
+      isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+    NSGradient(starting: .systemTeal, ending: .systemIndigo)!.draw(in: NSRect(x: 0, y: 0, width: width, height: height), angle: 45)
+    NSGraphicsContext.restoreGraphicsState()
+    try rep.representation(using: .png, properties: [:])!.write(to: url, options: .atomic)
+  }
+
   /// Dragging a slider in Settings: style values change, new attributes are applied to the whole body, and the visible area redraws.
   /// Two sizes: 5,000 chars (normal episode) and 100k chars (very long episode). Font size alternates 17↔18.
   func testStyleChange() throws {

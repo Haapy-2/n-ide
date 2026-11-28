@@ -3,13 +3,12 @@ import AppKit
 /// Blank lines (paragraphs with only a newline) get no paragraph spacing (DESIGN.md ch.3).
 /// Web novels separate paragraphs with blank lines; spacing on those too makes the gap "line spacing + blank line + blank spacing", far too wide.
 /// The storage's paragraph attributes stay as-is; only the line fragment shrinks at layout, so storage isn't touched even during Hangul composition.
-final class BlankLineSpacing: NSObject, NSLayoutManagerDelegate {
-  func layoutManager(
+enum BlankLineSpacing {
+  /// Called from `ManuscriptLayoutManager`'s line fragment hook. True if the rect was changed.
+  static func adjust(
     _ layoutManager: NSLayoutManager,
-    shouldSetLineFragmentRect lineFragmentRect: UnsafeMutablePointer<NSRect>,
+    lineFragmentRect: UnsafeMutablePointer<NSRect>,
     lineFragmentUsedRect: UnsafeMutablePointer<NSRect>,
-    baselineOffset: UnsafeMutablePointer<CGFloat>,
-    in textContainer: NSTextContainer,
     forGlyphRange glyphRange: NSRange
   ) -> Bool {
     guard let storage = layoutManager.textStorage else { return false }

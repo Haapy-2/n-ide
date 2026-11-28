@@ -75,6 +75,18 @@ row("키 입력 300번 (10만 자 회차, 글자 수 실시간)", perf("keystrok
 row("키 입력 300번 (10만 자 회차 끝, 줄 번호 켬, 30번에 한 번 엔터)", perf("keystroke_line_numbers_100k_ms", app), 16, stat="p95")
 row("키 입력 300번 (10만 자, 커서 100개, 화면 그리기까지)", perf("multi_cursor_100_keystroke_ms", app), 16, stat="p95")
 row("회차 전환 (처음 여는 5,000자 회차)", perf("switch_ms", app), 50)
+# 그림 회차(PLAN 19장 6번, 결정 41): 같은 측정에서 그림 없는 같은 본문과 비교한다.
+row("그림 회차 키 입력 1,000번 (5,000자 + 그림 10장)", perf("image_keystroke_ms", app), 8, stat="p95")
+def p95(values):
+    ordered = sorted(values); return ordered[min(len(ordered) - 1, int(len(ordered) * 0.95))]
+def extra(label, a, b, goal, use_p95):
+    if not a or not b:
+        rows.append(f"| {label} | 측정 실패 | | | {goal}ms 이내 | 확인 필요 |"); return
+    stat = p95 if use_p95 else statistics.median
+    d = stat(a) - stat(b)
+    rows.append(f"| {label} | {'p95' if use_p95 else '중앙값'} +{d:.2f}ms | | | +{goal}ms 이내 | {'통과' if d <= goal else '미달'} |")
+extra("　그림 없는 같은 본문보다 키 입력이 느려진 정도", perf("image_keystroke_ms", app), perf("image_keystroke_plain_ms", app), 1, True)
+extra("그림 회차 전환 (그림 10장, 그림 없는 같은 본문 대비)", perf("image_switch_ms", app), perf("image_switch_plain_ms", app), 5, False)
 # 타이핑 중 0.2초마다: 글자 수 하나가 바뀌어 작업 공간(사이드바 500회차 포함)이 다시 그려질 때까지. 한 프레임 기준.
 row("글자 수 바뀜 → 화면 갱신 (사이드바 500회차)", perf("sidebar_count_ms", app), 16, stat="p95")
 # 설정 창 슬라이더를 끌 때 본문에 새 모양 입히기. SPEC에 목표가 없어 한 프레임(16ms)을 기준으로 둔다.

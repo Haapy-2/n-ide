@@ -21,6 +21,12 @@ public struct ProjectLayout: Sendable {
   public var episodesFolder: URL { root.appending(path: "episodes", directoryHint: .isDirectory) }
   public var notesFolder: URL { root.appending(path: "notes", directoryHint: .isDirectory) }
   public var snapshotsFolder: URL { root.appending(path: "snapshots", directoryHint: .isDirectory) }
+  public var imagesFolder: URL { root.appending(path: "images", directoryHint: .isDirectory) }
+
+  /// File of an image line's `.project` source. The name comes from `ImageLine` (no `/`, `..`), so it stays inside `images/`.
+  public func imageFile(named fileName: String) -> URL {
+    imagesFolder.appending(path: fileName, directoryHint: .notDirectory)
+  }
 
   public func episodeFile(_ id: EpisodeID) -> URL {
     episodesFolder.appending(path: "\(id.rawValue).md", directoryHint: .notDirectory)

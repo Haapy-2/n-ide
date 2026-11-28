@@ -178,7 +178,10 @@ struct ManuscriptEditor: NSViewRepresentable {
       becomeKeyObserver = NotificationCenter.default.addObserver(
         forName: NSWindow.didBecomeKeyNotification, object: window, queue: .main
       ) { [weak self] _ in
-        MainActor.assumeIsolated { self?.parent?.onFocusGained() }
+        MainActor.assumeIsolated {
+          self?.textView?.manuscriptLayout?.revalidateImages()
+          self?.parent?.onFocusGained()
+        }
       }
       resignObserver = NotificationCenter.default.addObserver(
         forName: NSWindow.didResignKeyNotification, object: window, queue: .main

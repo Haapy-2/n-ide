@@ -58,7 +58,13 @@ extension ManuscriptTextView {
           let line = layoutManager.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
           // A blank line's newline glyph sits above the text baseline, so use the same baseline as text lines.
           let isBlank = Self.isLineBreak(text.character(at: location))
-          let baseline = origin.y + line.minY + (isBlank ? blankBaseline : layoutManager.location(forGlyphAt: glyph).y)
+          let baseline: CGFloat
+          if let images = manuscriptLayout, images.imageLines.entry(startingAt: location) != nil {
+            // Next to the top of the picture, not its bottom where the image line's baseline sits.
+            baseline = origin.y + line.minY + images.imagePadding + Self.lineNumberFont.ascender
+          } else {
+            baseline = origin.y + line.minY + (isBlank ? blankBaseline : layoutManager.location(forGlyphAt: glyph).y)
+          }
           if (!isBlank || numbersBlankLines), baseline - Self.lineNumberFont.ascender <= rect.maxY {
             result.append(LineNumberPlacement(number: number, baselineY: baseline, rightX: rightX))
           }
@@ -85,9 +91,16 @@ extension ManuscriptTextView {
   /// Use the actual value from the body's first non-newline character; compute by formula only when there's none. The formula is ~0.1 pt off.
   var emptyLineBaselineFromTop: CGFloat {
     if let layoutManager, let storage = textStorage {
-      let first = storage.mutableString.rangeOfCharacter(from: CharacterSet.newlines.inverted)
-      if first.location != NSNotFound {
-        return layoutManager.location(forGlyphAt: layoutManager.glyphIndexForCharacter(at: first.location)).y
+      let text = storage.mutableString
+      var from = 0
+      // An image line's baseline is at the bottom of its picture, so skip those.
+      while from < text.length {
+        let first = text.rangeOfCharacter(from: CharacterSet.newlines.inverted, range: NSRange(location: from, length: text.length - from))
+        guard first.location != NSNotFound else { break }
+        guard let entry = manuscriptLayout?.imageLines.entry(startingAt: first.location) else {
+          return layoutManager.location(forGlyphAt: layoutManager.glyphIndexForCharacter(at: first.location)).y
+        }
+        from = NSMaxRange(entry.range)
       }
     }
     let font = style.font

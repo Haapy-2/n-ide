@@ -6,6 +6,7 @@ extension NSColor {
   static let ink = NSColor(named: "ink")!
   static let inkMuted = NSColor(named: "inkMuted")!
   static let accentToken = NSColor(named: "accent")!
+  static let ruleToken = NSColor(named: "rule")!
 
   /// Selection: accent at 18% light, 28% dark (DESIGN.md ch.1).
   static let selectionToken = NSColor(name: nil) { appearance in

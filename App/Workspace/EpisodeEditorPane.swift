@@ -55,6 +55,7 @@ struct EpisodeEditorPane: View {
             onFocusLost: { autosaver.startSave() },
             onFocusGained: { Task { await autosaver.checkExternalChange() } },
             onReady: {
+              $0.project = autosaver.store.layout
               autosaver.attach($0)
               counter.attach($0)
             },

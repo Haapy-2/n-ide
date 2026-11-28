@@ -20,8 +20,6 @@ final class ManuscriptTextView: NSTextView {
   }
   /// The style changed during composition and isn't applied to the whole body yet. Applied when composition ends.
   private var needsRestyle = false
-  /// The layout manager's delegate is a weak reference, so it's retained here.
-  private let blankLineSpacing = BlankLineSpacing()
   /// Whether the body was empty when the empty-episode hint was last drawn (`EmptyEpisodePlaceholder.swift`)
   var placeholderShown = true
 
@@ -90,7 +88,7 @@ final class ManuscriptTextView: NSTextView {
   static func make() -> ManuscriptTextView {
     // TextKit 1: wire NSTextStorage → NSLayoutManager → NSTextContainer directly.
     let storage = NSTextStorage()
-    let layoutManager = NSLayoutManager()
+    let layoutManager = ManuscriptLayoutManager()
     storage.addLayoutManager(layoutManager)
     let container = NSTextContainer(size: NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
     container.widthTracksTextView = false
@@ -120,7 +118,6 @@ final class ManuscriptTextView: NSTextView {
     backgroundColor = .paper
     insertionPointColor = caret.dynamicColor
     selectedTextAttributes = [.backgroundColor: NSColor.selectionToken]
-    layoutManager?.delegate = blankLineSpacing
     applyStyle()
     NotificationCenter.default.addObserver(
       self, selector: #selector(eraseCaretOnDeactivate(_:)), name: NSWindow.didResignKeyNotification, object: nil)
@@ -216,7 +213,14 @@ final class ManuscriptTextView: NSTextView {
     return NSRect(x: 0, y: rect.minY, width: rect.maxX, height: rect.height)
   }
 
+  /// The open project, for image files. Image lines show as boxes until set.
+  var project: ProjectLayout? {
+    get { manuscriptLayout?.images.project }
+    set { manuscriptLayout?.images.project = newValue }
+  }
+
   private func applyStyle() {
+    manuscriptLayout?.imagePadding = (style.lineHeight / 2).rounded()
     let attributes = style.textAttributes
     typingAttributes = attributes
     defaultParagraphStyle = style.paragraphStyle
@@ -239,6 +243,7 @@ final class ManuscriptTextView: NSTextView {
     finishComposition()
     forgetInputInProgress()
     dropMultiCursor()
+    manuscriptLayout?.images.clear()
     textStorage?.setAttributedString(NSAttributedString(string: text, attributes: style.textAttributes))
     updatePlaceholderIfNeeded()
     setSelectedRange(NSRange(location: 0, length: 0))
@@ -343,6 +348,7 @@ final class ManuscriptTextView: NSTextView {
     dropMultiCursor()
     let cursor = selectedRange().location
     let origin = enclosingScrollView?.contentView.bounds.origin ?? .zero
+    manuscriptLayout?.revalidateImages()
     textStorage?.setAttributedString(NSAttributedString(string: text, attributes: style.textAttributes))
     setSelectedRange(NSRange(location: min(cursor, (text as NSString).length), length: 0))
     episodeUndoManager.removeAllActions()
@@ -367,9 +373,29 @@ final class ManuscriptTextView: NSTextView {
   /// (ㄱ → 가 → 각 → 가 + 가). Then `hasMarkedText` is always false, and NSTextView doesn't coalesce these replacements,
   /// so ⌘Z shows a mid-composition character ("각"). So each character the IME inserts is recorded as one unit directly, and while the IME
   /// edits that character only the same record's range grows. Undo is LIFO, so other changes in between are undone first and ranges line up.
+  override func keyDown(with event: NSEvent) {
+    if event.modifierFlags.intersection([.command, .control]).isEmpty, let scalar = event.characters?.unicodeScalars.first,
+      scalar.value >= 0x20, scalar.value != 0x7F, !(0xF700...0xF8FF).contains(scalar.value)
+    {
+      openLineBesideImageLine(for: String(scalar))
+    }
+    super.keyDown(with: event)
+  }
+
+  override func deleteBackward(_ sender: Any?) {
+    if deleteBackwardAroundImageLine() { return }
+    super.deleteBackward(sender)
+  }
+
+  override func deleteForward(_ sender: Any?) {
+    if deleteForwardAroundImageLine() { return }
+    super.deleteForward(sender)
+  }
+
   override func insertText(_ string: Any, replacementRange: NSRange) {
     let text = (string as? NSAttributedString)?.string ?? (string as? String) ?? ""
     if multiCursor != nil, multiCursorInsertText(text, replacementRange: replacementRange) { return }
+    if replacementRange.location == NSNotFound { openLineBesideImageLine(for: text) }
     guard !hasMarkedText() else {
       super.insertText(string, replacementRange: replacementRange)
       return
@@ -493,31 +519,39 @@ final class ManuscriptTextView: NSTextView {
 
   override func paste(_ sender: Any?) {
     guard multiCursor == nil else { return multiCursorPaste(from: .general) }
+    openLineBesideImageLine(for: NSPasteboard.general.string(forType: .string) ?? "")
     super.paste(sender)
   }
 
   override func pasteAsPlainText(_ sender: Any?) {
     guard multiCursor == nil else { return multiCursorPaste(from: .general) }
+    openLineBesideImageLine(for: NSPasteboard.general.string(forType: .string) ?? "")
     super.pasteAsPlainText(sender)
   }
 
   // If a path other than multi-cursor code (click, select all, paste, another undo record) changes selection or body, other spots go stale.
   // Drop multi-cursor before that path makes its change (PLAN ch.16 D3). That path decides body and selection.
   override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting: Bool) {
+    var ranges = ranges
     if !isApplyingMultiCursor {
       dropMultiCursor()
       wordFromCaret = nil
+      if ranges.count == 1, !hasMarkedText() {
+        ranges = [NSValue(range: selectionKeepingImageLinesWhole(ranges[0].rangeValue, from: selectedRange()))]
+      }
     }
     super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
   }
 
   override func shouldChangeText(inRanges affectedRanges: [NSValue], replacementStrings: [String]?) -> Bool {
     if !isApplyingMultiCursor { dropMultiCursor() }
+    guard editKeepsImageLinesWhole(affectedRanges.map(\.rangeValue)) else { return false }
     return super.shouldChangeText(inRanges: affectedRanges, replacementStrings: replacementStrings)
   }
 
   override func shouldChangeText(in affectedCharRange: NSRange, replacementString: String?) -> Bool {
     if !isApplyingMultiCursor { dropMultiCursor() }
+    guard editKeepsImageLinesWhole([affectedCharRange]) else { return false }
     return super.shouldChangeText(in: affectedCharRange, replacementString: replacementString)
   }
 
